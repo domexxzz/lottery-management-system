@@ -1,0 +1,24 @@
+/* แถบกรอง — เรียงในบรรทัดเดียวบนจอกว้าง และพับลงเมื่อจอแคบ */
+.bill-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.bill-filters label {
+  margin-bottom: 0;
+  flex: 1 1 11rem;
+}
+
+.bill-filters button {
+  flex: 0 0 auto;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
