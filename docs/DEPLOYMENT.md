@@ -105,6 +105,48 @@ npm run job:cutoff
 
 ---
 
+## การป้องกัน main
+
+**ยังไม่มีการป้องกันที่ฝั่ง GitHub**
+
+ลองตั้งทั้ง branch protection แบบเดิมและ repository ruleset แบบใหม่แล้ว ทั้งสองทางตอบกลับว่า
+`Upgrade to GitHub Pro or make this repository public to enable this feature` (HTTP 403)
+เพราะ repo นี้เป็น private อยู่บนบัญชีแบบฟรี
+
+แปลว่าตอนนี้ **push ตรงเข้า main ได้โดย CI ไม่ต้องผ่าน** — CI ที่ตั้งไว้เป็นเพียงสัญญาณเตือน
+ไม่ใช่ประตูกั้น
+
+### ทางเลือกในการแก้ เรียงตามที่แนะนำ
+
+| ทางเลือก | ค่าใช้จ่าย | ข้อสังเกต |
+|---|---|---|
+| ย้าย repo ไปใต้ organization ที่มีแผน Team | ตามจำนวนสมาชิก | เหมาะที่สุดถ้าทำงานเป็นทีมอยู่แล้ว และได้เรื่องสิทธิ์เข้าถึงไปด้วย |
+| อัปเกรดบัญชีเป็น GitHub Pro | ประมาณ 4 USD ต่อเดือน | ถูกและเร็วที่สุดถ้ายังเป็นคนเดียว |
+| เปลี่ยน repo เป็น public | ฟรี | **ไม่แนะนำ** — เป็นระบบที่จัดการเงินและข้อมูลส่วนบุคคล |
+
+เมื่ออัปเกรดแล้ว ตั้งค่าได้ด้วยคำสั่งเดียว โดยให้ status check ชื่อ `verify` เป็นเงื่อนไข:
+
+```bash
+gh api -X PUT repos/OWNER/REPO/branches/main/protection --input protection.json
+```
+
+### มาตรการชั่วคราวบนเครื่องตัวเอง
+
+repo มี `.githooks/pre-push` ที่รัน type check และ unit test ก่อนยอมให้ push ขึ้น main
+เปิดใช้งานด้วย:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+ข้อจำกัดที่ต้องรู้ — **อันนี้ไม่ทดแทน branch protection**
+
+- ทำงานเฉพาะบนเครื่องที่รันคำสั่งข้างบนแล้ว คนอื่นในทีมต้องรันเอง
+- ข้ามได้ด้วย `git push --no-verify`
+- ไม่ได้ตรวจ `next build` เพราะจะช้าเกินไปสำหรับ pre-push · CI ยังตรวจให้อยู่
+
+---
+
 ## การตามรอยปัญหา
 
 ทุก request มี `x-request-id` ทั้งใน response header และใน log
