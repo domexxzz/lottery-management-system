@@ -5,7 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { getBill } from "@/lib/bills/service";
 import { canTransition, statusLabel } from "@/lib/bills/lifecycle";
 import { NotFoundError } from "@/lib/errors";
-import { CancelForm, ConfirmButton } from "./BillActions";
+import { CancelForm, ConfirmButton, RequestCancelForm } from "./BillActions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +32,21 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
   }
 
   const canConfirm = canTransition(bill.status, "CONFIRMED") && can(actor.role, "bill.confirm");
+  const afterCutoff = bill.status === "LOCKED";
+
+  // หลังปิดรับ ผู้อนุมัติเท่านั้นที่ยกเลิกได้ และต้องไม่ใช่คนที่เสนอเอง
   const canCancel =
     canTransition(bill.status, "CANCELLED") &&
-    (bill.status === "LOCKED"
-      ? can(actor.role, "bill.approveChangeAfterCutoff")
+    (afterCutoff
+      ? can(actor.role, "bill.approveChangeAfterCutoff") &&
+        bill.cancelRequestedById !== actor.userId
       : can(actor.role, "bill.editBeforeCutoff"));
+
+  const canRequestCancel =
+    afterCutoff &&
+    bill.cancelRequestedById === null &&
+    can(actor.role, "bill.proposeChangeAfterCutoff") &&
+    !can(actor.role, "bill.approveChangeAfterCutoff");
 
   return (
     <main>
@@ -102,8 +112,31 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
           </tfoot>
         </table>
 
+        <p>
+          <Link href={`/bills/${bill.id}/print`} target="_blank">
+            พิมพ์แบบ A4
+          </Link>
+          {" · "}
+          <Link href={`/bills/${bill.id}/print?format=slip`} target="_blank">
+            พิมพ์แบบสลิป
+          </Link>
+        </p>
+
+        {bill.cancelRequestedById !== null && bill.status !== "CANCELLED" && (
+          <p role="status">
+            มีคำขอยกเลิกจาก {bill.cancelRequestedBy?.displayName ?? "-"} · เหตุผล:{" "}
+            {bill.cancelRequestReason} · รอผู้มีอำนาจอนุมัติ
+          </p>
+        )}
+
         {canConfirm && <ConfirmButton billId={bill.id} />}
-        {canCancel && <CancelForm billId={bill.id} />}
+        {canRequestCancel && <RequestCancelForm billId={bill.id} />}
+        {canCancel && (
+          <CancelForm
+            billId={bill.id}
+            label={afterCutoff ? "อนุมัติและยกเลิกบิล" : "ยกเลิกบิล"}
+          />
+        )}
       </section>
     </main>
   );

@@ -27,11 +27,21 @@ export default async function HomePage() {
           {actor.agentId !== null && " · ผูกกับ Agent แล้ว"}
         </p>
 
-        <p>
-          <Link href="/bills">
-            <button type="button">ไปที่รายการบิล</button>
-          </Link>
-        </p>
+        <nav aria-label="เมนูหลัก">
+          <p>
+            <Link href="/bills">
+              <button type="button">รายการบิล</button>
+            </Link>{" "}
+            <Link href="/draws">
+              <button type="button">รอบ</button>
+            </Link>{" "}
+            {permissions.includes("agent.manage") && (
+              <Link href="/agents">
+                <button type="button">จัดการ Agent</button>
+              </Link>
+            )}
+          </p>
+        </nav>
 
         <h2>สิทธิ์ของบทบาทนี้</h2>
         <table>

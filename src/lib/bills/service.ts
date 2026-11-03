@@ -307,7 +307,7 @@ export async function cancelBill(
   await prisma.$transaction(async (tx) => {
     const bill = await tx.bill.findFirst({
       where: { id: billId, ...billScope(actor) },
-      select: { id: true, status: true, organizationId: true, billNumber: true },
+      select: { id: true, status: true, organizationId: true, cancelRequestedById: true },
     });
 
     if (!bill) throw new NotFoundError("ไม่พบบิล");
@@ -315,9 +315,12 @@ export async function cancelBill(
       throw new ConflictError(transitionError(bill.status, "CANCELLED"));
     }
 
-    // หลัง Cutoff (สถานะ LOCKED) ต้องเป็นผู้มีอำนาจอนุมัติเท่านั้น Agent ทำไม่ได้
     if (cancelNeedsApproval(bill.status)) {
+      // หลัง Cutoff ต้องเป็นผู้มีอำนาจอนุมัติ และผู้อนุมัติต้องไม่ใช่ผู้เสนอคนเดียวกัน
       requirePermission(actor, "bill.approveChangeAfterCutoff");
+      if (bill.cancelRequestedById === actor.userId) {
+        throw new ForbiddenError("ผู้เสนอยกเลิกกับผู้อนุมัติต้องไม่ใช่คนเดียวกัน");
+      }
     } else {
       requirePermission(actor, "bill.editBeforeCutoff");
     }
@@ -338,9 +341,63 @@ export async function cancelBill(
       action: "CANCEL",
       entityType: "Bill",
       entityId: bill.id,
-      before: { status: bill.status },
+      before: { status: bill.status, cancelRequestedById: bill.cancelRequestedById },
       after: { status: "CANCELLED" },
       reason: trimmed,
+    });
+  });
+}
+
+/**
+ * เสนอยกเลิกบิลหลัง Cutoff
+ *
+ * Admin เสนอได้แต่ยกเลิกเองไม่ได้ ต้องรอ Owner อนุมัติ (เอกสารบทที่ 4)
+ * บันทึกผู้เสนอไว้เพื่อให้ตรวจได้ว่าผู้อนุมัติเป็นคนละคน
+ */
+export async function requestCancelAfterCutoff(
+  actor: Actor,
+  billId: string,
+  reason: string,
+): Promise<void> {
+  requirePermission(actor, "bill.proposeChangeAfterCutoff");
+
+  const trimmed = reason.trim();
+  if (trimmed.length === 0) {
+    throw new ValidationError("ต้องระบุเหตุผลในการเสนอยกเลิก");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const bill = await tx.bill.findFirst({
+      where: { id: billId, ...billScope(actor) },
+      select: { id: true, status: true, organizationId: true, cancelRequestedById: true },
+    });
+
+    if (!bill) throw new NotFoundError("ไม่พบบิล");
+    if (bill.status !== "LOCKED") {
+      throw new ConflictError("เสนอยกเลิกได้เฉพาะบิลที่ถูกล็อกหลังปิดรับแล้ว");
+    }
+    if (bill.cancelRequestedById !== null) {
+      throw new ConflictError("บิลนี้มีคำขอยกเลิกค้างอยู่แล้ว");
+    }
+
+    await tx.bill.update({
+      where: { id: bill.id },
+      data: {
+        cancelRequestedById: actor.userId,
+        cancelRequestedAt: new Date(),
+        cancelRequestReason: trimmed,
+      },
+    });
+
+    await writeAudit(tx, {
+      organizationId: bill.organizationId,
+      actorId: actor.userId,
+      action: "UPDATE",
+      entityType: "Bill",
+      entityId: bill.id,
+      before: { cancelRequestedById: null },
+      after: { cancelRequestedById: actor.userId },
+      reason: `เสนอยกเลิกหลังปิดรับ: ${trimmed}`,
     });
   });
 }
@@ -384,6 +441,7 @@ export async function getBill(actor: Actor, billId: string) {
       draw: { select: { name: true, cutoffAt: true, status: true } },
       createdBy: { select: { displayName: true } },
       cancelledBy: { select: { displayName: true } },
+      cancelRequestedBy: { select: { displayName: true } },
     },
   });
 

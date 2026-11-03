@@ -4,7 +4,13 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActor } from "@/lib/auth/context";
-import { cancelBill, confirmBill, createDraftBill, replaceDraftItems } from "@/lib/bills/service";
+import {
+  cancelBill,
+  confirmBill,
+  createDraftBill,
+  replaceDraftItems,
+  requestCancelAfterCutoff,
+} from "@/lib/bills/service";
 import { AppError } from "@/lib/errors";
 
 export type ActionState = { error: string | null };
@@ -78,6 +84,25 @@ export async function confirmBillAction(
 
   try {
     await confirmBill(actor, billId);
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(`/bills/${billId}`);
+  return { error: null };
+}
+
+export async function requestCancelAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireActor();
+  const billId = String(formData.get("billId") ?? "");
+  const reason = String(formData.get("reason") ?? "");
+
+  try {
+    await requestCancelAfterCutoff(actor, billId, reason);
   } catch (error) {
     if (error instanceof AppError) return { error: error.message };
     throw error;

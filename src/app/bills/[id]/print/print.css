@@ -1,0 +1,129 @@
+.sheet {
+  background: #fff;
+  color: #000;
+  margin: 0 auto;
+  padding: 12mm;
+  font-family: Tahoma, "Segoe UI", sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+}
+
+.sheet-a4 {
+  width: 210mm;
+  min-height: 297mm;
+}
+
+/* กระดาษสลิปแคบ ตัดคอลัมน์อัตราจ่ายออกเพื่อให้พอดีความกว้าง */
+.sheet-slip {
+  width: 80mm;
+  padding: 5mm;
+  font-size: 9pt;
+}
+
+.sheet-header {
+  border-bottom: 2px solid #000;
+  padding-bottom: 4mm;
+  margin-bottom: 4mm;
+}
+
+.sheet-header h1 {
+  margin: 0;
+  font-size: 16pt;
+}
+
+.sheet-slip .sheet-header h1 {
+  font-size: 12pt;
+}
+
+.sheet-number {
+  margin: 1mm 0 0;
+  font-weight: bold;
+  font-size: 13pt;
+  letter-spacing: 0.08em;
+}
+
+.sheet-meta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1mm 6mm;
+  margin: 0 0 5mm;
+}
+
+.sheet-slip .sheet-meta {
+  grid-template-columns: 1fr;
+}
+
+.sheet-meta div {
+  display: flex;
+  gap: 2mm;
+}
+
+.sheet-meta dt {
+  font-weight: bold;
+  min-width: 22mm;
+}
+
+.sheet-meta dd {
+  margin: 0;
+}
+
+.sheet-items {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 4mm;
+}
+
+.sheet-items th,
+.sheet-items td {
+  border-bottom: 1px solid #999;
+  padding: 1.5mm 2mm;
+  text-align: left;
+}
+
+.sheet-items .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* เลขที่แทงต้องอ่านง่ายที่สุดบนกระดาษ จึงใช้ฟอนต์ความกว้างคงที่และตัวใหญ่ขึ้น */
+.number-cell {
+  font-family: "Courier New", monospace;
+  font-size: 1.15em;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+}
+
+.sheet-items tfoot th,
+.sheet-items tfoot td {
+  border-top: 2px solid #000;
+  border-bottom: none;
+  font-weight: bold;
+  padding-top: 2mm;
+}
+
+.sheet-void {
+  border: 2px solid #000;
+  padding: 2mm;
+  font-weight: bold;
+  text-align: center;
+}
+
+.sheet-footer {
+  margin-top: 6mm;
+  font-size: 8pt;
+}
+
+@media print {
+  .no-print {
+    display: none;
+  }
+
+  .sheet {
+    padding: 0;
+    width: auto;
+  }
+}
+
+@page {
+  margin: 10mm;
+}
