@@ -1,0 +1,62 @@
+.rulebook-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.rulebook-row input[type="text"],
+.rulebook-row input:not([type]) {
+  width: auto;
+  margin-top: 0;
+}
+
+/* ความกว้างต่อช่องตั้งตามข้อมูลที่กรอกจริง ไม่ปล่อยให้ยืดเท่ากันหมด */
+.rulebook-row input[name="name"] {
+  flex: 1 1 10rem;
+}
+
+.rulebook-row input[name="digits"] {
+  flex: 0 0 4rem;
+}
+
+.rulebook-row input[name="payoutRate"] {
+  flex: 0 0 7rem;
+}
+
+.rulebook-row input[name="maxStakePerItem"] {
+  flex: 0 0 8rem;
+}
+
+.rulebook-row input[name="reason"] {
+  flex: 1 1 12rem;
+}
+
+.rulebook-row button {
+  flex: 0 0 auto;
+}
+
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.inline-check input {
+  width: auto;
+  margin: 0;
+}
+
+.rulebook td {
+  vertical-align: middle;
+}
+
+.notice {
+  background: #eaf5f3;
+  border-left: 4px solid #1f7a74;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}

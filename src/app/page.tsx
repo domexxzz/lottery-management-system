@@ -35,6 +35,9 @@ export default async function HomePage() {
             <Link href="/draws">
               <button type="button">รอบ</button>
             </Link>{" "}
+            <Link href="/prize-types">
+              <button type="button">Rulebook รางวัล</button>
+            </Link>{" "}
             {permissions.includes("agent.manage") && (
               <Link href="/agents">
                 <button type="button">จัดการ Agent</button>
