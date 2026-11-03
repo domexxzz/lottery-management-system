@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getActor } from "@/lib/auth/context";
 import { permissionsFor } from "@/lib/auth/permissions";
@@ -24,6 +25,12 @@ export default async function HomePage() {
         <p className="muted">
           {actor.displayName} · {ROLE_LABEL[actor.role] ?? actor.role}
           {actor.agentId !== null && " · ผูกกับ Agent แล้ว"}
+        </p>
+
+        <p>
+          <Link href="/bills">
+            <button type="button">ไปที่รายการบิล</button>
+          </Link>
         </p>
 
         <h2>สิทธิ์ของบทบาทนี้</h2>

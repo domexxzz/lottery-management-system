@@ -1,9 +1,12 @@
 import { cookies, headers } from "next/headers";
-import type { Prisma, Role } from "@prisma/client";
+import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
 import { can, type Permission } from "./permissions";
 import { SESSION_COOKIE_NAME, resolveSession } from "./session";
+
+// กฎการมองเห็นอยู่ใน scope.ts เพื่อให้ทดสอบได้โดยไม่ต้องพึ่ง next/headers
+export { auditScope, billScope, orgScope } from "./scope";
 
 export type Actor = {
   userId: string;
@@ -60,39 +63,6 @@ export async function requirePermissionAsActor(permission: Permission): Promise<
   const actor = await requireActor();
   requirePermission(actor, permission);
   return actor;
-}
-
-/**
- * ขอบเขตที่ทุก query เกี่ยวกับบิลต้องใช้ (เอกสารบทที่ 2)
- *
- * ห้ามเขียน prisma.bill.findMany({ where: { drawId } }) ตรง ๆ ที่ใดก็ตาม
- * ต้องเป็น prisma.bill.findMany({ where: { ...billScope(actor), drawId } }) เสมอ
- *
- * Agent เห็นเฉพาะบิลของตนเอง บทบาทอื่นเห็นทั้งองค์กรแต่ไม่ข้ามองค์กร
- */
-export function billScope(actor: Actor): Prisma.BillWhereInput {
-  if (actor.role === "AGENT") {
-    // agentId เป็น null ไม่ได้สำหรับ AGENT ที่ผ่าน getActor มาแล้ว
-    // ใส่ค่าที่ไม่มีทางตรงไว้กันพลาด ดีกว่าปล่อยให้เห็นทั้งองค์กร
-    return { organizationId: actor.organizationId, agentId: actor.agentId ?? "__no_agent__" };
-  }
-  return { organizationId: actor.organizationId };
-}
-
-/** ขอบเขตสำหรับตารางที่มี organizationId ตรง ๆ และไม่ได้แยกตาม Agent */
-export function orgScope(actor: Actor): { organizationId: string } {
-  return { organizationId: actor.organizationId };
-}
-
-/**
- * ขอบเขตของ Audit Log
- * Agent เห็นเฉพาะเหตุการณ์ของบิลตนเอง บทบาทอื่นที่มี audit.viewAll เห็นทั้งองค์กร
- */
-export function auditScope(actor: Actor): Prisma.AuditEventWhereInput {
-  if (can(actor.role, "audit.viewAll")) {
-    return { organizationId: actor.organizationId };
-  }
-  return { organizationId: actor.organizationId, actorId: actor.userId };
 }
 
 export async function clientIp(): Promise<string | undefined> {

@@ -89,6 +89,10 @@ model Organization {
   /// IANA timezone เช่น Asia/Bangkok — ใช้ตัดสิน Cutoff
   timezone  String   @default("Asia/Bangkok")
   isActive  Boolean  @default(true)
+
+  /// ตัวนับเลขบิล เพิ่มแบบ atomic ด้วย UPDATE ... RETURNING ตอนยืนยันบิล
+  /// ใช้ตัวนับระดับองค์กรเพื่อให้เลขบิลไม่ซ้ำข้ามรอบ
+  billSequence Int @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
