@@ -104,7 +104,7 @@ async function loadPrizeRules(
       code: true,
       name: true,
       digits: true,
-      isPermutation: true,
+      matchRule: true,
       payoutRate: true,
       maxStakePerItem: true,
     },

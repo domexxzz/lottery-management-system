@@ -66,6 +66,16 @@ enum SettlementStatus {
   APPROVED // Owner อนุมัติ ปิดรอบ
 }
 
+/// วิธีตัดสินว่ารายการถูกรางวัลหรือไม่
+enum MatchRule {
+  /// เลขตรงกันทุกหลัก เช่น 3 ตัวบน
+  EXACT
+  /// สลับตำแหน่งแล้วตรงกันก็ถือว่าถูก เช่น 3 ตัวโต๊ด
+  PERMUTATION
+  /// เลขที่แทงปรากฏอยู่ในผลที่ออก เช่น วิ่งบน วิ่งล่าง
+  CONTAINS_DIGIT
+}
+
 enum AuditAction {
   CREATE
   UPDATE
@@ -210,8 +220,8 @@ model PrizeType {
 
   /// จำนวนหลักของเลขที่รับ เช่น 3 สำหรับสามตัวบน
   digits Int
-  /// true = รางวัลแบบโต๊ด (สลับตำแหน่งแล้วถือว่าถูก)
-  isPermutation Boolean @default(false)
+  /// วิธีตัดสินว่าถูกรางวัล — ดู MatchRule
+  matchRule MatchRule @default(EXACT)
 
   /// อัตราจ่ายต่อเงินเดิมพัน 1 หน่วย เช่น 900.0000 = จ่าย 900 บาทต่อ 1 บาท
   payoutRate Decimal @db.Decimal(12, 4)

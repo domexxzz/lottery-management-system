@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import type { MatchRule } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
@@ -18,7 +19,7 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 export type PrizeTypeInput = {
   name: string;
   digits: string;
-  isPermutation: boolean;
+  matchRule: MatchRule;
   payoutRate: string;
   maxStakePerItem: string;
   isActive: boolean;
@@ -75,7 +76,7 @@ export async function listPrizeTypes(actor: Actor) {
       code: true,
       name: true,
       digits: true,
-      isPermutation: true,
+      matchRule: true,
       payoutRate: true,
       maxStakePerItem: true,
       isActive: true,
@@ -113,7 +114,7 @@ export async function updatePrizeType(
       code: true,
       name: true,
       digits: true,
-      isPermutation: true,
+      matchRule: true,
       payoutRate: true,
       maxStakePerItem: true,
       isActive: true,
@@ -127,7 +128,7 @@ export async function updatePrizeType(
       data: {
         name,
         digits,
-        isPermutation: input.isPermutation,
+        matchRule: input.matchRule,
         payoutRate,
         maxStakePerItem,
         isActive: input.isActive,
@@ -145,7 +146,7 @@ export async function updatePrizeType(
       before: {
         name: existing.name,
         digits: existing.digits,
-        isPermutation: existing.isPermutation,
+        matchRule: existing.matchRule,
         payoutRate: existing.payoutRate.toFixed(4),
         maxStakePerItem: existing.maxStakePerItem?.toFixed(2) ?? null,
         isActive: existing.isActive,
@@ -153,7 +154,7 @@ export async function updatePrizeType(
       after: {
         name,
         digits,
-        isPermutation: input.isPermutation,
+        matchRule: input.matchRule,
         payoutRate: payoutRate.toFixed(4),
         maxStakePerItem: maxStakePerItem?.toFixed(2) ?? null,
         isActive: input.isActive,

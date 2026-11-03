@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import type { MatchRule } from "@prisma/client";
 
 /**
  * กฎตรวจรายการบิล ตามเอกสารบทที่ 3 (Workflow สร้างบิล ข้อ 3)
@@ -15,7 +16,7 @@ export type PrizeTypeRule = {
   code: number;
   name: string;
   digits: number;
-  isPermutation: boolean;
+  matchRule: MatchRule;
   payoutRate: Prisma.Decimal;
   maxStakePerItem: Prisma.Decimal | null;
 };
@@ -82,11 +83,12 @@ function validateNumberFormat(
 /**
  * คีย์สำหรับตรวจรายการซ้ำ
  *
- * รางวัลแบบโต๊ด (isPermutation) ถือว่า 123 กับ 321 เป็นเลขเดียวกัน
+ * รางวัลแบบโต๊ด (matchRule = PERMUTATION) ถือว่า 123 กับ 321 เป็นเลขเดียวกัน
  * จึงเรียงหลักก่อนทำคีย์ ไม่งั้นผู้ใช้แทงซ้ำโดยไม่รู้ตัวและจ่ายสองเท่า
  */
-export function dedupeKey(prizeTypeId: string, numberValue: string, isPermutation: boolean): string {
-  const normalized = isPermutation ? [...numberValue].sort().join("") : numberValue;
+export function dedupeKey(prizeTypeId: string, numberValue: string, matchRule: MatchRule): string {
+  // รางวัลโต๊ดเท่านั้นที่ถือว่าสลับตำแหน่งแล้วเป็นเลขเดียวกัน
+  const normalized = matchRule === "PERMUTATION" ? [...numberValue].sort().join("") : numberValue;
   return `${prizeTypeId}:${normalized}`;
 }
 
@@ -158,7 +160,7 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
       });
     }
 
-    const key = dedupeKey(item.prizeTypeId, item.number, rule.isPermutation);
+    const key = dedupeKey(item.prizeTypeId, item.number, rule.matchRule);
     if (seen.has(key)) {
       issues.push({
         itemIndex: index,

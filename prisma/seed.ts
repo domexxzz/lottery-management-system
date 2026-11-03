@@ -12,22 +12,22 @@ import { hashPassword } from "../src/lib/auth/password";
  * ห้ามนำค่าชุดนี้ขึ้น staging หรือ production ก่อนสองใบนั้นปิด
  */
 const PRIZE_TYPES = [
-  { code: 1, name: "3 ตัวบน", digits: 3, isPermutation: false, payoutRate: "900.0000" },
-  { code: 2, name: "3 ตัวโต๊ด", digits: 3, isPermutation: true, payoutRate: "150.0000" },
-  { code: 3, name: "3 ตัวหน้า", digits: 3, isPermutation: false, payoutRate: "450.0000" },
-  { code: 4, name: "3 ตัวท้าย", digits: 3, isPermutation: false, payoutRate: "450.0000" },
-  { code: 5, name: "2 ตัวบน", digits: 2, isPermutation: false, payoutRate: "90.0000" },
-  { code: 6, name: "2 ตัวล่าง", digits: 2, isPermutation: false, payoutRate: "90.0000" },
-  { code: 7, name: "2 ตัวโต๊ด", digits: 2, isPermutation: true, payoutRate: "45.0000" },
-  { code: 8, name: "วิ่งบน", digits: 1, isPermutation: false, payoutRate: "3.2000" },
-  { code: 9, name: "วิ่งล่าง", digits: 1, isPermutation: false, payoutRate: "4.2000" },
-  { code: 10, name: "3 ตัวบนกลับ", digits: 3, isPermutation: true, payoutRate: "150.0000" },
-  { code: 11, name: "2 ตัวบนกลับ", digits: 2, isPermutation: true, payoutRate: "45.0000" },
-  { code: 12, name: "4 ตัวบน", digits: 4, isPermutation: false, payoutRate: "6000.0000" },
-  { code: 13, name: "4 ตัวโต๊ด", digits: 4, isPermutation: true, payoutRate: "900.0000" },
-  { code: 14, name: "5 ตัวบน", digits: 5, isPermutation: false, payoutRate: "30000.0000" },
-  { code: 15, name: "6 ตัวบน", digits: 6, isPermutation: false, payoutRate: "100000.0000" },
-  { code: 16, name: "เลขท้าย 2 ตัว", digits: 2, isPermutation: false, payoutRate: "90.0000" },
+  { code: 1, name: "3 ตัวบน", digits: 3, matchRule: "EXACT", payoutRate: "900.0000" },
+  { code: 2, name: "3 ตัวโต๊ด", digits: 3, matchRule: "PERMUTATION", payoutRate: "150.0000" },
+  { code: 3, name: "3 ตัวหน้า", digits: 3, matchRule: "EXACT", payoutRate: "450.0000" },
+  { code: 4, name: "3 ตัวท้าย", digits: 3, matchRule: "EXACT", payoutRate: "450.0000" },
+  { code: 5, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", payoutRate: "90.0000" },
+  { code: 6, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", payoutRate: "90.0000" },
+  { code: 7, name: "2 ตัวโต๊ด", digits: 2, matchRule: "PERMUTATION", payoutRate: "45.0000" },
+  { code: 8, name: "วิ่งบน", digits: 1, matchRule: "CONTAINS_DIGIT", payoutRate: "3.2000" },
+  { code: 9, name: "วิ่งล่าง", digits: 1, matchRule: "CONTAINS_DIGIT", payoutRate: "4.2000" },
+  { code: 10, name: "3 ตัวบนกลับ", digits: 3, matchRule: "PERMUTATION", payoutRate: "150.0000" },
+  { code: 11, name: "2 ตัวบนกลับ", digits: 2, matchRule: "PERMUTATION", payoutRate: "45.0000" },
+  { code: 12, name: "4 ตัวบน", digits: 4, matchRule: "EXACT", payoutRate: "6000.0000" },
+  { code: 13, name: "4 ตัวโต๊ด", digits: 4, matchRule: "PERMUTATION", payoutRate: "900.0000" },
+  { code: 14, name: "5 ตัวบน", digits: 5, matchRule: "EXACT", payoutRate: "30000.0000" },
+  { code: 15, name: "6 ตัวบน", digits: 6, matchRule: "EXACT", payoutRate: "100000.0000" },
+  { code: 16, name: "เลขท้าย 2 ตัว", digits: 2, matchRule: "EXACT", payoutRate: "90.0000" },
 ] as const;
 
 const AGENTS = [
@@ -88,7 +88,7 @@ async function main() {
       update: {
         name: pt.name,
         digits: pt.digits,
-        isPermutation: pt.isPermutation,
+        matchRule: pt.matchRule,
         payoutRate: pt.payoutRate,
       },
       create: {
@@ -96,7 +96,7 @@ async function main() {
         code: pt.code,
         name: pt.name,
         digits: pt.digits,
-        isPermutation: pt.isPermutation,
+        matchRule: pt.matchRule,
         payoutRate: pt.payoutRate,
       },
     });

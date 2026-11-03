@@ -51,7 +51,9 @@ export default async function DrawsPage() {
           <tbody>
             {draws.map((draw) => (
               <tr key={draw.id}>
-                <td>{draw.name}</td>
+                <td>
+                  <Link href={`/draws/${draw.id}`}>{draw.name}</Link>
+                </td>
                 <td>{BANGKOK.format(draw.opensAt)}</td>
                 <td>{BANGKOK.format(draw.cutoffAt)}</td>
                 <td>{draw._count.bills}</td>

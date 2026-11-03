@@ -8,6 +8,12 @@ import "./rulebook.css";
 
 export const dynamic = "force-dynamic";
 
+const MATCH_RULE_LABEL: Record<string, string> = {
+  EXACT: "ตรงทุกหลัก",
+  PERMUTATION: "โต๊ด",
+  CONTAINS_DIGIT: "วิ่ง",
+};
+
 export default async function PrizeTypesPage() {
   const actor = await getActor();
   if (!actor) redirect("/login");
@@ -42,7 +48,7 @@ export default async function PrizeTypesPage() {
             <tr>
               <th scope="col">รหัส</th>
               <th scope="col" colSpan={7}>
-                ชื่อ · จำนวนหลัก · อัตราจ่าย · วงเงินต่อรายการ · โต๊ด · เปิดใช้ · เหตุผล
+                ชื่อ · จำนวนหลัก · อัตราจ่าย · วงเงินต่อรายการ · วิธีตัดสิน · เปิดใช้ · เหตุผล
               </th>
             </tr>
           </thead>
@@ -56,7 +62,7 @@ export default async function PrizeTypesPage() {
                     code: p.code,
                     name: p.name,
                     digits: p.digits,
-                    isPermutation: p.isPermutation,
+                    matchRule: p.matchRule,
                     payoutRate: p.payoutRate.toFixed(4),
                     maxStakePerItem: p.maxStakePerItem?.toFixed(2) ?? "",
                     isActive: p.isActive,
@@ -73,7 +79,8 @@ export default async function PrizeTypesPage() {
                     {p.maxStakePerItem === null
                       ? "ไม่จำกัดต่อรายการ"
                       : `สูงสุด ${p.maxStakePerItem.toFixed(2)}`}
-                    {p.isPermutation && " · โต๊ด"}
+                    {" · "}
+                    {MATCH_RULE_LABEL[p.matchRule] ?? p.matchRule}
                     {!p.isActive && " · ปิดใช้งาน"}
                   </td>
                 </tr>

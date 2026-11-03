@@ -9,7 +9,7 @@ const THREE_TOP: PrizeTypeRule = {
   code: 1,
   name: "3 ตัวบน",
   digits: 3,
-  isPermutation: false,
+  matchRule: "EXACT",
   payoutRate: d("900"),
   maxStakePerItem: d("5000"),
 };
@@ -19,7 +19,7 @@ const THREE_TOD: PrizeTypeRule = {
   code: 2,
   name: "3 ตัวโต๊ด",
   digits: 3,
-  isPermutation: true,
+  matchRule: "PERMUTATION",
   payoutRate: d("150"),
   maxStakePerItem: null,
 };
@@ -156,8 +156,8 @@ describe("รายการซ้ำ", () => {
   });
 
   test("dedupeKey เรียงหลักเฉพาะรางวัลโต๊ด", () => {
-    expect(dedupeKey("p", "321", true)).toBe(dedupeKey("p", "123", true));
-    expect(dedupeKey("p", "321", false)).not.toBe(dedupeKey("p", "123", false));
+    expect(dedupeKey("p", "321", "PERMUTATION")).toBe(dedupeKey("p", "123", "PERMUTATION"));
+    expect(dedupeKey("p", "321", "EXACT")).not.toBe(dedupeKey("p", "123", "EXACT"));
   });
 });
 

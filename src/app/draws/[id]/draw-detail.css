@@ -1,0 +1,33 @@
+/* ฟอร์มที่อยู่ในช่องตาราง ต้องไม่ดันความสูงแถวจนอ่านยาก */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.inline-form input {
+  width: auto;
+  margin-top: 0;
+  flex: 0 1 9rem;
+}
+
+.inline-form button {
+  padding: 0.35rem 0.7rem;
+  flex: 0 0 auto;
+}
+
+/* ตัวเลขเงินต้องเรียงหลักให้ตรงกันเพื่อกวาดสายตาหาความผิดปกติได้ */
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* เลขที่ออกคือสิ่งที่คนจ้องมากที่สุดในหน้านี้ */
+.number-cell {
+  font-family: "Courier New", monospace;
+  font-size: 1.1em;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+}

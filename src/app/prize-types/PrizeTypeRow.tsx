@@ -10,7 +10,7 @@ export type PrizeTypeRowData = {
   code: number;
   name: string;
   digits: number;
-  isPermutation: boolean;
+  matchRule: string;
   payoutRate: string;
   maxStakePerItem: string;
   isActive: boolean;
@@ -60,10 +60,15 @@ export function PrizeTypeRow({ data }: { data: PrizeTypeRowData }) {
             aria-label={`วงเงินต่อรายการของรางวัลที่ ${data.code}`}
           />
 
-          <label className="inline-check">
-            <input type="checkbox" name="isPermutation" defaultChecked={data.isPermutation} />
-            โต๊ด
-          </label>
+          <select
+            name="matchRule"
+            defaultValue={data.matchRule}
+            aria-label={`วิธีตัดสินรางวัลที่ ${data.code}`}
+          >
+            <option value="EXACT">ตรงทุกหลัก</option>
+            <option value="PERMUTATION">โต๊ด</option>
+            <option value="CONTAINS_DIGIT">วิ่ง</option>
+          </select>
 
           <label className="inline-check">
             <input type="checkbox" name="isActive" defaultChecked={data.isActive} />
