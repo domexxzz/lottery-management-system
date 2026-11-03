@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireActor, clientIp } from "@/lib/auth/context";
+import { requireActor } from "@/lib/auth/context";
 import { changePassword } from "@/lib/auth/login";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { AppError } from "@/lib/errors";
@@ -41,7 +41,8 @@ export async function changePasswordAction(
       userId: actor.userId,
       currentPassword: parsed.data.currentPassword,
       newPassword: parsed.data.newPassword,
-      ipAddress: await clientIp(),
+      ipAddress: actor.ipAddress,
+      requestId: actor.requestId,
     });
   } catch (error) {
     if (error instanceof AppError) {

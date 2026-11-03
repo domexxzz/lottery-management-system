@@ -137,6 +137,8 @@ export async function updatePrizeType(
     await writeAudit(tx, {
       organizationId: actor.organizationId,
       actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
       action: "UPDATE",
       entityType: "PrizeType",
       entityId: existing.id,

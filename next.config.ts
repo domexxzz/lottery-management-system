@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // ให้ build ออกมาเป็น standalone server สำหรับใส่ container (ดู Dockerfile)
+  output: "standalone",
   async headers() {
     // Security headers ขั้นต้น ส่วนที่เหลืออยู่ใน LOT-16 (P5-3)
     return [

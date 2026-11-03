@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
+    "verify": "npx tsc --noEmit && npx vitest run && npx next build",
     "test": "vitest run",
     "test:watch": "vitest",
     "job:cutoff": "tsx scripts/run-cutoff.ts",

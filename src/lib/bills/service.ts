@@ -79,6 +79,8 @@ export async function createDraftBill(
     await writeAudit(tx, {
       organizationId: actor.organizationId,
       actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
       action: "CREATE",
       entityType: "Bill",
       entityId: created.id,
@@ -167,6 +169,8 @@ export async function replaceDraftItems(
     await writeAudit(tx, {
       organizationId: bill.organizationId,
       actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
       action: "UPDATE",
       entityType: "Bill",
       entityId: bill.id,
@@ -283,6 +287,8 @@ export async function confirmBill(
     await writeAudit(tx, {
       organizationId: bill.organizationId,
       actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
       action: "CONFIRM",
       entityType: "Bill",
       entityId: bill.id,
@@ -338,6 +344,8 @@ export async function cancelBill(
     await writeAudit(tx, {
       organizationId: bill.organizationId,
       actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
       action: "CANCEL",
       entityType: "Bill",
       entityId: bill.id,
@@ -392,6 +400,8 @@ export async function requestCancelAfterCutoff(
     await writeAudit(tx, {
       organizationId: bill.organizationId,
       actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
       action: "UPDATE",
       entityType: "Bill",
       entityId: bill.id,

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
 import { can, type Permission } from "./permissions";
 import { SESSION_COOKIE_NAME, resolveSession } from "./session";
+import { REQUEST_ID_HEADER } from "@/lib/requestId";
 
 // กฎการมองเห็นอยู่ใน scope.ts เพื่อให้ทดสอบได้โดยไม่ต้องพึ่ง next/headers
 export { auditScope, billScope, orgScope } from "./scope";
@@ -16,6 +17,9 @@ export type Actor = {
   /** ไม่ null เฉพาะผู้ใช้บทบาท AGENT ที่ผูกกับ Agent แล้ว */
   agentId: string | null;
   mustChangePassword: boolean;
+  /** ตัวตามรอย request เดียวกันจาก middleware ถึง Audit Log (LOT-38) */
+  requestId: string | undefined;
+  ipAddress: string | undefined;
 };
 
 /** คืน Actor ถ้ามี session ที่ใช้ได้ ไม่งั้นคืน null — ใช้กับหน้าที่เปิดสาธารณะได้ */
@@ -37,6 +41,8 @@ export async function getActor(): Promise<Actor | null> {
     return null;
   }
 
+  const h = await headers();
+
   return {
     userId: session.user.id,
     organizationId: session.user.organizationId,
@@ -44,6 +50,8 @@ export async function getActor(): Promise<Actor | null> {
     displayName: session.user.displayName,
     agentId: agent?.id ?? null,
     mustChangePassword: session.user.mustChangePassword,
+    requestId: h.get(REQUEST_ID_HEADER) ?? undefined,
+    ipAddress: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
   };
 }
 
@@ -63,9 +71,4 @@ export async function requirePermissionAsActor(permission: Permission): Promise<
   const actor = await requireActor();
   requirePermission(actor, permission);
   return actor;
-}
-
-export async function clientIp(): Promise<string | undefined> {
-  const h = await headers();
-  return h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined;
 }

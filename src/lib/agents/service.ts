@@ -98,6 +98,8 @@ export async function createAgent(actor: Actor, input: AgentInput): Promise<{ ag
     await writeAudit(tx, {
       organizationId: actor.organizationId,
       actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
       action: "CREATE",
       entityType: "Agent",
       entityId: created.id,
@@ -142,6 +144,8 @@ export async function setAgentStatus(
     await writeAudit(tx, {
       organizationId: actor.organizationId,
       actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
       action: status === "ACTIVE" ? "REACTIVATE" : "SUSPEND",
       entityType: "Agent",
       entityId: agent.id,

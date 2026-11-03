@@ -64,6 +64,8 @@ export async function createDraw(actor: Actor, input: DrawInput): Promise<{ draw
     await writeAudit(tx, {
       organizationId: actor.organizationId,
       actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
       action: "CREATE",
       entityType: "Draw",
       entityId: created.id,
@@ -100,7 +102,7 @@ export type LockOutcome = {
  */
 export async function lockDraw(
   drawId: string,
-  options: { actorId: string | null; reason: string },
+  options: { actorId: string | null; reason: string; requestId?: string | undefined },
 ): Promise<LockOutcome> {
   return prisma.$transaction(async (tx) => {
     const draw = await tx.draw.findUnique({
@@ -137,6 +139,7 @@ export async function lockDraw(
     await writeAudit(tx, {
       organizationId: draw.organizationId,
       actorId: options.actorId,
+      requestId: options.requestId,
       action: "LOCK",
       entityType: "Draw",
       entityId: draw.id,
@@ -168,7 +171,11 @@ export async function lockDrawManually(actor: Actor, drawId: string): Promise<Lo
   });
   if (!draw) throw new NotFoundError("ไม่พบรอบ");
 
-  return lockDraw(draw.id, { actorId: actor.userId, reason: "ปิดรอบด้วยมือโดยผู้ดูแล" });
+  return lockDraw(draw.id, {
+    actorId: actor.userId,
+    reason: "ปิดรอบด้วยมือโดยผู้ดูแล",
+    requestId: actor.requestId,
+  });
 }
 
 /**

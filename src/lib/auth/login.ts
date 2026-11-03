@@ -20,6 +20,7 @@ export async function login(input: {
   password: string;
   ipAddress?: string | undefined;
   userAgent?: string | undefined;
+  requestId?: string | undefined;
 }): Promise<LoginResult> {
   const GENERIC_FAILURE = "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
 
@@ -41,6 +42,7 @@ export async function login(input: {
       entityId: input.loginName,
       reason: "ไม่พบบัญชีผู้ใช้",
       ipAddress: input.ipAddress,
+      requestId: input.requestId,
     });
     return { ok: false, message: GENERIC_FAILURE };
   }
@@ -56,6 +58,7 @@ export async function login(input: {
       entityId: user.id,
       reason: passwordOk ? "บัญชีถูกระงับ" : "รหัสผ่านไม่ถูกต้อง",
       ipAddress: input.ipAddress,
+      requestId: input.requestId,
     });
     return { ok: false, message: GENERIC_FAILURE };
   }
@@ -78,6 +81,7 @@ export async function login(input: {
       entityType: "User",
       entityId: user.id,
       ipAddress: input.ipAddress,
+      requestId: input.requestId,
     });
   });
 
@@ -98,6 +102,7 @@ export async function changePassword(input: {
   currentPassword: string;
   newPassword: string;
   ipAddress?: string | undefined;
+  requestId?: string | undefined;
 }): Promise<void> {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } });
 
@@ -128,6 +133,7 @@ export async function changePassword(input: {
       entityId: user.id,
       reason: "เปลี่ยนรหัสผ่าน",
       ipAddress: input.ipAddress,
+      requestId: input.requestId,
     });
   });
 

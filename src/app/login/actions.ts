@@ -6,6 +6,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { login } from "@/lib/auth/login";
 import { SESSION_COOKIE_NAME, sessionCookieOptions } from "@/lib/auth/session";
+import { REQUEST_ID_HEADER } from "@/lib/requestId";
+import { logger } from "@/lib/logger";
 
 const LoginInput = z.object({
   login: z.string().trim().min(1, "กรุณากรอกชื่อผู้ใช้").max(64),
@@ -43,17 +45,24 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   }
 
   const h = await headers();
+  const requestId = h.get(REQUEST_ID_HEADER) ?? undefined;
+  const ipAddress = h.get("x-forwarded-for")?.split(",")[0]?.trim();
+
   const result = await login({
     organizationId,
     loginName: parsed.data.login,
     password: parsed.data.password,
-    ipAddress: h.get("x-forwarded-for")?.split(",")[0]?.trim(),
+    ipAddress,
     userAgent: h.get("user-agent") ?? undefined,
+    requestId,
   });
 
   if (!result.ok) {
+    logger.warn("login failed", { requestId, login: parsed.data.login, ipAddress });
     return { error: result.message };
   }
+
+  logger.info("login succeeded", { requestId, login: parsed.data.login, ipAddress });
 
   (await cookies()).set(
     SESSION_COOKIE_NAME,
