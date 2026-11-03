@@ -1,0 +1,436 @@
+// แบบจำลองข้อมูลระบบบริหารจัดการลอตเตอรี่
+// อ้างอิง: docs/Lottery_System_CTO_Development_Plan_TH.docx บทที่ 6 (Logical Data Model)
+//
+// หลักการที่ schema นี้บังคับไว้:
+//   1. ตรวจสอบย้อนหลังได้   — AuditEvent เก็บ actor/before/after/reason ทุกการเปลี่ยนแปลง
+//   2. แยกความเป็นเจ้าของ   — ทุกตารางที่แตะบิลมี organizationId และ query ต้อง scope เสมอ
+//   3. คำนวณซ้ำได้         — BillItem เก็บ payoutRateSnapshot ไม่อ้างอิงเรตปัจจุบัน
+//   4. ปิดรอบอย่างมีวินัย   — Draw.status + Bill.status เป็น state machine
+//   5. ผลลัพธ์มีผู้อนุมัติ   — Result แยก makerId / checkerId และห้ามเป็นคนเดียวกัน
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7: connection URL อยู่ใน prisma.config.ts สำหรับ migrate
+// และส่งผ่าน driver adapter ให้ PrismaClient (ดู src/lib/db.ts)
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------- enums
+
+enum Role {
+  OWNER
+  ADMIN
+  CHECKER
+  AGENT
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum AgentStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum DrawStatus {
+  OPEN // เปิดรับบิล
+  LOCKED // ถึง Cutoff แล้ว ล็อกบิลทั้งรอบ
+  RESULT_PENDING // รอผลและการอนุมัติผล
+  SETTLED // คำนวณแล้ว รอ Owner อนุมัติ
+  CLOSED // ปิดบัญชีแล้ว แก้ไขไม่ได้
+}
+
+enum BillStatus {
+  DRAFT // แก้ไขได้อิสระ
+  CONFIRMED // ยืนยันแล้ว มีเลขบิลและ payout snapshot
+  LOCKED // รอบปิดรับแล้ว
+  SETTLED // คำนวณผลแล้ว
+  CANCELLED // ยกเลิก ต้องมีเหตุผลและผู้อนุมัติ
+}
+
+enum ResultStatus {
+  DRAFT // Maker กรอกแล้ว ยังไม่ trigger การคำนวณ
+  APPROVED // Checker อนุมัติแล้ว
+  REJECTED // Checker ตีกลับ ต้องมีเหตุผล
+}
+
+enum SettlementStatus {
+  DRAFT // ระบบคำนวณแล้ว รอกระทบยอด
+  RECONCILED // Admin กระทบยอดแล้ว
+  APPROVED // Owner อนุมัติ ปิดรอบ
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  CANCEL
+  CONFIRM
+  LOCK
+  APPROVE
+  REJECT
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  SUSPEND
+  REACTIVATE
+}
+
+// ---------------------------------------------------------------- tenancy
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  /// IANA timezone เช่น Asia/Bangkok — ใช้ตัดสิน Cutoff
+  timezone  String   @default("Asia/Bangkok")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  agents      Agent[]
+  draws       Draw[]
+  prizeTypes  PrizeType[]
+  bills       Bill[]
+  billItems   BillItem[]
+  results     Result[]
+  settlements Settlement[]
+  auditEvents AuditEvent[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  login        String
+  displayName  String
+  passwordHash String
+  role         Role
+  status       UserStatus @default(ACTIVE)
+
+  /// บังคับเปลี่ยนรหัสผ่านในการ login ครั้งถัดไป
+  mustChangePassword Boolean   @default(true)
+  lastLoginAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// ผูกกับ Agent ได้หนึ่งรายตามนโยบาย (เฉพาะ role AGENT)
+  agent    Agent?    @relation("AgentUser")
+  sessions Session[]
+
+  createdBills     Bill[]       @relation("BillCreatedBy")
+  cancelledBills   Bill[]       @relation("BillCancelledBy")
+  madeResults      Result[]     @relation("ResultMaker")
+  checkedResults   Result[]     @relation("ResultChecker")
+  approvedSettle   Settlement[] @relation("SettlementApprover")
+  reconciledSettle Settlement[] @relation("SettlementReconciler")
+  auditEvents      AuditEvent[]
+
+  @@unique([organizationId, login])
+  @@index([organizationId, role])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// SHA-256 ของ session token — ไม่เก็บ token ดิบ
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------- agents
+
+model Agent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  code String
+  name String
+
+  /// อัตราคอมมิชชันเป็นเปอร์เซ็นต์ของยอดขาย เช่น 25.0000 = 25%
+  commissionRate Decimal @db.Decimal(7, 4)
+  /// วงเงินรวมต่อรอบ null = ไม่จำกัด
+  creditLimit    Decimal? @db.Decimal(18, 2)
+  /// วงเงินสูงสุดต่อเลขหนึ่งรายการ null = ไม่จำกัด
+  perNumberLimit Decimal? @db.Decimal(18, 2)
+
+  status AgentStatus @default(ACTIVE)
+
+  /// บัญชีผู้ใช้ของ Agent รายนี้
+  userId String? @unique
+  user   User?   @relation("AgentUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bills       Bill[]
+  settlements Settlement[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("agents")
+}
+
+// ---------------------------------------------------------------- rulebook
+
+/// ประเภทรางวัล 1 ถึง 16 — ค่าในตารางนี้คือ Rulebook ที่ต้องยืนยันก่อนเริ่ม Settlement (LOT-28, LOT-31)
+model PrizeType {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// รหัส 1 ถึง 16
+  code Int
+  name String
+
+  /// จำนวนหลักของเลขที่รับ เช่น 3 สำหรับสามตัวบน
+  digits Int
+  /// true = รางวัลแบบโต๊ด (สลับตำแหน่งแล้วถือว่าถูก)
+  isPermutation Boolean @default(false)
+
+  /// อัตราจ่ายต่อเงินเดิมพัน 1 หน่วย เช่น 900.0000 = จ่าย 900 บาทต่อ 1 บาท
+  payoutRate Decimal @db.Decimal(12, 4)
+  /// วงเงินสูงสุดต่อรายการ null = ไม่จำกัด
+  maxStakePerItem Decimal? @db.Decimal(18, 2)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  billItems BillItem[]
+  results   Result[]
+
+  @@unique([organizationId, code])
+  @@map("prize_types")
+}
+
+// ---------------------------------------------------------------- draws
+
+model Draw {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name    String
+  /// เวลาเริ่มรับบิล
+  opensAt DateTime
+  /// เวลาปิดรับบิล — ถึงเวลานี้ worker จะล็อกบิลทั้งรอบ
+  cutoffAt DateTime
+
+  status   DrawStatus @default(OPEN)
+  lockedAt DateTime?
+  closedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bills       Bill[]
+  results     Result[]
+  settlements Settlement[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, status])
+  @@index([status, cutoffAt])
+  @@map("draws")
+}
+
+// ---------------------------------------------------------------- bills
+
+model Bill {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id])
+  drawId  String
+  draw    Draw   @relation(fields: [drawId], references: [id])
+
+  /// เลขบิลที่ออกตอนยืนยัน — null ขณะยังเป็น Draft
+  billNumber String?
+  /// ชื่อบิลหรือรหัสอ้างอิงลูกค้า
+  title      String
+
+  status BillStatus @default(DRAFT)
+
+  /// ยอดเดิมพันรวมของบิล คำนวณจาก BillItem ตอนยืนยัน
+  totalStake Decimal @default(0) @db.Decimal(18, 2)
+  /// ยอดที่ต้องจ่ายรวม เติมหลัง settlement
+  totalPayout Decimal @default(0) @db.Decimal(18, 2)
+
+  createdById String
+  createdBy   User   @relation("BillCreatedBy", fields: [createdById], references: [id])
+  confirmedAt DateTime?
+
+  cancelledById String?
+  cancelledBy   User?     @relation("BillCancelledBy", fields: [cancelledById], references: [id])
+  cancelledAt   DateTime?
+  cancelReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items BillItem[]
+
+  @@unique([organizationId, billNumber])
+  @@index([organizationId, drawId, status])
+  @@index([organizationId, agentId, drawId])
+  @@map("bills")
+}
+
+model BillItem {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  billId String
+  bill   Bill   @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  prizeTypeId String
+  prizeType   PrizeType @relation(fields: [prizeTypeId], references: [id])
+
+  /// เลขที่แทง เก็บเป็น string เพื่อรักษาเลขศูนย์นำหน้า
+  number String
+  stake  Decimal @db.Decimal(18, 2)
+
+  /// อัตราจ่าย ณ เวลายืนยันบิล — ใช้ตัวนี้คำนวณเสมอ ห้ามอ่านจาก PrizeType.payoutRate
+  /// นี่คือสิ่งที่ทำให้ "คำนวณซ้ำได้" ตามหลักการในเอกสารบทที่ 1
+  payoutRateSnapshot Decimal @db.Decimal(12, 4)
+
+  /// เติมหลังอนุมัติผล
+  isWinner Boolean @default(false)
+  payout   Decimal @default(0) @db.Decimal(18, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([billId])
+  @@index([organizationId, prizeTypeId, number])
+  @@map("bill_items")
+}
+
+// ---------------------------------------------------------------- results
+
+model Result {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  drawId      String
+  draw        Draw      @relation(fields: [drawId], references: [id])
+  prizeTypeId String
+  prizeType   PrizeType @relation(fields: [prizeTypeId], references: [id])
+
+  /// เลขที่ออก
+  value String
+  /// เพิ่มทีละ 1 เมื่อมีการแก้ผลหลังประกาศ
+  version Int @default(1)
+
+  status ResultStatus @default(DRAFT)
+
+  makerId     String
+  maker       User     @relation("ResultMaker", fields: [makerId], references: [id])
+  enteredAt   DateTime @default(now())
+
+  /// ต้องไม่ใช่คนเดียวกับ maker — บังคับใน service layer
+  checkerId  String?
+  checker    User?     @relation("ResultChecker", fields: [checkerId], references: [id])
+  checkedAt  DateTime?
+  rejectReason String?
+
+  @@unique([drawId, prizeTypeId, version])
+  @@index([organizationId, drawId, status])
+  @@map("results")
+}
+
+// ---------------------------------------------------------------- settlement
+
+model Settlement {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  drawId  String
+  draw    Draw   @relation(fields: [drawId], references: [id])
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id])
+
+  /// ยอดขายรวมของ Agent ในรอบนี้
+  gross      Decimal @db.Decimal(18, 2)
+  /// ยอดที่ต้องจ่ายผู้ถูกรางวัล
+  payout     Decimal @db.Decimal(18, 2)
+  /// ค่าคอมมิชชันของ Agent
+  commission Decimal @db.Decimal(18, 2)
+  /// net = gross - payout - commission
+  net        Decimal @db.Decimal(18, 2)
+
+  /// อัตราคอม ณ เวลาคำนวณ — snapshot เช่นเดียวกับ payoutRateSnapshot
+  commissionRateSnapshot Decimal @db.Decimal(7, 4)
+
+  status SettlementStatus @default(DRAFT)
+
+  calculatedAt   DateTime  @default(now())
+  reconciledById String?
+  reconciledBy   User?     @relation("SettlementReconciler", fields: [reconciledById], references: [id])
+  reconciledAt   DateTime?
+  approvedById   String?
+  approvedBy     User?     @relation("SettlementApprover", fields: [approvedById], references: [id])
+  approvedAt     DateTime?
+
+  @@unique([drawId, agentId])
+  @@index([organizationId, drawId])
+  @@map("settlements")
+}
+
+// ---------------------------------------------------------------- audit
+
+/// ทุก mutation ต้องเขียนแถวที่นี่ในทรานแซกชันเดียวกับการเปลี่ยนแปลง (LOT-12)
+model AuditEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// null ได้เฉพาะกรณี LOGIN_FAILED ที่ยังระบุตัวผู้ใช้ไม่ได้
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id])
+
+  action AuditAction
+  /// ชื่อตาราง เช่น Bill, Result, Settlement
+  entityType String
+  entityId   String
+
+  /// สถานะก่อนและหลัง เก็บเป็น JSON เพื่อเทียบย้อนหลังได้
+  before Json?
+  after  Json?
+  reason String?
+
+  /// ผูกกับ log ของ request เดียวกัน (LOT-38)
+  requestId String?
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, actorId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("audit_events")
+}

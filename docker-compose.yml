@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: lottery-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lottery
+      POSTGRES_PASSWORD: lottery_dev_only
+      POSTGRES_DB: lottery
+    # เครื่อง dev อาจมี PostgreSQL ของตัวเองครอง 5432 อยู่แล้ว
+    # จึง map ออกมาที่ 5433 เพื่อไม่ชนกัน — ดู DATABASE_URL ใน .env.example
+    ports:
+      - "5433:5432"
+    volumes:
+      - lottery-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lottery -d lottery"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  lottery-pgdata:
