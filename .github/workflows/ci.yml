@@ -54,11 +54,16 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Unit tests
-        run: npx vitest run
+        run: npm test
 
       # รัน migration จริงบน Postgres เปล่า เพื่อจับ migration ที่พังตั้งแต่ CI
       - name: Apply migrations
         run: npx prisma migrate deploy
+
+      # ตรวจเส้นทางเงินและด่านกำกับกับฐานข้อมูลจริง
+      # ชุดนี้คือสิ่งที่จับได้เมื่อมีคนแก้ settlement หรือ scope แล้วพัง
+      - name: Integration tests
+        run: npm run test:integration
 
       - name: Seed smoke test
         run: npx prisma db seed

@@ -120,6 +120,30 @@ migration backfill ตามหลักการ ไม่ hardcode รหั�
 
 CI บน Linux ไม่เจอปัญหานี้ แต่ตั้งไว้ให้เหมือนกันทุกที่จะคาดเดาง่ายกว่า
 
+### T-14 · แยก integration test ออกจาก unit test
+
+unit test ต้องรันได้เร็วและไม่ต้องมีฐานข้อมูล ส่วน integration test ต้องมี
+PostgreSQL จริง ถ้ารวมกันไว้ชุดเดียว คนที่ยังไม่ได้ตั้ง Docker จะรัน test ไม่ได้เลย
+
+ใช้ config แยกสองไฟล์ ชุด integration รันแบบไม่ขนานเพราะทุกไฟล์ล้างและสร้าง
+ข้อมูลในฐานเดียวกัน และสร้างข้อมูลตั้งต้นเองแทนการพึ่ง `prisma db seed`
+เพราะ seed มีไว้สำหรับ development การแก้ seed ไม่ควรทำให้ test พัง
+
+**พิสูจน์แล้วว่าจับ regression ได้จริง** — จงใจลบด่าน Maker-Checker ใน
+`approveResult` แล้ว test แดงทันทีพร้อมชี้ชื่อเคสที่พัง จากนั้นคืนโค้ดเดิมและเขียวอีกครั้ง
+
+### T-15 · DeprecationWarning ของ pg ที่ยังไม่ได้แก้
+
+integration test พ่น `Calling client.query() when the client is already executing
+a query is deprecated and will be removed in pg@9.0`
+
+ตรวจ stack แล้วพบว่าเกิดใน `PgTransaction.performIO` ของ `@prisma/adapter-pg`
+ที่ถูกเรียกจาก query interpreter ของ Prisma เอง ไม่ใช่โค้ดในโปรเจกต์
+ยืนยันแล้วว่าไม่มี `Promise.all` ที่ไหนยิง query ขนานบน transaction client
+
+**ยังไม่แก้** เพราะอยู่ในไลบรารี แต่ต้องกลับมาดูก่อนอัปเกรดเป็น pg 9
+เพราะตอนนั้นจะกลายเป็น error ไม่ใช่ warning
+
 ### T-10 · Cutoff job เป็น idempotent และป้องกันด้วย token
 
 **เหตุผล** scheduler อาจเรียกซ้ำหรือเรียกถี่เกินไป งานต้องทนได้

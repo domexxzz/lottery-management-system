@@ -12,11 +12,12 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "verify": "npx tsc --noEmit && npx vitest run && npx next build",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "verify": "npx tsc --noEmit && npm test && npm run test:integration && npx next build",
+    "test": "vitest run --config vitest.config.mts",
+    "test:watch": "vitest --config vitest.config.mts",
     "job:cutoff": "tsx scripts/run-cutoff.ts",
-    "contract:emit": "prisma contract emit"
+    "contract:emit": "prisma contract emit",
+    "test:integration": "vitest run --config vitest.integration.config.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
