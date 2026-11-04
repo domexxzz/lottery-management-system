@@ -6,6 +6,7 @@ import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { searchBills } from "@/lib/reports/service";
 import { statusLabel } from "@/lib/bills/lifecycle";
+import { BillFilters } from "./BillFilters";
 import "./bills.css";
 
 export const dynamic = "force-dynamic";
@@ -51,82 +52,39 @@ export default async function BillsPage({
   ]);
 
   return (
-    <main>
-      <section className="card" aria-labelledby="bills-heading">
-        <p>
-          <Link href="/">← หน้าแรก</Link>
-        </p>
-        <h1 id="bills-heading">รายการบิล</h1>
-        <p className="muted">
-          {actor.role === "AGENT" ? "แสดงเฉพาะบิลของคุณ" : "แสดงบิลทั้งหมดในองค์กร"}
-        </p>
+    <main className="workspace-page bills-page">
+      <section className="card workspace-card" aria-labelledby="bills-heading">
+        <p><Link href="/">← หน้าภาพรวม</Link></p>
+        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Bill Management</p><h1 id="bills-heading">รายการบิล</h1><p>{actor.role === "AGENT" ? "ตรวจสอบและจัดการบิลของคุณ" : "จัดการบิลทั้งหมด ค้นหา กรอง และตรวจสอบสถานะ"}</p></div>{can(actor.role, "bill.create") && <Link href="/bills/new" className="page-primary-action">＋ สร้างบิลใหม่</Link>}</header>
 
-        {can(actor.role, "bill.create") && (
-          <p>
-            <Link href="/bills/new">
-              <button type="button">สร้างบิลใหม่</button>
-            </Link>
-          </p>
-        )}
+        <div className="bill-summary-strip"><div><span>บิลที่พบ</span><strong>{bills.length}</strong></div><div><span>ยืนยันแล้ว</span><strong>{bills.filter((bill) => bill.status === "CONFIRMED").length}</strong></div><div><span>รอประมวลผล</span><strong>{bills.filter((bill) => bill.status === "LOCKED").length}</strong></div><div><span>ยอดรับแทงรวม</span><strong>{bills.reduce((sum, bill) => sum + Number(bill.totalStake), 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })}</strong></div></div>
 
-        <form method="get" className="bill-filters">
-          <label htmlFor="q">
-            ค้นหา
-            <input
-              id="q"
-              name="q"
-              defaultValue={params.q ?? ""}
-              placeholder="เลขบิลหรือชื่อบิล"
-            />
-          </label>
-
-          <label htmlFor="draw">
-            รอบ
-            <select id="draw" name="draw" defaultValue={params.draw ?? ""}>
-              <option value="">ทุกรอบ</option>
-              {draws.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {canSeeAllAgents && (
-            <label htmlFor="agent">
-              Agent
-              <select id="agent" name="agent" defaultValue={params.agent ?? ""}>
-                <option value="">ทุก Agent</option>
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.code} {a.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          <label htmlFor="status">
-            สถานะ
-            <select id="status" name="status" defaultValue={params.status ?? ""}>
-              <option value="">ทุกสถานะ</option>
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {statusLabel(s)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button type="submit">ค้นหา</button>
-        </form>
+        <BillFilters
+          query={params.q ?? ""}
+          drawId={params.draw ?? ""}
+          agentId={params.agent ?? ""}
+          status={params.status ?? ""}
+          draws={draws.map((draw) => ({ id: draw.id, label: draw.name }))}
+          agents={
+            canSeeAllAgents
+              ? agents.map((agent) => ({
+                  id: agent.id,
+                  label: `${agent.code} ${agent.name}`,
+                }))
+              : null
+          }
+          statuses={STATUSES.map((statusOption) => ({
+            id: statusOption,
+            label: statusLabel(statusOption),
+          }))}
+        />
 
         {bills.length === 0 ? (
           <p className="muted">ไม่พบบิลที่ตรงกับเงื่อนไข</p>
         ) : (
           <>
             <p className="muted">พบ {bills.length} บิล (แสดงสูงสุด 200)</p>
-            <table>
+            <div className="table-wrap"><table>
               <thead>
                 <tr>
                   <th scope="col">เลขบิล</th>
@@ -153,11 +111,11 @@ export default async function BillsPage({
                     <td className="num">{bill._count.items}</td>
                     <td className="num">{bill.totalStake.toFixed(2)}</td>
                     <td className="num">{bill.totalPayout.toFixed(2)}</td>
-                    <td>{statusLabel(bill.status)}</td>
+                    <td><span className={`status-pill ${bill.status === "CANCELLED" ? "danger" : bill.status === "DRAFT" ? "warning" : bill.status === "SETTLED" ? "success" : "info"}`}>{statusLabel(bill.status)}</span></td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </>
         )}
       </section>

@@ -31,3 +31,4 @@
   font-weight: bold;
   letter-spacing: 0.08em;
 }
+.draw-detail-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:.65rem;margin-bottom:1rem}.draw-detail-summary>div{display:flex;flex-direction:column;padding:.7rem .8rem;border:1px solid #e0e8ec;border-radius:10px;background:#f9fbfc}.draw-detail-summary span{color:#75858f;font-size:.62rem}.draw-detail-summary strong{color:#15364d;font-size:.95rem}.draw-detail-summary small{color:#909da5;font-size:.58rem}.draw-detail-page h2{display:flex;align-items:center;gap:.45rem;padding-top:.8rem;border-top:1px solid #e7edef}.draw-detail-page h2::before{width:4px;height:18px;border-radius:99px;content:"";background:#168b99}.draw-detail-page .inline-form{padding:.35rem;border-radius:8px;background:#f8fafb}@media(max-width:650px){.draw-detail-summary{grid-template-columns:1fr}}

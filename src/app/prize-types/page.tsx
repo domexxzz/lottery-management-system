@@ -24,12 +24,10 @@ export default async function PrizeTypesPage() {
   const confirmedItems = prizeTypes.reduce((sum, p) => sum + p._count.billItems, 0);
 
   return (
-    <main>
-      <section className="card" aria-labelledby="rulebook-heading">
-        <p>
-          <Link href="/">← หน้าแรก</Link>
-        </p>
-        <h1 id="rulebook-heading">Rulebook รางวัล 1 ถึง 16</h1>
+    <main className="workspace-page rulebook-page">
+      <section className="card workspace-card" aria-labelledby="rulebook-heading">
+        <p><Link href="/">← หน้าภาพรวม</Link></p>
+        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Prize Configuration</p><h1 id="rulebook-heading">Rulebook รางวัล</h1><p>กำหนดประเภทรางวัล อัตราจ่าย วิธีตัดสิน และวงเงินอย่างควบคุม</p></div><span className="rulebook-count">{prizeTypes.length}<small>ประเภทรางวัล</small></span></header>
 
         <p className="muted">
           ค่าในหน้านี้คือสิ่งที่ LOT-28 และ LOT-31 ต้องยืนยัน การแก้ที่นี่ไม่ต้อง deploy ใหม่
@@ -43,7 +41,7 @@ export default async function PrizeTypesPage() {
 
         {!canEdit && <p className="muted">บทบาทของคุณดูได้อย่างเดียว</p>}
 
-        <table className="rulebook">
+        <div className="table-wrap"><table className="rulebook">
           <thead>
             <tr>
               <th scope="col">รหัส</th>
@@ -87,7 +85,7 @@ export default async function PrizeTypesPage() {
               ),
             )}
           </tbody>
-        </table>
+        </table></div>
       </section>
     </main>
   );

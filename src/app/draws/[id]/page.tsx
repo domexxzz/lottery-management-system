@@ -74,22 +74,17 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
   ).length;
 
   return (
-    <main>
-      <section className="card" aria-labelledby="draw-heading">
-        <p>
-          <Link href="/draws">← กลับไปรายการรอบ</Link>
-        </p>
-        <h1 id="draw-heading">{draw.name}</h1>
-        <p className="muted">
-          สถานะ {DRAW_STATUS[draw.status] ?? draw.status} · อนุมัติผลแล้ว {approvedCount} จาก{" "}
-          {prizeTypes.length} ประเภท
-        </p>
+    <main className="workspace-page draw-detail-page">
+      <section className="card workspace-card" aria-labelledby="draw-heading">
+        <p><Link href="/draws">← กลับไปรายการรอบ</Link></p>
+        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Draw & Settlement</p><h1 id="draw-heading">{draw.name}</h1><p>ลงผล ตรวจอนุมัติ และกระทบยอดทางการเงินในขั้นตอนเดียว</p></div><span className={`status-pill ${draw.status === "CLOSED" ? "success" : draw.status === "RESULT_PENDING" ? "warning" : "info"}`}>{DRAW_STATUS[draw.status] ?? draw.status}</span></header>
+        <div className="draw-detail-summary"><div><span>ผลที่อนุมัติแล้ว</span><strong>{approvedCount} / {prizeTypes.length}</strong></div><div><span>Settlement</span><strong>{settlementData.settlements.length}</strong><small>Agent</small></div><div><span>สถานะรอบ</span><strong>{DRAW_STATUS[draw.status] ?? draw.status}</strong></div></div>
 
         <h2>ผลรางวัล</h2>
         {draw.status === "OPEN" ? (
           <p className="muted">รอบนี้ยังเปิดรับอยู่ ลงผลได้หลังปิดรับ</p>
         ) : (
-          <table>
+          <div className="table-wrap"><table>
             <thead>
               <tr>
                 <th scope="col">รางวัล</th>
@@ -142,7 +137,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         )}
 
         <h2>สรุปการเงิน</h2>
@@ -155,7 +150,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
           <p className="muted">ยังไม่ได้คำนวณ</p>
         ) : (
           <>
-            <table>
+            <div className="table-wrap"><table>
               <thead>
                 <tr>
                   <th scope="col">Agent</th>
@@ -196,7 +191,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
 
             {canReconcile && (
               <p>

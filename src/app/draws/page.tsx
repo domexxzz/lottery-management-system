@@ -4,6 +4,7 @@ import { getActor } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { listDraws } from "@/lib/draws/service";
 import { CreateDrawForm, LockDrawForm } from "./DrawForms";
+import "./draws.css";
 
 export const dynamic = "force-dynamic";
 
@@ -30,14 +31,13 @@ export default async function DrawsPage() {
   const canManage = can(actor.role, "draw.manage");
 
   return (
-    <main>
-      <section className="card" aria-labelledby="draws-heading">
-        <p>
-          <Link href="/">← หน้าแรก</Link>
-        </p>
-        <h1 id="draws-heading">รอบ</h1>
+    <main className="workspace-page">
+      <section className="card workspace-card" aria-labelledby="draws-heading">
+        <p><Link href="/">← หน้าภาพรวม</Link></p>
+        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Draw Operations</p><h1 id="draws-heading">จัดการรอบ</h1><p>ติดตามวงจรตั้งแต่เปิดรับ ปิดรับ ลงผล กระทบยอด จนถึงปิดบัญชี</p></div></header>
+        <div className="draw-status-overview">{Object.entries(STATUS_LABEL).map(([status, label]) => <div key={status} className={`draw-status-${status.toLowerCase()}`}><span>{label}</span><strong>{draws.filter((draw) => draw.status === status).length}</strong><small>รอบ</small></div>)}</div>
 
-        <table>
+        <div className="table-wrap"><table>
           <thead>
             <tr>
               <th scope="col">ชื่อรอบ</th>
@@ -58,7 +58,7 @@ export default async function DrawsPage() {
                 <td>{BANGKOK.format(draw.cutoffAt)}</td>
                 <td>{draw._count.bills}</td>
                 <td>
-                  {STATUS_LABEL[draw.status] ?? draw.status}
+                  <span className={`status-pill ${draw.status === "OPEN" || draw.status === "CLOSED" ? "success" : draw.status === "RESULT_PENDING" ? "warning" : "info"}`}>{STATUS_LABEL[draw.status] ?? draw.status}</span>
                   {draw.lockedAt !== null && (
                     <span className="muted"> · {BANGKOK.format(draw.lockedAt)}</span>
                   )}
@@ -69,16 +69,16 @@ export default async function DrawsPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
 
         {canManage && (
-          <>
-            <h2>สร้างรอบใหม่</h2>
+          <details className="create-draw-panel">
+            <summary><span><strong>สร้างรอบใหม่</strong><small>กำหนดวันเปิดรับและเวลาปิดรับ</small></span><b>＋ เปิดฟอร์ม</b></summary>
             <p className="muted">
               เมื่อถึงเวลาปิดรับ งานอัตโนมัติจะล็อกบิลที่ยืนยันแล้วและยกเลิกบิลร่างที่ค้างอยู่
             </p>
             <CreateDrawForm />
-          </>
+          </details>
         )}
       </section>
     </main>

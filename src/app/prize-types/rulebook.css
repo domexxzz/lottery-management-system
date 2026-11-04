@@ -53,6 +53,7 @@
 .rulebook td {
   vertical-align: middle;
 }
+.rulebook-count { display:flex; min-width:100px; align-items:center; flex-direction:column; padding:.55rem .8rem; border:1px solid #dce7eb; border-radius:10px; color:#148291; background:#f6fbfb; font-size:1.2rem; font-weight:800; }.rulebook-count small{color:#80909a;font-size:.58rem;font-weight:500}.rulebook-page .notice{margin-bottom:1rem}.rulebook-page .rulebook{min-width:960px}
 
 .notice {
   background: #eaf5f3;

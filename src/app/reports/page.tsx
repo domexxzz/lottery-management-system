@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getActor, orgScope } from "@/lib/auth/context";
 import { prisma } from "@/lib/db";
 import { byAgent, byPrizeType, drawSummary } from "@/lib/reports/service";
+import { DrawPicker } from "./DrawPicker";
 import "./reports.css";
 
 export const dynamic = "force-dynamic";
@@ -56,26 +57,18 @@ export default async function ReportsPage({
   ]);
 
   return (
-    <main>
-      <section className="card" aria-labelledby="reports-heading">
-        <p>
-          <Link href="/">← หน้าแรก</Link>
-        </p>
-        <h1 id="reports-heading">รายงาน</h1>
+    <main className="workspace-page reports-page">
+      <section className="card workspace-card" aria-labelledby="reports-heading">
+        <p><Link href="/">← หน้าภาพรวม</Link></p>
+        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Financial Reports</p><h1 id="reports-heading">รายงาน</h1><p>สรุปยอดขาย รางวัล คอมมิชชัน และผลการดำเนินงานแต่ละรอบ</p></div><a className="page-primary-action" href={`/api/reports/${selectedId}/agents`}>↓ ดาวน์โหลดรายงาน</a></header>
 
-        <form method="get" className="draw-picker">
-          <label htmlFor="draw">
-            เลือกรอบ
-            <select id="draw" name="draw" defaultValue={selectedId}>
-              {draws.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} — {DRAW_STATUS[d.status] ?? d.status}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit">ดูรายงาน</button>
-        </form>
+        <DrawPicker
+          selectedId={selectedId}
+          draws={draws.map((draw) => ({
+            id: draw.id,
+            label: `${draw.name} — ${DRAW_STATUS[draw.status] ?? draw.status}`,
+          }))}
+        />
 
         {actor.role === "AGENT" && (
           <p className="muted">แสดงเฉพาะข้อมูลของคุณ</p>
@@ -124,7 +117,7 @@ export default async function ReportsPage({
         {agents.length === 0 ? (
           <p className="muted">ไม่มีข้อมูล</p>
         ) : (
-          <table>
+          <div className="table-wrap"><table>
             <thead>
               <tr>
                 <th scope="col">Agent</th>
@@ -151,7 +144,7 @@ export default async function ReportsPage({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
 
         <h2>แยกตามประเภทรางวัล</h2>
@@ -161,7 +154,7 @@ export default async function ReportsPage({
         {prizes.length === 0 ? (
           <p className="muted">ไม่มีข้อมูล</p>
         ) : (
-          <table>
+          <div className="table-wrap"><table>
             <thead>
               <tr>
                 <th scope="col">รางวัล</th>
@@ -184,7 +177,7 @@ export default async function ReportsPage({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </section>
     </main>

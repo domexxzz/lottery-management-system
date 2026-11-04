@@ -49,13 +49,13 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
     !can(actor.role, "bill.approveChangeAfterCutoff");
 
   return (
-    <main>
-      <section className="card" aria-labelledby="bill-heading">
+    <main className="workspace-page bill-detail-page">
+      <section className="card workspace-card" aria-labelledby="bill-heading">
         <p>
           <Link href="/bills">← กลับไปรายการบิล</Link>
         </p>
 
-        <h1 id="bill-heading">{bill.title}</h1>
+        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Bill Detail</p><h1 id="bill-heading">{bill.title}</h1><p>ตรวจสอบรายการ ยอดเดิมพัน และประวัติการยืนยันบิล</p></div><span className={`status-pill ${bill.status === "CANCELLED" ? "danger" : bill.status === "SETTLED" ? "success" : bill.status === "DRAFT" ? "warning" : "info"}`}>{statusLabel(bill.status)}</span></header>
         <p className="muted">
           เลขบิล {bill.billNumber ?? "ยังไม่ออกเลข (ร่าง)"} · สถานะ {statusLabel(bill.status)} ·
           รอบ {bill.draw.name} · Agent {bill.agent.code} {bill.agent.name}
@@ -72,7 +72,7 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
         )}
 
         <h2>รายการ</h2>
-        <table>
+        <div className="table-wrap"><table>
           <thead>
             <tr>
               <th scope="col">ประเภทรางวัล</th>
@@ -110,7 +110,7 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
               <td />
             </tr>
           </tfoot>
-        </table>
+        </table></div>
 
         <p>
           <Link href={`/bills/${bill.id}/print`} target="_blank">

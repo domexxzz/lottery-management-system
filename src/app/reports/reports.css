@@ -11,10 +11,6 @@
   flex: 1 1 18rem;
 }
 
-.draw-picker button {
-  flex: 0 0 auto;
-}
-
 /* ตัวเลขสรุปต้องอ่านได้ในแวบเดียว จึงให้ขนาดต่างจากข้อความรอบข้างชัดเจน */
 .kpi {
   display: grid;
@@ -51,3 +47,4 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+.reports-page .draw-picker { padding: .8rem; border: 1px solid #e0e8ec; border-radius: 11px; background: #f8fafb; }.reports-page .kpi div { border-color: #dfe8ed; border-radius: 11px; background: #fbfcfd; }.reports-page .kpi dt { font-size: .67rem; }.reports-page .kpi dd { color: #15364d; font-size: 1.25rem; }

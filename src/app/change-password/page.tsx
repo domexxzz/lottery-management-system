@@ -9,8 +9,9 @@ export default function ChangePasswordPage() {
   const [state, formAction, pending] = useActionState(changePasswordAction, INITIAL);
 
   return (
-    <main>
-      <section className="card" aria-labelledby="cp-heading">
+    <main className="auth-page">
+      <section className="card auth-card" aria-labelledby="cp-heading">
+        <div className="auth-brand"><span>ล</span><div><strong>ระบบจัดการหวย</strong><small>SECURITY</small></div></div>
         <h1 id="cp-heading">เปลี่ยนรหัสผ่าน</h1>
         <p className="muted">
           ต้องเปลี่ยนรหัสผ่านก่อนใช้งานครั้งแรก เมื่อเปลี่ยนแล้วระบบจะให้เข้าสู่ระบบใหม่
