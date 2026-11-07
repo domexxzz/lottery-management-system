@@ -24,11 +24,27 @@ const schema = z
     if (value.STORAGE_PROVIDER === "minio" && !value.STORAGE_ENDPOINT) {
       ctx.addIssue({ code: "custom", path: ["STORAGE_ENDPOINT"], message: "MinIO ต้องกำหนด STORAGE_ENDPOINT" });
     }
-    if ((value.STORAGE_ACCESS_KEY && !value.STORAGE_SECRET_KEY) || (!value.STORAGE_ACCESS_KEY && value.STORAGE_SECRET_KEY)) {
-      ctx.addIssue({ code: "custom", path: ["STORAGE_ACCESS_KEY"], message: "ต้องกำหนด Access Key และ Secret Key เป็นคู่กัน" });
-    }
-    if (value.STORAGE_PROVIDER === "minio" && (!value.STORAGE_ACCESS_KEY || !value.STORAGE_SECRET_KEY)) {
-      ctx.addIssue({ code: "custom", path: ["STORAGE_ACCESS_KEY"], message: "MinIO ต้องกำหนด Access Key และ Secret Key" });
+    /*
+     * บังคับคีย์ทั้งสองตัวกับทุก provider ไม่ใช่เฉพาะ MinIO
+     *
+     * เดิม s3 ไม่ถูกบังคับเลย พอคีย์หาย credentials() คืน undefined
+     * แล้ว AWS SDK ไปไล่หา credential จากที่อื่น (ตัวแปร AWS_* หรือ
+     * instance metadata) ซึ่งบนเครื่องที่ไม่ได้ตั้งไว้จะไม่เจอ
+     * การตั้งค่าที่ไม่ครบจึงผ่านด่านนี้ไปได้ แล้วไประเบิดตอนอัปโหลดจริง
+     * เป็น 500 ที่ไม่บอกอะไรเลย กว่าจะรู้ว่าลืมใส่คีย์ก็ต้องไปไล่ log เอง
+     *
+     * ล้มตั้งแต่ตอนอ่านค่าพร้อมบอกชื่อตัวแปรที่ขาด หาสาเหตุง่ายกว่ากันมาก
+     */
+    const missingKeys = [
+      !value.STORAGE_ACCESS_KEY ? "STORAGE_ACCESS_KEY" : null,
+      !value.STORAGE_SECRET_KEY ? "STORAGE_SECRET_KEY" : null,
+    ].filter(Boolean);
+    if (missingKeys.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["STORAGE_ACCESS_KEY"],
+        message: `ต้องกำหนด ${missingKeys.join(" และ ")} ให้ครบ`,
+      });
     }
   });
 
