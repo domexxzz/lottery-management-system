@@ -69,9 +69,19 @@ export function parseGloDrawResult(payload: unknown, expectedDate: string): GloD
   };
 }
 
+/** รางวัลที่ต้องให้คนกรอกเอง เพราะ GLO จับเลขแยกและมีได้หลายเลขต่อรางวัล */
+export const MANUAL_PRIZE_CODES = [3, 4] as const;
+
 /**
- * แปลงผลทางการเป็น Rulebook 16 ประเภทของระบบ
- * เลขบนทั้งหมดอ้างอิงรางวัลที่ 1 ส่วนเลขล่างอ้างอิงเลขท้าย 2 ตัวทางการ
+ * แปลงผลทางการเป็น Rulebook ของระบบ
+ *
+ * เลขบนทุกตัวอ้างอิงรางวัลที่ 1 ส่วนเลขล่างอ้างอิงเลขท้าย 2 ตัวทางการ
+ *
+ * ไม่เสนอรางวัลที่ 3 (3 ตัวหน้า) และ 4 (3 ตัวท้าย)
+ * เพราะ GLO จับสองรางวัลนี้แยกจากรางวัลที่ 1 และจับรางวัลละ 2 เลข
+ * ขณะที่ Result เก็บได้เลขเดียวต่อประเภทรางวัล (unique drawId+prizeTypeId+version)
+ * การเดาค่าจากรางวัลที่ 1 จึงให้เลขที่ไม่ใช่ผลจริง และอัตราจ่าย 450 เท่า
+ * ทำให้จ่ายผิดคนทั้งสองทาง หน้าจอแสดง front3/back3 ให้ Admin กรอกเองแทน
  */
 export function buildGloPrizeSuggestions(result: GloDrawResult): Record<number, GloPrizeSuggestion> {
   const first = result.firstPrize;
@@ -80,8 +90,6 @@ export function buildGloPrizeSuggestions(result: GloDrawResult): Record<number, 
   return {
     1: { value: top3, source: "3 หลักท้ายของรางวัลที่ 1" },
     2: { value: top3, source: "3 หลักท้ายของรางวัลที่ 1 (โต๊ด)" },
-    3: { value: first.slice(0, 3), source: "3 หลักหน้าของรางวัลที่ 1" },
-    4: { value: top3, source: "3 หลักท้ายของรางวัลที่ 1" },
     5: { value: top2, source: "2 หลักท้ายของรางวัลที่ 1" },
     6: { value: result.last2, source: "เลขท้าย 2 ตัวทางการ" },
     7: { value: top2, source: "2 หลักท้ายของรางวัลที่ 1 (โต๊ด)" },

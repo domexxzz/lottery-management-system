@@ -71,6 +71,14 @@ export function GloResultImporter({ drawId, defaultDate }: { drawId: string; def
           <div><span>เลขหน้า 3 ตัว</span><strong>{data.official.front3.join(" · ")}</strong></div>
           <div><span>เลขท้าย 3 ตัว</span><strong>{data.official.back3.join(" · ")}</strong></div>
           <p><b>เติมแล้ว {filledCount} ช่อง</b><span>ยังไม่บันทึก · กรุณาตรวจทุกช่องก่อนกดบันทึกผลทั้งหมด</span></p>
+          <p className="glo-import-manual">
+            <b>ไม่ได้เติม: 3 ตัวหน้า และ 3 ตัวท้าย</b>
+            <span>
+              GLO จับสองรางวัลนี้แยกจากรางวัลที่ 1 และจับรางวัลละ 2 เลข
+              ({data.official.front3.join(" · ")} และ {data.official.back3.join(" · ")})
+              แต่ระบบเก็บได้เลขเดียวต่อรางวัล กรุณาเลือกเลขที่ใช้แล้วกรอกสองช่องนี้เอง
+            </span>
+          </p>
         </div>
       )}
     </section>
