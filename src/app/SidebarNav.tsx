@@ -20,7 +20,7 @@ const AUDIT_ROLES: Role[] = ["OWNER", "ADMIN"];
 const ITEMS: MenuItem[] = [
   { href: "/", label: "ภาพรวม", icon: "home", roles: ALL_ROLES },
   { href: "/bills", label: "รายการบิล", icon: "bill", roles: ALL_ROLES },
-  { href: "/draws", label: "รอบ", icon: "draw", roles: ALL_ROLES },
+  { href: "/draws", label: "งวด", icon: "draw", roles: ALL_ROLES },
   { href: "/reports", label: "รายงาน", icon: "report", roles: ALL_ROLES },
   { href: "/evidence", label: "ตรวจหลักฐาน", icon: "evidence", roles: AUDIT_ROLES },
   { href: "/audit", label: "ประวัติการตรวจ", icon: "audit", roles: AUDIT_ROLES },
@@ -28,6 +28,7 @@ const ITEMS: MenuItem[] = [
   { href: "/chat", label: "ผู้ช่วย AI", icon: "chat", roles: OWNER_ROLES },
   { href: "/prize-types", label: "Rulebook รางวัล", icon: "book", roles: MANAGEMENT_ROLES },
   { href: "/agents", label: "ภาพรวม Agent", icon: "agent", roles: MANAGEMENT_ROLES },
+  { href: "/users", label: "จัดการผู้ใช้งาน", icon: "lock", roles: OWNER_ROLES },
 ];
 
 export function SidebarNav({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {

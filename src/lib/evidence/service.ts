@@ -76,9 +76,10 @@ function attachmentDto(row: {
   verifiedAt: Date | null;
   createdAt: Date;
   replacesId: string | null;
+  replacedBy?: { id: string } | null;
   uploadedBy?: { displayName: string } | null;
   verifiedBy?: { displayName: string } | null;
-}) {
+}, duplicateCount = 1) {
   return {
     id: row.id,
     type: row.type,
@@ -90,6 +91,8 @@ function attachmentDto(row: {
     verifiedAt: row.verifiedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     replacesId: row.replacesId,
+    replacedById: row.replacedBy?.id ?? null,
+    duplicateCount,
     uploadedBy: row.uploadedBy?.displayName ?? null,
     verifiedBy: row.verifiedBy?.displayName ?? null,
   };
@@ -121,7 +124,8 @@ export async function uploadBillAttachment(
   });
   if (idempotent) {
     if (idempotent.organizationId !== actor.organizationId || idempotent.billId !== billId) throw new ConflictError("Upload token ถูกใช้งานแล้ว");
-    return attachmentDto(idempotent);
+    const duplicateCount = await prisma.billAttachment.count({ where: { organizationId: actor.organizationId, checksum: idempotent.checksum } });
+    return attachmentDto(idempotent, duplicateCount);
   }
 
   const bill = await visibleBill(actor, billId);
@@ -243,7 +247,8 @@ export async function uploadBillAttachment(
       });
       return row;
     });
-    return attachmentDto(created);
+    const duplicateCount = await prisma.billAttachment.count({ where: { organizationId: actor.organizationId, checksum: created.checksum } });
+    return attachmentDto(created, duplicateCount);
   } catch (error) {
     try {
       await storage.delete(storageKey);
@@ -263,9 +268,42 @@ export async function listBillAttachments(actor: Actor, billId: string) {
   const rows = await prisma.billAttachment.findMany({
     where: { billId, organizationId: actor.organizationId },
     orderBy: { createdAt: "asc" },
-    include: { uploadedBy: { select: { displayName: true } }, verifiedBy: { select: { displayName: true } } },
+    include: { uploadedBy: { select: { displayName: true } }, verifiedBy: { select: { displayName: true } }, replacedBy: { select: { id: true } } },
   });
-  return rows.map(attachmentDto);
+  const checksums = [...new Set(rows.map((row) => row.checksum))];
+  const counts = checksums.length === 0 ? [] : await prisma.billAttachment.groupBy({
+    by: ["checksum"],
+    where: {
+      organizationId: actor.organizationId,
+      checksum: { in: checksums },
+      ...(actor.role === "AGENT" ? { bill: { agentId: actor.agentId ?? "__no_agent__" } } : {}),
+    },
+    _count: { _all: true },
+  });
+  const countByChecksum = new Map(counts.map((row) => [row.checksum, row._count._all]));
+  return rows.map((row) => attachmentDto(row, countByChecksum.get(row.checksum) ?? 1));
+}
+
+/** ประวัติรูปที่มี checksum เดียวกัน โดยไม่ส่ง checksum หรือ storageKey ออกไปยัง client */
+export async function duplicateEvidenceHistory(actor: Actor, attachmentId: string) {
+  const attachment = await attachmentForActor(actor, attachmentId);
+  return prisma.billAttachment.findMany({
+    where: {
+      organizationId: actor.organizationId,
+      checksum: attachment.checksum,
+      ...(actor.role === "AGENT" ? { bill: { agentId: actor.agentId ?? "__no_agent__" } } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      originalName: true,
+      createdAt: true,
+      uploadedBy: { select: { displayName: true } },
+      bill: { select: { id: true, billNumber: true, title: true, agent: { select: { code: true, name: true } } } },
+    },
+  });
 }
 
 async function attachmentForActor(actor: Actor, attachmentId: string) {
@@ -597,17 +635,25 @@ export async function listEvidenceReviewQueue(
       id: true,
       type: true,
       originalName: true,
+      checksum: true,
       fileSize: true,
       status: true,
       rejectionReason: true,
       createdAt: true,
       verifiedAt: true,
-      bill: { select: { id: true, billNumber: true, title: true, status: true, agent: { select: { code: true, name: true } }, draw: { select: { name: true } } } },
+      bill: { select: { id: true, billNumber: true, title: true, status: true, totalStake: true, agent: { select: { code: true, name: true } }, draw: { select: { name: true } } } },
       uploadedBy: { select: { displayName: true } },
       verifiedBy: { select: { displayName: true } },
       payment: { select: { amount: true, paidAt: true, paymentMethod: true, bankName: true, transactionReference: true, note: true, verificationStatus: true } },
       },
     });
   items.sort((a, b) => (billOrder.get(a.bill.id) ?? 0) - (billOrder.get(b.bill.id) ?? 0) || a.createdAt.getTime() - b.createdAt.getTime());
-  return { items, total, page, pageSize };
+  const checksums = [...new Set(items.map((item) => item.checksum))];
+  const duplicateGroups = checksums.length === 0 ? [] : await prisma.billAttachment.groupBy({
+    by: ["checksum"],
+    where: { organizationId: actor.organizationId, checksum: { in: checksums } },
+    _count: { _all: true },
+  });
+  const duplicateCountByChecksum = new Map(duplicateGroups.map((row) => [row.checksum, row._count._all]));
+  return { items: items.map((item) => ({ ...item, duplicateCount: duplicateCountByChecksum.get(item.checksum) ?? 1 })), total, page, pageSize };
 }

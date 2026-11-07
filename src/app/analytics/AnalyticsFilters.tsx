@@ -22,7 +22,7 @@ export function AnalyticsFilters({ draws, agents }: { draws: Option[]; agents: O
 
   return (
     <section className={`analytics-filters ${pending ? "is-loading" : ""}`} aria-label="ตัวกรองวิเคราะห์เชิงลึก">
-      <label>รอบ<AppDropdown value={searchParams.get("drawId") ?? ""} onValueChange={(value) => update("drawId", value)} options={[{ value: "", label: "ทุกรอบ" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหารอบ" /></label>
+      <label>งวด<AppDropdown value={searchParams.get("drawId") ?? ""} onValueChange={(value) => update("drawId", value)} options={[{ value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" /></label>
       <label>Agent<AppDropdown value={searchParams.get("agentId") ?? ""} onValueChange={(value) => update("agentId", value)} options={[{ value: "", label: "ทุก Agent" }, ...agents.map((agent) => ({ value: agent.id, label: agent.label }))]} searchable={agents.length > 6} searchPlaceholder="ค้นหา Agent" /></label>
       <label>สถานะบิล<AppDropdown value={searchParams.get("status") ?? ""} onValueChange={(value) => update("status", value)} options={[{ value: "", label: "ทุกสถานะ" }, { value: "CONFIRMED", label: "ยืนยันแล้ว" }, { value: "LOCKED", label: "ล็อกแล้ว" }, { value: "SETTLED", label: "คำนวณแล้ว" }]} /></label>
       <button type="button" onClick={() => startTransition(() => router.replace(pathname, { scroll: false }))}>ล้างตัวกรอง</button>

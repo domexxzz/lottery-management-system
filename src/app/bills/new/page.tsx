@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getActor, orgScope } from "@/lib/auth/context";
+import { billScope, getActor, orgScope } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { BillForm } from "./BillForm";
@@ -19,7 +19,7 @@ export default async function NewBillPage() {
   if (!actor) redirect("/login");
   if (!can(actor.role, "bill.create")) redirect("/bills");
 
-  const [draws, prizeTypes, agents] = await Promise.all([
+  const [draws, prizeTypes, agents, historicalBills] = await Promise.all([
     prisma.draw.findMany({
       where: { ...orgScope(actor), status: "OPEN" },
       orderBy: { cutoffAt: "asc" },
@@ -37,16 +37,35 @@ export default async function NewBillPage() {
           orderBy: [{ code: "asc" }, { name: "asc" }],
           select: { id: true, code: true, name: true },
         }),
+    prisma.bill.findMany({
+      where: actor.role === "AGENT" ? billScope(actor) : orgScope(actor),
+      orderBy: { createdAt: "desc" },
+      take: 5000,
+      select: { agentId: true, title: true },
+    }),
   ]);
+
+  const customerNamesByAgent: Record<string, string[]> = {};
+  const seenByAgent = new Map<string, Set<string>>();
+  for (const bill of historicalBills) {
+    const title = bill.title.trim();
+    if (!title) continue;
+    const seen = seenByAgent.get(bill.agentId) ?? new Set<string>();
+    const normalized = title.toLocaleLowerCase("th-TH");
+    if (seen.has(normalized) || seen.size >= 100) continue;
+    seen.add(normalized);
+    seenByAgent.set(bill.agentId, seen);
+    (customerNamesByAgent[bill.agentId] ??= []).push(title);
+  }
 
   return (
     <main className="workspace-page new-bill-page">
       <section className="card workspace-card" aria-labelledby="new-bill-heading">
         <p><Link href="/bills">← กลับไปรายการบิล</Link></p>
-        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Create Bill</p><h1 id="new-bill-heading">สร้างบิลใหม่</h1><p>เลือกรอบ เจ้าของบิล และเพิ่มรายการรับแทงอย่างเป็นขั้นตอน</p></div></header>
+        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Create Bill</p><h1 id="new-bill-heading">สร้างบิลใหม่</h1><p>เลือกงวด เจ้าของบิล และเพิ่มรายการรับแทงอย่างเป็นขั้นตอน</p></div></header>
 
         {draws.length === 0 ? (
-          <p className="error">ยังไม่มีรอบที่เปิดรับรายการ</p>
+          <p className="error">ยังไม่มีงวดที่เปิดรับรายการ</p>
         ) : (
           <BillForm
             draws={draws.map((d) => ({
@@ -56,6 +75,8 @@ export default async function NewBillPage() {
             }))}
             prizeTypes={prizeTypes}
             agents={agents}
+            currentAgentId={actor.agentId}
+            customerNamesByAgent={customerNamesByAgent}
           />
         )}
       </section>

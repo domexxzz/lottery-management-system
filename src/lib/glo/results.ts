@@ -36,7 +36,7 @@ export type GloDrawResult = {
 };
 
 export type GloPrizeSuggestion = {
-  value: string;
+  values: string[];
   source: string;
 };
 
@@ -51,57 +51,61 @@ export function parseGloDrawResult(payload: unknown, expectedDate: string): GloD
 
   const result = parsed.data.response.result;
   if (result.date !== expectedDate) {
-    throw new AppError(`GLO ส่งผลงวด ${result.date} ซึ่งไม่ตรงกับวันที่รอบ ${expectedDate}`, 502, "GLO_DATE_MISMATCH");
+    throw new AppError(`GLO ส่งผลงวด ${result.date} ซึ่งไม่ตรงกับวันที่งวด ${expectedDate}`, 502, "GLO_DATE_MISMATCH");
   }
 
   const firstPrize = result.data.first.number[0]!.value;
   const last2 = result.data.last2.number[0]!.value;
+  const front3 = result.data.last3f.number.map((item) => item.value);
+  const back3 = result.data.last3b.number.map((item) => item.value);
   if (firstPrize.length !== 6 || last2.length !== 2) {
     throw new AppError("ผลรางวัลหลักจาก GLO มีจำนวนหลักไม่ถูกต้อง", 502, "GLO_INVALID_RESULT_LENGTH");
+  }
+  if (
+    front3.length !== 2
+    || back3.length !== 2
+    || front3.some((value) => value.length !== 3)
+    || back3.some((value) => value.length !== 3)
+  ) {
+    throw new AppError("ผลรางวัล 3 ตัวจาก GLO ต้องมีประเภทละ 2 เลข และแต่ละเลขต้องมี 3 หลัก", 502, "GLO_INVALID_RESULT_LENGTH");
   }
 
   return {
     drawDate: result.date,
     firstPrize,
     last2,
-    front3: result.data.last3f.number.map((item) => item.value),
-    back3: result.data.last3b.number.map((item) => item.value),
+    front3,
+    back3,
   };
 }
-
-/** รางวัลที่ต้องให้คนกรอกเอง เพราะ GLO จับเลขแยกและมีได้หลายเลขต่อรางวัล */
-export const MANUAL_PRIZE_CODES = [3, 4] as const;
 
 /**
  * แปลงผลทางการเป็น Rulebook ของระบบ
  *
  * เลขบนทุกตัวอ้างอิงรางวัลที่ 1 ส่วนเลขล่างอ้างอิงเลขท้าย 2 ตัวทางการ
- *
- * ไม่เสนอรางวัลที่ 3 (3 ตัวหน้า) และ 4 (3 ตัวท้าย)
- * เพราะ GLO จับสองรางวัลนี้แยกจากรางวัลที่ 1 และจับรางวัลละ 2 เลข
- * ขณะที่ Result เก็บได้เลขเดียวต่อประเภทรางวัล (unique drawId+prizeTypeId+version)
- * การเดาค่าจากรางวัลที่ 1 จึงให้เลขที่ไม่ใช่ผลจริง และอัตราจ่าย 450 เท่า
- * ทำให้จ่ายผิดคนทั้งสองทาง หน้าจอแสดง front3/back3 ให้ Admin กรอกเองแทน
+ * รางวัลที่ 3 และ 4 ใช้เลขทางการทั้ง 2 เลขที่ GLO จับแยกโดยตรง
  */
 export function buildGloPrizeSuggestions(result: GloDrawResult): Record<number, GloPrizeSuggestion> {
   const first = result.firstPrize;
   const top3 = first.slice(-3);
   const top2 = first.slice(-2);
   return {
-    1: { value: top3, source: "3 หลักท้ายของรางวัลที่ 1" },
-    2: { value: top3, source: "3 หลักท้ายของรางวัลที่ 1 (โต๊ด)" },
-    5: { value: top2, source: "2 หลักท้ายของรางวัลที่ 1" },
-    6: { value: result.last2, source: "เลขท้าย 2 ตัวทางการ" },
-    7: { value: top2, source: "2 หลักท้ายของรางวัลที่ 1 (โต๊ด)" },
-    8: { value: top3, source: "วิ่งจาก 3 หลักท้ายของรางวัลที่ 1" },
-    9: { value: result.last2, source: "วิ่งจากเลขท้าย 2 ตัวทางการ" },
-    10: { value: top3, source: "3 หลักท้ายของรางวัลที่ 1 (กลับ)" },
-    11: { value: top2, source: "2 หลักท้ายของรางวัลที่ 1 (กลับ)" },
-    12: { value: first.slice(-4), source: "4 หลักท้ายของรางวัลที่ 1" },
-    13: { value: first.slice(-4), source: "4 หลักท้ายของรางวัลที่ 1 (โต๊ด)" },
-    14: { value: first.slice(-5), source: "5 หลักท้ายของรางวัลที่ 1" },
-    15: { value: first, source: "รางวัลที่ 1" },
-    16: { value: result.last2, source: "เลขท้าย 2 ตัวทางการ" },
+    1: { values: [top3], source: "3 หลักท้ายของรางวัลที่ 1" },
+    2: { values: [top3], source: "3 หลักท้ายของรางวัลที่ 1 (โต๊ด)" },
+    3: { values: result.front3, source: "เลขหน้า 3 ตัวทางการทั้ง 2 เลข" },
+    4: { values: result.back3, source: "เลขท้าย 3 ตัวทางการทั้ง 2 เลข" },
+    5: { values: [top2], source: "2 หลักท้ายของรางวัลที่ 1" },
+    6: { values: [result.last2], source: "เลขท้าย 2 ตัวทางการ" },
+    7: { values: [top2], source: "2 หลักท้ายของรางวัลที่ 1 (โต๊ด)" },
+    8: { values: [top3], source: "วิ่งจาก 3 หลักท้ายของรางวัลที่ 1" },
+    9: { values: [result.last2], source: "วิ่งจากเลขท้าย 2 ตัวทางการ" },
+    10: { values: [top3], source: "3 หลักท้ายของรางวัลที่ 1 (กลับ)" },
+    11: { values: [top2], source: "2 หลักท้ายของรางวัลที่ 1 (กลับ)" },
+    12: { values: [first.slice(-4)], source: "4 หลักท้ายของรางวัลที่ 1" },
+    13: { values: [first.slice(-4)], source: "4 หลักท้ายของรางวัลที่ 1 (โต๊ด)" },
+    14: { values: [first.slice(-5)], source: "5 หลักท้ายของรางวัลที่ 1" },
+    15: { values: [first], source: "รางวัลที่ 1" },
+    16: { values: [result.last2], source: "เลขท้าย 2 ตัวทางการ" },
   };
 }
 

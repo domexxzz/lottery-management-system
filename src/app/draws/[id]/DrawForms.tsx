@@ -92,14 +92,16 @@ export function ProposeCorrectionForm({
   drawId,
   prizeTypeId,
   code,
-  currentValue,
+  currentValues,
   resultLength,
+  valueCount,
 }: {
   drawId: string;
   prizeTypeId: string;
   code: number;
-  currentValue: string;
+  currentValues: string[];
   resultLength: number;
+  valueCount: number;
 }) {
   const [state, formAction, pending] = useActionState(proposeResultCorrectionAction, INITIAL);
 
@@ -110,17 +112,20 @@ export function ProposeCorrectionForm({
         <input type="hidden" name="drawId" value={drawId} />
         <input type="hidden" name="prizeTypeId" value={prizeTypeId} />
         <p className="muted">
-          ผลปัจจุบันคือ {currentValue} · ผลเดิมยังมีผลบังคับจนกว่า Owner จะอนุมัติการแก้
+          ผลปัจจุบันคือ {currentValues.join(" · ")} · ผลเดิมยังมีผลบังคับจนกว่า Owner จะอนุมัติการแก้
         </p>
-        <input
-          name="value"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          maxLength={resultLength}
-          placeholder={`ผลที่ถูกต้อง · ${resultLength} หลัก`}
-          aria-label={`ผลที่ถูกต้องของรางวัลที่ ${code}`}
-          required
-        />
+        {Array.from({ length: valueCount }, (_, valueIndex) => (
+          <input
+            key={valueIndex}
+            name="value"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={resultLength}
+            placeholder={`ผลที่ถูกต้อง${valueCount > 1 ? ` ช่อง ${valueIndex + 1}` : ""} · ${resultLength} หลัก`}
+            aria-label={`ผลที่ถูกต้องของรางวัลที่ ${code}${valueCount > 1 ? ` เลขที่ ${valueIndex + 1}` : ""}`}
+            required
+          />
+        ))}
         <input
           name="reason"
           maxLength={200}
@@ -213,7 +218,7 @@ export function ApproveSettlementForm({ drawId }: { drawId: string }) {
     <form action={formAction}>
       <input type="hidden" name="drawId" value={drawId} />
       <button type="submit" disabled={pending}>
-        {pending ? "กำลังปิดบัญชี..." : "อนุมัติและปิดบัญชีรอบ"}
+        {pending ? "กำลังปิดบัญชี..." : "อนุมัติและปิดบัญชีงวด"}
       </button>
       <Feedback state={state} />
     </form>

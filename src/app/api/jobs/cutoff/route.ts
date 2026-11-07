@@ -13,12 +13,12 @@ function tokenMatches(provided: string, expected: string): boolean {
 }
 
 /**
- * Endpoint สำหรับ scheduler เรียกปิดรอบที่ถึงเวลา Cutoff
+ * Endpoint สำหรับ scheduler เรียกปิดงวดที่ถึงเวลา Cutoff
  *
  * ป้องกันด้วย header x-job-token ไม่ใช้ session เพราะผู้เรียกเป็นเครื่อง
  * ไม่ใช่คน ตั้งค่า CUTOFF_JOB_TOKEN ใน environment
  *
- * ตัวงานเองเป็น idempotent: รอบที่ปิดไปแล้วจะไม่ถูกเลือกซ้ำ
+ * ตัวงานเองเป็น idempotent: งวดที่ปิดไปแล้วจะไม่ถูกเลือกซ้ำ
  * เรียกถี่เกินไปจึงไม่เป็นอันตราย
  */
 export async function POST(request: NextRequest) {

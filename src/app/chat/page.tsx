@@ -14,7 +14,7 @@ export default async function OwnerChatPage() {
   if (actor.mustChangePassword) redirect("/change-password");
   if (actor.role !== "OWNER") redirect("/");
 
-  // ปุ่มลัดขึ้นกับสถานะรอบล่าสุด จึงต้องรู้สถานะก่อนเรนเดอร์
+  // ปุ่มลัดขึ้นกับสถานะงวดล่าสุด จึงต้องรู้สถานะก่อนเรนเดอร์
   const [latestDraw, initialConversations] = await Promise.all([
     prisma.draw.findFirst({
       where: orgScope(actor),

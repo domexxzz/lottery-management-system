@@ -14,7 +14,7 @@ const STEPS = [
   { key: "LOCKED", label: "ปิดรับ", detail: "เตรียมลงผล" },
   { key: "RESULT_PENDING", label: "ตรวจผล", detail: "รอผลครบ" },
   { key: "SETTLED", label: "ตรวจสอบยอด", detail: "ตรวจยอด Agent" },
-  { key: "CLOSED", label: "ปิดรอบ", detail: "เสร็จสมบูรณ์" },
+  { key: "CLOSED", label: "ปิดงวด", detail: "เสร็จสมบูรณ์" },
 ] as const;
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const DATE_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
@@ -59,12 +59,12 @@ export async function ManagementDashboard({ actor, filters }: { actor: Actor; fi
     ...(selectedStatus ? { status: selectedStatus } : {}),
     ...(validFrom || validTo ? { createdAt: { ...(validFrom ? { gte: validFrom } : {}), ...(validTo ? { lte: validTo } : {}) } } : {}),
   };
-  const [filteredBills, drawOptions, pendingResults, pendingSettlements, pendingCancellations, activeAgents, settlementRows] = await Promise.all([
+  const [filteredBills, drawOptions, awaitingClose, pendingCancellations, anomalyCount, activeAgents, settlementRows] = await Promise.all([
     prisma.bill.findMany({ where: billWhere, orderBy: { createdAt: "desc" }, select: { id: true, billNumber: true, title: true, status: true, totalStake: true, totalPayout: true, createdAt: true, draw: { select: { id: true, name: true } }, agent: { select: { id: true, code: true, name: true, commissionRate: true } }, _count: { select: { items: true } } } }),
     prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true } }),
-    currentDraw === null ? Promise.resolve(0) : prisma.result.count({ where: { ...scope, drawId: currentDraw.id, status: "DRAFT" } }),
-    currentDraw === null ? Promise.resolve(0) : prisma.settlement.count({ where: { ...scope, drawId: currentDraw.id, status: "DRAFT" } }),
+    prisma.draw.count({ where: { ...scope, status: "SETTLED" } }),
     prisma.bill.count({ where: { ...scope, cancelRequestedAt: { not: null }, cancelledAt: null } }),
+    prisma.settlement.count({ where: { ...scope, net: { lt: 0 } } }),
     prisma.agent.count({ where: { ...scope, status: "ACTIVE" } }),
     prisma.settlement.findMany({ where: { ...scope, ...(filters.drawId ? { drawId: filters.drawId } : {}), ...(filters.agentId ? { agentId: filters.agentId } : {}) }, select: { gross: true, payout: true, commission: true, net: true, draw: { select: { id: true, name: true, cutoffAt: true } }, agent: { select: { id: true, code: true, name: true } } } }),
   ]);
@@ -86,9 +86,9 @@ export async function ManagementDashboard({ actor, filters }: { actor: Actor; fi
     { label: "สุทธิ", value: summary.net, tone: summary.net < 0 ? "red" : "green", icon: "report" as const },
   ];
   const tasks = [
-    { label: "ผลรางวัลร่างค้างจากระบบเดิม", count: pendingResults, href: currentDraw ? `/draws/${currentDraw.id}` : "/draws" },
-    { label: "รายการรอตรวจสอบยอด", count: pendingSettlements, href: currentDraw ? `/draws/${currentDraw.id}` : "/draws" },
-    { label: "คำขอยกเลิกบิล", count: pendingCancellations, href: "/bills" },
+    { label: "รอปิดบัญชี", detail: "งวดที่ตรวจสอบยอดแล้วและพร้อมปิดบัญชี", count: awaitingClose, href: "/draws" },
+    { label: "คำขอแก้ไข", detail: "คำขอแก้ไขหรือยกเลิกบิลที่รอพิจารณา", count: pendingCancellations, href: "/bills" },
+    { label: "ความผิดปกติ", detail: "รายการที่มียอดสุทธิติดลบและควรตรวจสอบ", count: anomalyCount, href: "/reports" },
   ];
   const salesByDay = new Map<string, number>();
   for (const bill of filteredBills) { const { key } = bangkokDay(bill.createdAt); salesByDay.set(key, (salesByDay.get(key) ?? 0) + Number(bill.totalStake)); }
@@ -138,8 +138,8 @@ export async function ManagementDashboard({ actor, filters }: { actor: Actor; fi
     </section>
     <section className="operations-grid" aria-label="การดำเนินงาน">
       <article className="dashboard-panel agent-performance-panel"><div className="panel-heading"><div><p className="eyebrow">ผลงาน Agent</p><h2>ยอดขายสูงสุดตามข้อมูลที่เลือก</h2></div><Link href="/reports">ดูรายงาน <Icon name="arrow" /></Link></div>{rankedAgents.length === 0 ? <p className="empty-state">ไม่พบยอดขายตามตัวกรองนี้</p> : <div className="agent-ranking">{rankedAgents.map((agent, index) => <div className="agent-rank" key={agent.agentCode}><b>{index + 1}</b><div className="agent-rank-name"><strong>{agent.agentCode} {agent.agentName}</strong><span><i style={{ width: `${(Number(agent.gross) / maxAgentGross) * 100}%` }}/></span></div><div className="agent-rank-value"><strong>{MONEY.format(Number(agent.gross))}</strong><small>{agent.billCount} บิล</small></div></div>)}</div>}</article>
-      <section className="dashboard-panel task-panel"><div className="panel-heading"><div><p className="eyebrow">ต้องตรวจสอบ</p><h2>งานที่ต้องดำเนินการ</h2></div></div><div className="task-list">{tasks.map((task) => <Link key={task.label} href={task.href}><span className={task.count > 0 ? "task-alert" : "task-ok"}><Icon name={task.count > 0 ? "alert" : "home"}/></span><div><strong>{task.label}</strong><small>{task.count > 0 ? "รอการดำเนินการ" : "ไม่มีรายการค้าง"}</small></div><b>{task.count}</b><Icon name="arrow"/></Link>)}</div></section>
-      <section className="dashboard-panel timeline-panel"><div className="panel-heading"><div><p className="eyebrow">ขั้นตอนการทำงาน</p><h2>สถานะรอบ</h2></div></div>{currentDraw === null ? <p className="empty-state">ยังไม่มีรอบในระบบ</p> : <><div className="draw-meta"><strong>{currentDraw.name}</strong><span>ปิดรับ {DATE_TIME.format(currentDraw.cutoffAt)}</span></div><ol className="draw-timeline">{STEPS.map((step, index) => <li key={step.key} className={index < currentStep ? "complete" : index === currentStep ? "current" : ""}><span>{index < currentStep ? "✓" : index + 1}</span><div><strong>{step.label}</strong><small>{step.detail}</small></div></li>)}</ol></>}</section>
+      <section className="dashboard-panel task-panel"><div className="panel-heading"><div><p className="eyebrow">Today&apos;s Priorities</p><h2>งานที่ต้องทำวันนี้</h2></div></div><div className="task-list">{tasks.map((task) => <Link key={task.label} href={task.href}><span className={task.count > 0 ? "task-alert" : "task-ok"}><Icon name={task.count > 0 ? "alert" : "home"}/></span><div><strong>{task.label}</strong><small>{task.count > 0 ? task.detail : "ไม่มีรายการค้าง"}</small></div><b>{task.count}</b><Icon name="arrow"/></Link>)}</div></section>
+      <section className="dashboard-panel timeline-panel"><div className="panel-heading"><div><p className="eyebrow">ขั้นตอนการทำงาน</p><h2>สถานะงวด</h2></div></div>{currentDraw === null ? <p className="empty-state">ยังไม่มีงวดในระบบ</p> : <><div className="draw-meta"><strong>{currentDraw.name}</strong><span>ปิดรับ {DATE_TIME.format(currentDraw.cutoffAt)}</span></div><ol className="draw-timeline">{STEPS.map((step, index) => <li key={step.key} className={index < currentStep ? "complete" : index === currentStep ? "current" : ""}><span>{index < currentStep ? "✓" : index + 1}</span><div><strong>{step.label}</strong><small>{step.detail}</small></div></li>)}</ol></>}</section>
     </section>
     <section className="dashboard-panel recent-panel"><div className="panel-heading"><div><p className="eyebrow">อัปเดตล่าสุด</p><h2>บิลล่าสุด</h2></div><Link href="/bills">ดูทั้งหมด <Icon name="arrow" /></Link></div>{recentBills.length === 0 ? <p className="empty-state">ยังไม่มีบิลในระบบ</p> : <div className="recent-table-wrap"><table className="recent-table"><thead><tr><th>เลขบิล</th><th>Agent</th><th>วันที่และเวลา</th><th className="num">ยอดขาย</th><th>สถานะ</th></tr></thead><tbody>{recentBills.map((bill) => <tr key={bill.id}><td><Link href={`/bills/${bill.id}`}><strong>{bill.billNumber ?? "บิลร่าง"}</strong><small>{bill.title}</small></Link></td><td>{bill.agent.code}<small>{bill.agent.name}</small></td><td>{DATE_TIME.format(bill.createdAt)}</td><td className="num">{MONEY.format(Number(bill.totalStake))}</td><td><span className={`status-chip status-${bill.status.toLowerCase()}`}>{statusLabel(bill.status)}</span></td></tr>)}</tbody></table></div>}</section>
   </main>;

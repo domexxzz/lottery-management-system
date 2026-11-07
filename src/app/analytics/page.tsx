@@ -10,6 +10,7 @@ const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximum
 const INTEGER = new Intl.NumberFormat("th-TH");
 
 type CustomerRow = { label: string; bills: number; spend: number; items: number; numbers: Map<string, number> };
+type DemandValue = { count: number; stake: number };
 const ANALYTICS_STATUSES: BillStatus[] = ["CONFIRMED", "LOCKED", "SETTLED"];
 function first(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] : value; }
 
@@ -47,8 +48,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   ]);
 
   const customers = new Map<string, CustomerRow>();
-  const numberDemand = new Map<string, { count: number; stake: number }>();
-  const prizeDemand = new Map<string, { count: number; stake: number }>();
+  const prizeDemand = new Map<string, DemandValue>();
+  const prizeNumberDemand = new Map<string, Map<string, DemandValue>>();
   const timeDemand = new Map<string, { bills: number; sales: number }>([["เช้า", { bills: 0, sales: 0 }], ["บ่าย", { bills: 0, sales: 0 }], ["เย็น/ค่ำ", { bills: 0, sales: 0 }]]);
   const drawDemand = new Map<string, { bills: number; sales: number }>();
 
@@ -60,10 +61,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     customer.items += bill.items.length;
     for (const item of bill.items) {
       customer.numbers.set(item.number, (customer.numbers.get(item.number) ?? 0) + 1);
-      const number = numberDemand.get(item.number) ?? { count: 0, stake: 0 };
-      number.count += 1; number.stake += Number(item.stake); numberDemand.set(item.number, number);
       const prize = prizeDemand.get(item.prizeType.name) ?? { count: 0, stake: 0 };
       prize.count += 1; prize.stake += Number(item.stake); prizeDemand.set(item.prizeType.name, prize);
+      const numbersForPrize = prizeNumberDemand.get(item.prizeType.name) ?? new Map<string, DemandValue>();
+      const number = numbersForPrize.get(item.number) ?? { count: 0, stake: 0 };
+      number.count += 1; number.stake += Number(item.stake); numbersForPrize.set(item.number, number);
+      prizeNumberDemand.set(item.prizeType.name, numbersForPrize);
     }
     customers.set(customerKey, customer);
     const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "2-digit", hour12: false, timeZone: "Asia/Bangkok" }).format(bill.createdAt));
@@ -84,9 +87,14 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     { label: "ลูกค้าใหม่", detail: "พบเพียง 1 ครั้ง", count: customerRows.filter((row) => row.bills === 1).length, color: "#7566b1" },
     { label: "ไม่ระบุรหัส", detail: "ยังเชื่อมลูกค้าไม่ได้", count: customerRows.filter((row) => row.label === "ไม่ระบุรหัส").length, color: "#9aa8b1" },
   ];
-  const topNumbers = [...numberDemand.entries()].sort((a, b) => b[1].count - a[1].count || b[1].stake - a[1].stake).slice(0, 5);
-  const topPrizes = [...prizeDemand.entries()].sort((a, b) => b[1].stake - a[1].stake).slice(0, 6);
-  const maxPrizeStake = Math.max(...topPrizes.map(([, value]) => value.stake), 1);
+  const allPrizes = [...prizeDemand.entries()].sort((a, b) => b[1].stake - a[1].stake || b[1].count - a[1].count);
+  const topPrizeNumberGroups = allPrizes.slice(0, 5).map(([name]) => ({
+    name,
+    numbers: [...(prizeNumberDemand.get(name)?.entries() ?? [])]
+      .sort((a, b) => b[1].count - a[1].count || b[1].stake - a[1].stake)
+      .slice(0, 3),
+  }));
+  const maxPrizeStake = Math.max(...allPrizes.map(([, value]) => value.stake), 1);
   const maxTimeSales = Math.max(...[...timeDemand.values()].map((value) => value.sales), 1);
   const topDraws = [...drawDemand.entries()].sort((a, b) => b[1].sales - a[1].sales).slice(0, 5);
 
@@ -111,8 +119,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     </section>
 
     <section className="analytics-grid analytics-grid-detail">
-      <article className="analytics-card"><header><div><p className="eyebrow">Number Demand</p><h2>เลขที่มีความต้องการสูง</h2></div><span className="neutral-chip">ไม่ใช่การทำนายผล</span></header>{topNumbers.length === 0 ? <p className="empty-state">ยังไม่มีข้อมูล</p> : <div className="number-grid">{topNumbers.map(([number, value], index) => <div key={number}><b>{index + 1}</b><strong>{number}</strong><span>{value.count} รายการ</span><small>{MONEY.format(value.stake)} ฿</small></div>)}</div>}</article>
-      <article className="analytics-card"><header><div><p className="eyebrow">Product Preference</p><h2>ประเภทรางวัลที่นิยม</h2></div></header><div className="prize-bars">{topPrizes.map(([name, value]) => <div key={name}><div><strong>{name}</strong><span>{value.count} รายการ</span></div><span><i style={{ width: `${value.stake / maxPrizeStake * 100}%` }}/></span><small>{MONEY.format(value.stake)} ฿</small></div>)}</div></article>
+      <article className="analytics-card number-demand-card"><header><div><p className="eyebrow">Number Demand by Prize Type</p><h2>เลขที่มีความต้องการสูง</h2><small className="ranking-basis">แยกเลขยอดนิยม 3 อันดับ ภายใน 5 ประเภทรางวัลยอดนิยม</small></div><span className="neutral-chip">ไม่ใช่การทำนายผล</span></header>{topPrizeNumberGroups.length === 0 ? <p className="empty-state">ยังไม่มีข้อมูล</p> : <div className="number-groups">{topPrizeNumberGroups.map((group, groupIndex) => <section key={group.name} className="number-group"><header><span>{groupIndex + 1}</span><strong>{group.name}</strong><small>เลขยอดนิยม 3 อันดับ</small></header><div className="number-grid">{group.numbers.map(([number, value], index) => <div key={number}><b>{index + 1}</b><strong>{number}</strong><span>{value.count} รายการ</span><small>{MONEY.format(value.stake)} ฿</small></div>)}</div></section>)}</div>}</article>
+      <article className="analytics-card"><header><div><p className="eyebrow">Prize Type Preference · All</p><h2>ประเภทรางวัลที่นิยมทั้งหมด</h2><small className="ranking-basis">แสดงทุกประเภท เรียงจากยอดเดิมพันรวม</small></div></header>{allPrizes.length === 0 ? <p className="empty-state">ยังไม่มีข้อมูล</p> : <div className="prize-bars">{allPrizes.map(([name, value], index) => <div key={name}><div><span className="prize-rank">{index + 1}</span><strong>{name}</strong><span>{value.count} รายการ</span></div><span><i style={{ width: `${value.stake / maxPrizeStake * 100}%` }}/></span><small>{MONEY.format(value.stake)} ฿</small></div>)}</div>}</article>
     </section>
 
     <section className="analytics-grid analytics-grid-bottom">

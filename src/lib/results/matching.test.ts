@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   expectedResultLength,
+  isWinningAny,
   isWinning,
   validatePrizeShape,
   validateResultValue,
@@ -8,6 +9,15 @@ import {
 
 const win = (number: string, resultValue: string, matchRule: "EXACT" | "PERMUTATION" | "CONTAINS_DIGIT") =>
   isWinning({ number, resultValue, matchRule });
+
+describe("ผลรางวัลที่มีหลายเลข", () => {
+  test("ถูกเมื่อเลขตรงกับผลช่องใดช่องหนึ่ง", () => {
+    expect(isWinningAny({ number: "300", resultValues: ["300", "950"], matchRule: "EXACT" })).toBe(true);
+    expect(isWinningAny({ number: "950", resultValues: ["300", "950"], matchRule: "EXACT" })).toBe(true);
+    expect(isWinningAny({ number: "393", resultValues: ["393", "804"], matchRule: "EXACT" })).toBe(true);
+    expect(isWinningAny({ number: "111", resultValues: ["393", "804"], matchRule: "EXACT" })).toBe(false);
+  });
+});
 
 describe("EXACT — เลขตรงกันทุกหลัก", () => {
   test("ตรงกันถือว่าถูก", () => {

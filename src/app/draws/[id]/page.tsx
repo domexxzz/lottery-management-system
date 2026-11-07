@@ -5,6 +5,7 @@ import { getActor } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { expectedResultLength } from "@/lib/results/matching";
 import { listResults } from "@/lib/results/service";
+import { displayResultValues, resultValueCount, storedResultValues } from "@/lib/results/values";
 import { listSettlements } from "@/lib/settlement/service";
 import { NotFoundError } from "@/lib/errors";
 import { bangkokDate } from "@/lib/glo/results";
@@ -85,19 +86,19 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
   return (
     <main className="workspace-page draw-detail-page">
       <section className="card workspace-card" aria-labelledby="draw-heading">
-        <p><Link href="/draws">← กลับไปรายการรอบ</Link></p>
+        <p><Link href="/draws">← กลับไปรายการงวด</Link></p>
         <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Draw & Settlement</p><h1 id="draw-heading">{draw.name}</h1><p>บันทึกผลครั้งเดียวแล้วดำเนินการตรวจสอบยอดต่อได้ทันที</p></div><span className={`status-pill ${draw.status === "CLOSED" ? "success" : draw.status === "RESULT_PENDING" ? "warning" : "info"}`}>{DRAW_STATUS[draw.status] ?? draw.status}</span></header>
-        <div className="draw-detail-summary"><div><span>ผลที่อนุมัติแล้ว</span><strong>{approvedCount} / {prizeTypes.length}</strong></div><div><span>Settlement</span><strong>{settlementData.settlements.length}</strong><small>Agent</small></div><div><span>สถานะรอบ</span><strong>{DRAW_STATUS[draw.status] ?? draw.status}</strong></div></div>
+        <div className="draw-detail-summary"><div><span>ผลที่อนุมัติแล้ว</span><strong>{approvedCount} / {prizeTypes.length}</strong></div><div><span>Settlement</span><strong>{settlementData.settlements.length}</strong><small>Agent</small></div><div><span>สถานะงวด</span><strong>{DRAW_STATUS[draw.status] ?? draw.status}</strong></div></div>
 
         <h2>ผลรางวัล</h2>
         {draw.status === "OPEN" ? (
-          <p className="muted">รอบนี้ยังเปิดรับอยู่ ลงผลได้หลังปิดรับ</p>
+          <p className="muted">งวดนี้ยังเปิดรับอยู่ ลงผลได้หลังปิดรับ</p>
         ) : (
           <>
           {pendingCorrections > 0 && (
             <p className="notice" role="status">
               มีคำขอแก้ผลรางวัลรออนุมัติ {pendingCorrections} รายการ · ผลเดิมยังมีผลบังคับจนกว่า
-              Owner จะอนุมัติ และเมื่ออนุมัติแล้วรอบนี้ต้องคำนวณและตรวจสอบยอดใหม่
+              Owner จะอนุมัติ และเมื่ออนุมัติแล้วงวดนี้ต้องคำนวณและตรวจสอบยอดใหม่
             </p>
           )}
           {canEnter && draw.status !== "CLOSED" && <div className="result-entry-guide"><span className="result-entry-guide-icon"><DashboardIcon name="edit" /></span><div><strong>กรอกและยืนยันผลรางวัล</strong><small>ตรวจเลขให้ถูกต้องก่อนบันทึก เมื่อกดแล้วผลจะได้รับการยืนยันทันทีโดยไม่ต้องตรวจซ้ำ</small></div><a href="#result-entry-list">กรอกผลด้านล่าง ↓</a></div>}
@@ -122,6 +123,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                 // ความยาวของผลที่ประกาศ ไม่ใช่ความยาวของเลขที่แทง — ต่างกันในรางวัลวิ่ง
                 // null = รางวัลวิ่งที่ยังไม่ได้ตั้งค่าใน Rulebook จึงลงผลไม่ได้
                 const resultLength = expectedResultLength(pt);
+                const valueCount = resultValueCount(pt.code);
 
                 return (
                   <tr key={pt.id}>
@@ -139,11 +141,11 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                     <td className="number-cell">
                       {correctionPending ? (
                         <>
-                          {approvedResult?.value}
-                          <span className="muted"> → {latest?.value}</span>
+                          {approvedResult && displayResultValues(approvedResult)}
+                          <span className="muted"> → {latest && displayResultValues(latest)}</span>
                         </>
                       ) : (
-                        (latest?.value ?? "-")
+                        (latest ? displayResultValues(latest) : "-")
                       )}
                     </td>
                     <td>
@@ -161,19 +163,25 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                     </td>
                     <td>
                       {canEnter && !locked && resultLength !== null && (
-                        <input
-                          form={bulkFormId}
-                          className="result-bulk-input"
-                          data-glo-prize-code={pt.code}
-                          name={`result:${pt.id}`}
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          maxLength={resultLength}
-                          defaultValue={latest?.status === "DRAFT" ? latest.value : ""}
-                          placeholder={`${MATCH_HINT[pt.matchRule] ?? "เลขที่ออก"} · ${resultLength} หลัก`}
-                          aria-label={`ผลรางวัลที่ ${pt.code}`}
-                          required
-                        />
+                        <div className={valueCount > 1 ? "result-value-inputs" : undefined}>
+                          {Array.from({ length: valueCount }, (_, valueIndex) => (
+                            <input
+                              key={valueIndex}
+                              form={bulkFormId}
+                              className="result-bulk-input"
+                              data-glo-prize-code={pt.code}
+                              data-glo-value-index={valueIndex}
+                              name={`result:${pt.id}`}
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength={resultLength}
+                              defaultValue={latest?.status === "DRAFT" ? storedResultValues(latest)[valueIndex] ?? "" : ""}
+                              placeholder={`${MATCH_HINT[pt.matchRule] ?? "เลขที่ออก"} ${valueCount > 1 ? `ช่อง ${valueIndex + 1}` : ""} · ${resultLength} หลัก`}
+                              aria-label={`ผลรางวัลที่ ${pt.code}${valueCount > 1 ? ` เลขที่ ${valueIndex + 1}` : ""}`}
+                              required
+                            />
+                          ))}
+                        </div>
                       )}
                       {canEnter && !locked && resultLength === null && (
                         <span className="error" role="alert">
@@ -190,8 +198,9 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                             drawId={draw.id}
                             prizeTypeId={pt.id}
                             code={pt.code}
-                            currentValue={approvedResult.value}
+                            currentValues={storedResultValues(approvedResult)}
                             resultLength={resultLength}
+                            valueCount={valueCount}
                           />
                         )}
                       {canApproveResult && latest?.status === "DRAFT" && (

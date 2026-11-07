@@ -12,7 +12,7 @@ type OfficialResult = {
 
 type ImportData = {
   official: OfficialResult;
-  suggestions: Record<string, { value: string; source: string }>;
+  suggestions: Record<string, { values: string[]; source: string }>;
   source: string;
 };
 
@@ -41,7 +41,10 @@ export function GloResultImporter({ drawId, defaultDate }: { drawId: string; def
         const code = input.dataset.gloPrizeCode;
         const suggestion = code ? payload.data!.suggestions[code] : undefined;
         if (!suggestion) return;
-        input.value = suggestion.value;
+        const valueIndex = Number(input.dataset.gloValueIndex ?? "0");
+        const value = suggestion.values[valueIndex];
+        if (value === undefined) return;
+        input.value = value;
         input.dataset.gloImported = "true";
         input.dispatchEvent(new Event("input", { bubbles: true }));
         filled += 1;
@@ -71,12 +74,11 @@ export function GloResultImporter({ drawId, defaultDate }: { drawId: string; def
           <div><span>เลขหน้า 3 ตัว</span><strong>{data.official.front3.join(" · ")}</strong></div>
           <div><span>เลขท้าย 3 ตัว</span><strong>{data.official.back3.join(" · ")}</strong></div>
           <p><b>เติมแล้ว {filledCount} ช่อง</b><span>ยังไม่บันทึก · กรุณาตรวจทุกช่องก่อนกดบันทึกผลทั้งหมด</span></p>
-          <p className="glo-import-manual">
-            <b>ไม่ได้เติม: 3 ตัวหน้า และ 3 ตัวท้าย</b>
+          <p>
+            <b>เติมผล GLO ครบแล้ว</b>
             <span>
-              GLO จับสองรางวัลนี้แยกจากรางวัลที่ 1 และจับรางวัลละ 2 เลข
+              3 ตัวหน้าและ 3 ตัวท้ายถูกเติมรางวัลละ 2 เลขตามผลทางการ
               ({data.official.front3.join(" · ")} และ {data.official.back3.join(" · ")})
-              แต่ระบบเก็บได้เลขเดียวต่อรางวัล กรุณาเลือกเลขที่ใช้แล้วกรอกสองช่องนี้เอง
             </span>
           </p>
         </div>

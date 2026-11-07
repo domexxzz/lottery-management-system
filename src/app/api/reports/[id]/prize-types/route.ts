@@ -18,7 +18,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const [summary, rows] = await Promise.all([drawSummary(actor, drawId), byPrizeType(actor, drawId)]);
 
     const csv = csvFile(
-      ["รอบ", "รหัสรางวัล", "ชื่อรางวัล", "จำนวนรายการ", "ถูกรางวัล", "ยอดขาย", "จ่ายรางวัล"],
+      ["งวด", "รหัสรางวัล", "ชื่อรางวัล", "จำนวนรายการ", "ถูกรางวัล", "ยอดขาย", "จ่ายรางวัล"],
       rows.map((r) => [
         summary.drawName,
         String(r.code),

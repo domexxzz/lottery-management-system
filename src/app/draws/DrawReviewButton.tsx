@@ -9,7 +9,7 @@ export function DrawReviewButton({ href, label, drawName }: { href: string; labe
     <button
       type="button"
       className="draw-review-button"
-      aria-label={`${label}รอบ ${drawName}`}
+      aria-label={`${label}งวด ${drawName}`}
       onClick={() => router.push(href)}
     >
       <span aria-hidden="true">✓</span>

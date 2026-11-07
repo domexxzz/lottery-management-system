@@ -22,7 +22,7 @@ const ItemSchema = z.object({
 });
 
 const CreateSchema = z.object({
-  drawId: z.string().min(1, "กรุณาเลือกรอบ"),
+  drawId: z.string().min(1, "กรุณาเลือกงวด"),
   agentId: z.string().min(1, "กรุณาเลือก Agent").optional(),
   title: z.string().trim().min(1, "กรุณากรอกชื่อบิล").max(120),
   items: z.array(ItemSchema).min(1, "บิลต้องมีอย่างน้อยหนึ่งรายการ"),

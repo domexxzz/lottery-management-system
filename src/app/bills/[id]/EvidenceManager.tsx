@@ -20,6 +20,17 @@ export type EvidenceItem = {
   verifiedAt: string | null;
   replacesId: string | null;
   replacedById: string | null;
+  duplicateCount: number;
+};
+
+type DuplicateOccurrence = {
+  id: string;
+  type: AttachmentType;
+  status: AttachmentStatus;
+  originalName: string;
+  createdAt: string;
+  uploadedBy: { displayName: string };
+  bill: { id: string; billNumber: string | null; title: string; agent: { code: string; name: string } };
 };
 
 type Payment = {
@@ -84,6 +95,7 @@ export function EvidenceManager({
   const [error, setError] = useState<string | null>(null);
   const [failedUpload, setFailedUpload] = useState<{ file: File; type: AttachmentType; replacesId?: string } | null>(null);
   const [replacement, setReplacement] = useState<EvidenceItem | null>(null);
+  const [duplicateHistory, setDuplicateHistory] = useState<{ attachmentId: string; rows: DuplicateOccurrence[] } | null>(null);
 
   const activeItems = useMemo(() => items.filter((item) => item.replacedById === null), [items]);
   const orderItems = useMemo(() => activeItems.filter((item) => item.type === "ORDER_EVIDENCE"), [activeItems]);
@@ -116,8 +128,8 @@ export function EvidenceManager({
         setFailedUpload({ file, type, ...(replacesId ? { replacesId } : {}) });
         return;
       }
-      const response = JSON.parse(xhr.responseText) as { data: Omit<EvidenceItem, "replacedById"> };
-      const created: EvidenceItem = { ...response.data, replacedById: null };
+      const response = JSON.parse(xhr.responseText) as { data: EvidenceItem };
+      const created: EvidenceItem = response.data;
       setItems((current) => [
         ...current.map((item) => item.id === replacesId ? { ...item, replacedById: created.id } : item),
         created,
@@ -158,6 +170,17 @@ export function EvidenceManager({
     router.refresh();
   }
 
+  async function showDuplicateHistory(item: EvidenceItem) {
+    setError(null);
+    const response = await fetch(`/api/attachments/${item.id}/duplicates`, { cache: "no-store" });
+    if (!response.ok) {
+      setError("โหลดประวัติรูปซ้ำไม่สำเร็จ");
+      return;
+    }
+    const body = await response.json() as { data: DuplicateOccurrence[] };
+    setDuplicateHistory({ attachmentId: item.id, rows: body.data });
+  }
+
   function drop(event: React.DragEvent<HTMLDivElement>, type: AttachmentType) {
     event.preventDefault();
     const file = event.dataTransfer.files[0];
@@ -175,6 +198,7 @@ export function EvidenceManager({
           <p>{item.originalName} · {fileSize(item.fileSize)}</p>
           <small>แนบโดย {item.uploadedBy} · {new Date(item.createdAt).toLocaleString("th-TH")}</small>
           {item.verifiedBy && <small>ตรวจโดย {item.verifiedBy}{item.verifiedAt ? ` · ${new Date(item.verifiedAt).toLocaleString("th-TH")}` : ""}</small>}
+          {item.duplicateCount > 1 && <div className="duplicate-evidence-alert"><strong>รูปนี้เคยปรากฏ {item.duplicateCount} ครั้ง</strong><button type="button" onClick={() => showDuplicateHistory(item)}>ดูประวัติรูปซ้ำ</button></div>}
           {item.rejectionReason && <div className="rejection-reason"><strong>เหตุผลที่ตีกลับ</strong><span>{item.rejectionReason}</span></div>}
           <div className="evidence-actions">
             <button type="button" className="secondary-button" onClick={() => setSelectedPreview(item)}>ดูรูป</button>
@@ -235,6 +259,7 @@ export function EvidenceManager({
       {hasCorrectedPending && <button type="button" className="resubmit-button" onClick={resubmit}>ส่งหลักฐานที่แก้ไขแล้วเข้าตรวจใหม่</button>}
 
       {selectedPreview && <div className="evidence-modal" role="dialog" aria-modal="true" aria-label="ตัวอย่างหลักฐาน" onClick={() => setSelectedPreview(null)}><div onClick={(event) => event.stopPropagation()}><header><strong>{TYPE_LABEL[selectedPreview.type]}</strong><button type="button" onClick={() => setSelectedPreview(null)} aria-label="ปิด">ปิด</button></header><img src={`/api/attachments/${selectedPreview.id}/file`} alt={selectedPreview.originalName} /><footer><span>{selectedPreview.originalName}</span><a href={`/api/attachments/${selectedPreview.id}/file?download=1`}>ดาวน์โหลดต้นฉบับที่จัดเก็บ</a></footer></div></div>}
+      {duplicateHistory && <div className="duplicate-history-modal" role="dialog" aria-modal="true" onClick={() => setDuplicateHistory(null)}><section onClick={(event) => event.stopPropagation()}><header><div><p className="page-eyebrow">Duplicate Evidence History</p><h2>ประวัติรูปที่เหมือนกัน</h2><small>พบทั้งหมด {duplicateHistory.rows.length} ครั้ง</small></div><button type="button" onClick={() => setDuplicateHistory(null)}>ปิด</button></header><div className="duplicate-history-list">{duplicateHistory.rows.map((row) => <article key={row.id} className={row.id === duplicateHistory.attachmentId ? "is-current" : undefined}><img src={`/api/attachments/${row.id}/file`} alt={row.originalName} /><div><strong>{row.bill.billNumber ?? "บิลร่าง"} · {row.bill.title}</strong><span>{TYPE_LABEL[row.type]} · Agent {row.bill.agent.code} {row.bill.agent.name}</span><small>แนบโดย {row.uploadedBy.displayName} · {new Date(row.createdAt).toLocaleString("th-TH")}</small>{row.id === duplicateHistory.attachmentId && <b>รูปปัจจุบัน</b>}</div><a href={`/bills/${row.bill.id}#customer-evidence-heading`}>ดูบิล</a></article>)}</div></section></div>}
     </section>
   );
 }

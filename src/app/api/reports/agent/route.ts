@@ -28,13 +28,13 @@ export async function GET(request: Request) {
       csv = csvFile(["รหัส", "ประเภทรางวัล", "รายการ", "ถูกรางวัล", "ยอดขาย", "จ่ายรางวัล"], report.prizes.map((row) => [String(row.code), row.name, String(row.count), String(row.winners), row.gross.toFixed(2), row.payout.toFixed(2)]));
       name = "agent-prize-report.csv";
     } else if (report.selectedView === "bills") {
-      csv = csvFile(["เลขบิล", "ชื่อบิล", "รอบ", "รายการ", "ยอดขาย", "จ่ายรางวัล", "วันที่สร้าง", "สถานะ"], report.bills.map((bill) => [bill.billNumber ?? "", bill.title, bill.draw.name, String(bill._count.items), bill.totalStake.toFixed(2), bill.totalPayout.toFixed(2), bill.createdAt.toISOString(), bill.status]));
+      csv = csvFile(["เลขบิล", "ชื่อบิล", "งวด", "รายการ", "ยอดขาย", "จ่ายรางวัล", "วันที่สร้าง", "สถานะ"], report.bills.map((bill) => [bill.billNumber ?? "", bill.title, bill.draw.name, String(bill._count.items), bill.totalStake.toFixed(2), bill.totalPayout.toFixed(2), bill.createdAt.toISOString(), bill.status]));
       name = "agent-bill-report.csv";
     } else if (report.selectedView === "settlements") {
-      csv = csvFile(["รอบ", "วันที่ปิดรับ", "ยอดขาย", "จ่ายรางวัล", "คอมมิชชัน", "สุทธิ", "สถานะ"], report.settlements.map((row) => [row.drawName, row.cutoffAt.toISOString(), row.gross.toFixed(2), row.payout.toFixed(2), row.commission?.toFixed(2) ?? "", row.net?.toFixed(2) ?? "", STATUS[row.settlementStatus] ?? row.settlementStatus]));
+      csv = csvFile(["งวด", "วันที่ปิดรับ", "ยอดขาย", "จ่ายรางวัล", "คอมมิชชัน", "สุทธิ", "สถานะ"], report.settlements.map((row) => [row.drawName, row.cutoffAt.toISOString(), row.gross.toFixed(2), row.payout.toFixed(2), row.commission?.toFixed(2) ?? "", row.net?.toFixed(2) ?? "", STATUS[row.settlementStatus] ?? row.settlementStatus]));
       name = "agent-settlement-report.csv";
     } else {
-      csv = csvFile(["รอบ", "วันที่ปิดรับ", "บิล", "รายการ", "ยอดขาย", "จ่ายรางวัล", "คอมมิชชัน", "สุทธิ", "สถานะ"], report.rows.map((row) => [row.drawName, row.cutoffAt.toISOString(), String(row.billCount), String(row.itemCount), row.gross.toFixed(2), row.payout.toFixed(2), row.commission?.toFixed(2) ?? "", row.net?.toFixed(2) ?? "", STATUS[row.settlementStatus] ?? row.settlementStatus]));
+      csv = csvFile(["งวด", "วันที่ปิดรับ", "บิล", "รายการ", "ยอดขาย", "จ่ายรางวัล", "คอมมิชชัน", "สุทธิ", "สถานะ"], report.rows.map((row) => [row.drawName, row.cutoffAt.toISOString(), String(row.billCount), String(row.itemCount), row.gross.toFixed(2), row.payout.toFixed(2), row.commission?.toFixed(2) ?? "", row.net?.toFixed(2) ?? "", STATUS[row.settlementStatus] ?? row.settlementStatus]));
       name = "agent-round-report.csv";
     }
 

@@ -31,8 +31,9 @@ export async function EvidenceReviewScreen({ actor, params, mode }: { actor: Act
   const serialized = result.items.map((item) => ({
     id: item.id, type: item.type, originalName: item.originalName, fileSize: item.fileSize, status: item.status,
     rejectionReason: item.rejectionReason, createdAt: item.createdAt.toISOString(), verifiedAt: item.verifiedAt?.toISOString() ?? null,
+    duplicateCount: item.duplicateCount,
     uploadedBy: item.uploadedBy.displayName, verifiedBy: item.verifiedBy?.displayName ?? null,
-    bill: { id: item.bill.id, billNumber: item.bill.billNumber, title: item.bill.title, status: item.bill.status, agentCode: item.bill.agent.code, agentName: item.bill.agent.name, drawName: item.bill.draw.name },
+    bill: { id: item.bill.id, billNumber: item.bill.billNumber, title: item.bill.title, status: item.bill.status, totalStake: item.bill.totalStake.toFixed(2), agentCode: item.bill.agent.code, agentName: item.bill.agent.name, drawName: item.bill.draw.name },
     payment: item.payment ? { amount: item.payment.amount.toFixed(2), paidAt: item.payment.paidAt.toISOString(), paymentMethod: item.payment.paymentMethod, note: item.payment.note, verificationStatus: item.payment.verificationStatus } : null,
   }));
   const buildPageLink = (target: number) => { const next = new URLSearchParams(); for (const [key, raw] of Object.entries(params)) { const value = first(raw); if (value && key !== "page" && !(mode === "verified" && key === "status")) next.set(key, value); } next.set("page", String(target)); return `${basePath}?${next}`; };

@@ -2,9 +2,9 @@ import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { officialDrawName } from "./schedule";
 
 export type DrawInput = {
-  name: string;
   opensAt: string;
   cutoffAt: string;
 };
@@ -47,11 +47,10 @@ export async function listDraws(
 export async function createDraw(actor: Actor, input: DrawInput): Promise<{ drawId: string }> {
   requirePermission(actor, "draw.manage");
 
-  const name = input.name.trim();
-  if (name === "") throw new ValidationError("ต้องกรอกชื่อรอบ");
-
   const opensAt = parseDate(input.opensAt, "เวลาเปิดรับ");
   const cutoffAt = parseDate(input.cutoffAt, "เวลาปิดรับ");
+  const name = officialDrawName(input.cutoffAt);
+  if (!name) throw new ValidationError("วันที่ปิดรับไม่ถูกต้อง");
 
   if (cutoffAt.getTime() <= opensAt.getTime()) {
     throw new ValidationError("เวลาปิดรับต้องหลังเวลาเปิดรับ");
@@ -61,7 +60,7 @@ export async function createDraw(actor: Actor, input: DrawInput): Promise<{ draw
     where: { ...orgScope(actor), name },
     select: { id: true },
   });
-  if (duplicate) throw new ConflictError(`ชื่อรอบ "${name}" ถูกใช้ไปแล้ว`);
+  if (duplicate) throw new ConflictError(`งวดวันที่ "${name}" ถูกสร้างไว้แล้ว`);
 
   const draw = await prisma.$transaction(async (tx) => {
     const created = await tx.draw.create({
@@ -98,13 +97,13 @@ export type LockOutcome = {
 };
 
 /**
- * ปิดรอบและล็อกบิลทั้งรอบ
+ * ปิดงวดและล็อกบิลทั้งงวด
  *
- * ทำทั้งหมดในทรานแซกชันเดียว: เปลี่ยนสถานะรอบ ล็อกบิลที่ยืนยันแล้ว
+ * ทำทั้งหมดในทรานแซกชันเดียว: เปลี่ยนสถานะงวด ล็อกบิลที่ยืนยันแล้ว
  * ยกเลิกบิลร่างที่ค้าง และเขียน audit
  *
  * บิลร่างที่ยังไม่ยืนยันถือว่าตกไป ไม่ใช่ปล่อยค้างเป็น DRAFT ตลอดไป
- * เพราะร่างที่ค้างอยู่หลังปิดรอบจะยืนยันไม่ได้อีกแล้วและทำให้รายงานสับสน
+ * เพราะร่างที่ค้างอยู่หลังปิดงวดจะยืนยันไม่ได้อีกแล้วและทำให้รายงานสับสน
  *
  * actorId เป็น null ได้เมื่อ job อัตโนมัติเป็นผู้เรียก
  */
@@ -118,9 +117,9 @@ export async function lockDraw(
       select: { id: true, name: true, status: true, organizationId: true },
     });
 
-    if (!draw) throw new NotFoundError("ไม่พบรอบ");
+    if (!draw) throw new NotFoundError("ไม่พบงวด");
     if (draw.status !== "OPEN") {
-      throw new ConflictError(`รอบ "${draw.name}" ไม่ได้อยู่ในสถานะเปิดรับ`);
+      throw new ConflictError(`งวด "${draw.name}" ไม่ได้อยู่ในสถานะเปิดรับ`);
     }
 
     const now = new Date();
@@ -169,7 +168,7 @@ export async function lockDraw(
   });
 }
 
-/** ปิดรอบด้วยมือ ใช้เมื่อต้องปิดก่อนเวลาหรือเมื่อ job ไม่ทำงาน */
+/** ปิดงวดด้วยมือ ใช้เมื่อต้องปิดก่อนเวลาหรือเมื่อ job ไม่ทำงาน */
 export async function lockDrawManually(actor: Actor, drawId: string): Promise<LockOutcome> {
   requirePermission(actor, "draw.manage");
 
@@ -177,20 +176,20 @@ export async function lockDrawManually(actor: Actor, drawId: string): Promise<Lo
     where: { id: drawId, ...orgScope(actor) },
     select: { id: true },
   });
-  if (!draw) throw new NotFoundError("ไม่พบรอบ");
+  if (!draw) throw new NotFoundError("ไม่พบงวด");
 
   return lockDraw(draw.id, {
     actorId: actor.userId,
-    reason: "ปิดรอบด้วยมือโดยผู้ดูแล",
+    reason: "ปิดงวดด้วยมือโดยผู้ดูแล",
     requestId: actor.requestId,
   });
 }
 
 /**
- * งานอัตโนมัติ: ปิดทุกรอบที่ถึงเวลา Cutoff แล้ว
+ * งานอัตโนมัติ: ปิดทุกงวดที่ถึงเวลา Cutoff แล้ว
  *
  * ไม่รับ Actor เพราะเรียกจาก scheduler ไม่ใช่จากผู้ใช้
- * ทำทีละรอบเพื่อให้รอบที่ล้มเหลวไม่ลากรอบอื่นตกไปด้วย
+ * ทำทีละงวดเพื่อให้งวดที่ล้มเหลวไม่ลากงวดอื่นตกไปด้วย
  */
 export async function lockDueDraws(now: Date = new Date()): Promise<{
   locked: LockOutcome[];

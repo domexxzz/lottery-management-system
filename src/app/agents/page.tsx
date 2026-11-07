@@ -6,7 +6,6 @@ import { listAgents } from "@/lib/agents/service";
 import { aggregateAgentCustomers } from "@/lib/agents/customer-aggregation";
 import { customerProfileKey } from "@/lib/customers/profile-key";
 import { prisma } from "@/lib/db";
-import { CreateAgentForm, StatusForm } from "./AgentForms";
 import { AgentDashboardFilters } from "./AgentDashboardFilters";
 import { DashboardIcon } from "../DashboardIcon";
 import "./agents.css";
@@ -26,7 +25,6 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
   if (!actor) redirect("/login");
   if (actor.mustChangePassword) redirect("/change-password");
   if (!can(actor.role, "report.viewAllAgents")) redirect("/");
-  const canManageAgents = can(actor.role, "agent.manage");
 
   const query = await searchParams;
   const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
@@ -110,12 +108,12 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
   const totalCustomerCount = rankedAgents.reduce((sum, { agent }) => sum + (customersByAgent.get(agent.id)?.length ?? 0), 0);
   const maxCurrentSales = Math.max(...rankedAgents.map((row) => row.stats.currentSales), 1);
   const selectedDrawLabel = selectedAllDraws
-    ? "รอบทั้งหมด"
-    : currentDraw?.name ?? "ยังไม่มีรอบปัจจุบัน";
+    ? "งวดทั้งหมด"
+    : currentDraw?.name ?? "ยังไม่มีงวดปัจจุบัน";
 
   return (
     <main className="agents-page">
-      <header className="agents-hero"><div className="agents-hero-copy"><p><Link href="/">← หน้าภาพรวม</Link></p><div className="agents-title-row"><span className="agents-title-icon"><DashboardIcon name="agent" /></span><div><span className="agents-eyebrow">Organization & Customer View</span><h1 id="agents-heading">Agent และลูกค้าที่ดูแล</h1><p>ดูโครงสร้าง Agent ลูกค้าหลัก และผลงานจริงจากบิลที่ยืนยันแล้วในหน้าเดียว</p></div></div></div><div className="agents-current-draw"><span>ข้อมูลที่กำลังติดตาม</span><strong>{selectedDrawLabel}</strong><small>{drawOptions.length > 0 ? "เลือกดูได้ทั้งภาพรวมและรอบเฉพาะ" : "ยังไม่มีข้อมูลรอบสำหรับแสดงผล"}</small></div></header>
+      <header className="agents-hero"><div className="agents-hero-copy"><p><Link href="/">← หน้าภาพรวม</Link></p><div className="agents-title-row"><span className="agents-title-icon"><DashboardIcon name="agent" /></span><div><span className="agents-eyebrow">Organization & Customer View</span><h1 id="agents-heading">Agent และลูกค้าที่ดูแล</h1><p>ดูโครงสร้าง Agent ลูกค้าหลัก และผลงานจริงจากบิลที่ยืนยันแล้วในหน้าเดียว</p></div></div></div><div className="agents-current-draw"><span>ข้อมูลที่กำลังติดตาม</span><strong>{selectedDrawLabel}</strong><small>{drawOptions.length > 0 ? "เลือกดูได้ทั้งภาพรวมและงวดเฉพาะ" : "ยังไม่มีข้อมูลงวดสำหรับแสดงผล"}</small></div></header>
 
       <AgentDashboardFilters draws={drawOptions.map((draw) => ({ id: draw.id, name: draw.name }))} agents={allAgents.map((agent) => ({ id: agent.id, code: agent.code, name: agent.name }))} />
 
@@ -134,7 +132,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
             <header><span><DashboardIcon name="agent" /></span><div><strong>{agent.code} · {agent.name}</strong><small>{customers.length} ลูกค้าในข้อมูลที่เลือก</small></div><i className={`agent-status-dot status-${agent.status.toLowerCase()}`}>{STATUS_LABEL[agent.status] ?? agent.status}</i></header>
             <Link className="organization-profile-link" href={`/agents/${agent.id}${currentDraw ? `?drawId=${currentDraw.id}` : ""}`}>ดูโปรไฟล์ Agent <DashboardIcon name="arrow" /></Link>
             <div className="organization-connector" aria-hidden="true" />
-            {topCustomers.length === 0 ? <p className="organization-empty">ยังไม่มีลูกค้าในรอบนี้</p> : <ol>{topCustomers.map((customer, index) => <li key={customer.key}><b>{customer.name.trim().slice(0, 1) || index + 1}</b><Link href={`/customers/${customerProfileKey(customer.name)}`}><strong>{customer.name}</strong><small>{customer.billCount} บิล</small></Link><em><small>ยอดซื้อ</small>{MONEY.format(customer.gross)}</em></li>)}</ol>}
+            {topCustomers.length === 0 ? <p className="organization-empty">ยังไม่มีลูกค้าในงวดนี้</p> : <ol>{topCustomers.map((customer, index) => <li key={customer.key}><b>{customer.name.trim().slice(0, 1) || index + 1}</b><Link href={`/customers/${customerProfileKey(customer.name)}`}><strong>{customer.name}</strong><small>{customer.billCount} บิล</small></Link><em><small>ยอดซื้อ</small>{MONEY.format(customer.gross)}</em></li>)}</ol>}
             <footer><Link href={`/agents/${agent.id}${currentDraw ? `?drawId=${currentDraw.id}` : ""}`}>ดูลูกค้าทั้งหมด</Link>{customers.length > 5 ? <a href={`/api/agents/${agent.id}/customers${currentDraw ? `?draw=${currentDraw.id}` : ""}`}>ดาวน์โหลด CSV ↓</a> : <span>แสดงครบ {customers.length} คนแล้ว</span>}</footer>
           </article>
         ))}</div>}
@@ -143,11 +141,11 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
       </section>
 
       <section className="agent-performance-card" aria-labelledby="performance-heading">
-        <div className="agent-section-heading"><div><span className="agents-eyebrow">ผลงานรายบุคคล</span><h2 id="performance-heading">Agent ขายเป็นอย่างไรบ้าง</h2></div><small>{selectedAllDraws ? "รอบทั้งหมด · เรียงตามยอดขายสะสม" : currentDraw ? `${currentDraw.name} · เรียงจากยอดขายสูงสุด` : "เรียงตามยอดขายสะสม"}</small></div>
+        <div className="agent-section-heading"><div><span className="agents-eyebrow">ผลงานรายบุคคล</span><h2 id="performance-heading">Agent ขายเป็นอย่างไรบ้าง</h2></div><small>{selectedAllDraws ? "งวดทั้งหมด · เรียงตามยอดขายสะสม" : currentDraw ? `${currentDraw.name} · เรียงจากยอดขายสูงสุด` : "เรียงตามยอดขายสะสม"}</small></div>
         {rankedAgents.length === 0 ? <p className="agent-empty">ไม่พบ Agent ตามตัวกรองที่เลือก</p> : <div className="agent-compact-list">{pageAgents.map(({ agent, stats }, pageIndex) => {
           const index = (currentPage - 1) * pageSize + pageIndex;
           const share = totalCurrentSales ? stats.currentSales / totalCurrentSales * 100 : 0;
-          const settlementLabel = stats.settlementStatus === "AGGREGATED" ? "รวมรอบที่คำนวณแล้ว" : stats.settlementStatus === "APPROVED" ? "อนุมัติแล้ว" : stats.settlementStatus === "RECONCILED" ? "ตรวจสอบยอดแล้ว" : stats.settlementStatus === "DRAFT" ? "รอตรวจสอบยอด" : "ยังไม่คำนวณ";
+          const settlementLabel = stats.settlementStatus === "AGGREGATED" ? "รวมงวดที่คำนวณแล้ว" : stats.settlementStatus === "APPROVED" ? "อนุมัติแล้ว" : stats.settlementStatus === "RECONCILED" ? "ตรวจสอบยอดแล้ว" : stats.settlementStatus === "DRAFT" ? "รอตรวจสอบยอด" : "ยังไม่คำนวณ";
           return <article className="agent-compact-row" key={agent.id}>
             <div className="agent-card-person"><b>{index + 1}</b><Link className="agent-profile-entry" href={`/agents/${agent.id}${currentDraw ? `?drawId=${currentDraw.id}` : ""}`}><strong>{agent.code} · {agent.name}</strong><small>{STATUS_LABEL[agent.status]} · คอม {agent.commissionRate.toFixed(2)}% · ดูโปรไฟล์เชิงลึก →</small></Link></div>
             <div className="agent-compact-sales"><span>ยอดขาย</span><strong>{MONEY.format(stats.currentSales)}</strong><div><i style={{ width: `${stats.currentSales / maxCurrentSales * 100}%` }}/></div><small>{share.toFixed(1)}%</small></div>
@@ -160,62 +158,6 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         <p className="agent-data-note">ยอดขายและจำนวนบิลอ่านจากบิลที่ยืนยันแล้ว ส่วนยอดจ่าย คอมมิชชัน และสุทธิอ่านจาก Settlement ที่บันทึกจริง หากยังไม่คำนวณจะแสดง “—” แทนการประมาณค่า</p>
       </section>
 
-      {canManageAgents && <details className="card agent-management-card">
-        <summary><span><span className="agents-eyebrow">Agent Management</span><strong id="agents-management-heading">ตั้งค่า สถานะ และเพิ่ม Agent</strong><small>คลิกเพื่อเปิดส่วนจัดการ</small></span><b>เปิด</b></summary>
-        <div className="agent-management-content">
-
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">รหัส</th>
-              <th scope="col">ชื่อ</th>
-              <th scope="col">บัญชีผู้ใช้</th>
-              <th scope="col">คอม (%)</th>
-              <th scope="col">วงเงินต่อรอบ</th>
-              <th scope="col">วงเงินต่อเลข</th>
-              <th scope="col">บิล</th>
-              <th scope="col">สถานะ</th>
-              <th scope="col">การจัดการ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {agents.map((agent) => (
-              <tr key={agent.id}>
-                <td>{agent.code}</td>
-                <td><Link className="agent-table-profile-link" href={`/agents/${agent.id}`}>{agent.name}</Link></td>
-                <td>{agent.user?.login ?? <span className="muted">ยังไม่ผูก</span>}</td>
-                <td>{agent.commissionRate.toFixed(2)}</td>
-                <td>
-                  {agent.creditLimit === null ? (
-                    <span className="muted">ไม่จำกัด</span>
-                  ) : (
-                    agent.creditLimit.toFixed(2)
-                  )}
-                </td>
-                <td>
-                  {agent.perNumberLimit === null ? (
-                    <span className="muted">ไม่จำกัด</span>
-                  ) : (
-                    agent.perNumberLimit.toFixed(2)
-                  )}
-                </td>
-                <td>{agent._count.bills}</td>
-                <td>{STATUS_LABEL[agent.status] ?? agent.status}</td>
-                <td>
-                  <StatusForm agentId={agent.id} currentStatus={agent.status} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <h2 className="agent-create-heading">เพิ่ม Agent ใหม่</h2>
-        <p className="muted">
-          Agent ที่สร้างใหม่จะยังไม่มีบัญชีผู้ใช้ ต้องผูกบัญชีให้ก่อนจึงจะ login สร้างบิลได้
-        </p>
-        <CreateAgentForm />
-        </div>
-      </details>}
     </main>
   );
 }

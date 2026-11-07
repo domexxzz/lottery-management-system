@@ -20,9 +20,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       where: { id, ...orgScope(actor) },
       select: { id: true, name: true, cutoffAt: true, status: true },
     });
-    if (!draw) throw new NotFoundError("ไม่พบรอบ");
+    if (!draw) throw new NotFoundError("ไม่พบงวด");
     if (draw.status !== "LOCKED" && draw.status !== "RESULT_PENDING") {
-      throw new ConflictError("ดึงผลได้เฉพาะรอบที่ปิดรับแล้วและยังไม่ปิดบัญชี");
+      throw new ConflictError("ดึงผลได้เฉพาะงวดที่ปิดรับแล้วและยังไม่ปิดบัญชี");
     }
 
     const body = bodySchema.safeParse(await request.json().catch(() => ({})));

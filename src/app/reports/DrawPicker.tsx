@@ -23,8 +23,8 @@ export function DrawPicker({
   return (
     <div className="draw-picker">
       <label htmlFor="draw">
-        เลือกรอบ
-        <AppDropdown id="draw" value={selectedId || "all"} onValueChange={selectDraw} options={[{ value: "all", label: "ทุกรอบ" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหารอบ" />
+        เลือกงวด
+        <AppDropdown id="draw" value={selectedId || "all"} onValueChange={selectDraw} options={[{ value: "all", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" />
       </label>
     </div>
   );

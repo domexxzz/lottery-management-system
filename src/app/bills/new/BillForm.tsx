@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { AppDropdown } from "../../AppDropdown";
 import { checkNumberField, checkRowComplete, checkStakeField } from "@/lib/bills/fieldChecks";
 import { createBillAction, type ActionState } from "../actions";
@@ -13,14 +13,84 @@ export type AgentOption = { id: string; code: string; name: string };
 
 type Row = { id: number; prizeTypeId: string; number: string; stake: string };
 
+function normalized(value: string) {
+  return value.trim().toLocaleLowerCase("th-TH").replace(/\s+/g, " ");
+}
+
+function editDistance(left: string, right: string): number {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    let diagonal = previous[0] ?? 0;
+    previous[0] = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const above = previous[j] ?? j;
+      previous[j] = Math.min(above + 1, (previous[j - 1] ?? i) + 1, diagonal + (left[i - 1] === right[j - 1] ? 0 : 1));
+      diagonal = above;
+    }
+  }
+  return previous[right.length] ?? left.length;
+}
+
+function customerMatchScore(name: string, query: string): number | null {
+  const candidate = normalized(name);
+  const search = normalized(query);
+  if (!search) return 10;
+  if (candidate === search) return 0;
+  if (candidate.startsWith(search)) return 1;
+  if (candidate.includes(search)) return 2;
+  const distance = editDistance(candidate, search);
+  return distance <= Math.max(2, Math.floor(Math.max(candidate.length, search.length) * 0.3)) ? 3 + distance : null;
+}
+
+function CustomerNameCombobox({ names, disabledHint }: { names: string[]; disabledHint?: string }) {
+  const [value, setValue] = useState("");
+  const [open, setOpen] = useState(false);
+  const matches = useMemo(() => names
+    .map((name, index) => ({ name, index, score: customerMatchScore(name, value) }))
+    .filter((item): item is { name: string; index: number; score: number } => item.score !== null)
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .slice(0, 8), [names, value]);
+
+  return <label htmlFor="title" className="customer-name-field">
+    ชื่อบิลหรือรหัสอ้างอิงลูกค้า
+    <span className="customer-combobox">
+      <input
+        id="title"
+        name="title"
+        required
+        maxLength={120}
+        value={value}
+        onChange={(event) => { setValue(event.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        autoComplete="off"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={open && matches.length > 0}
+        aria-controls="customer-name-options"
+        placeholder="พิมพ์ชื่อใหม่ หรือค้นหาลูกค้าเดิม"
+      />
+      {open && matches.length > 0 && <span id="customer-name-options" className="customer-name-options" role="listbox">
+        <span className="customer-options-heading" role="presentation"><strong>ลูกค้าเดิมของ Agent</strong><small>{matches.length} รายชื่อที่ใกล้เคียง</small></span>
+        {matches.map((item) => <button key={item.name} type="button" role="option" aria-selected={normalized(item.name) === normalized(value)} onMouseDown={(event) => event.preventDefault()} onClick={() => { setValue(item.name); setOpen(false); }}><span className="customer-option-avatar">{item.name.trim().slice(0, 1).toUpperCase()}</span><span className="customer-option-copy"><strong>{item.name}</strong><small>เลือกชื่อนี้เพื่อสร้างบิล</small></span><span className="customer-option-arrow">→</span></button>)}
+      </span>}
+    </span>
+    <small className="customer-field-hint">{disabledHint ?? (names.length > 0 ? `ค้นหาได้จากลูกค้าเดิม ${names.length} คน หรือพิมพ์ชื่อใหม่` : "ยังไม่มีลูกค้าเดิม สามารถพิมพ์ชื่อใหม่ได้")}</small>
+  </label>;
+}
+
 export function BillForm({
   draws,
   prizeTypes,
   agents,
+  currentAgentId,
+  customerNamesByAgent,
 }: {
   draws: DrawOption[];
   prizeTypes: PrizeOption[];
   agents: AgentOption[] | null;
+  currentAgentId: string | null;
+  customerNamesByAgent: Record<string, string[]>;
 }) {
   const [state, formAction, pending] = useActionState(createBillAction, INITIAL);
 
@@ -35,6 +105,8 @@ export function BillForm({
     },
   ]);
   const [selectedAgentId, setSelectedAgentId] = useState("");
+  const customerAgentId = agents === null ? currentAgentId : selectedAgentId;
+  const customerNames = customerAgentId ? customerNamesByAgent[customerAgentId] ?? [] : [];
 
   const digitsOf = (prizeTypeId: string) =>
     prizeTypes.find((p) => p.id === prizeTypeId)?.digits ?? 0;
@@ -73,22 +145,19 @@ export function BillForm({
   return (
     <form action={formAction} className="bill-create-form">
       <div className="bill-form-fields">
-      <label htmlFor="title">
-        ชื่อบิลหรือรหัสอ้างอิงลูกค้า
-        <input id="title" name="title" required maxLength={120} />
-      </label>
-
-      <label htmlFor="drawId">
-        รอบ
-        <AppDropdown id="drawId" name="drawId" defaultValue={draws[0]?.id ?? ""} required options={draws.map((draw) => ({ value: draw.id, label: draw.name, description: `ปิดรับ ${draw.cutoffAt}` }))} searchable={draws.length > 6} searchPlaceholder="ค้นหารอบ" />
-      </label>
-
       {agents !== null && (
         <div className="agent-picker">
           <label htmlFor="agentSearch">Agent ที่เป็นเจ้าของบิล</label>
           <AppDropdown id="agentSearch" name="agentId" value={selectedAgentId} onValueChange={setSelectedAgentId} placeholder="เลือก Agent" searchPlaceholder="ค้นหาด้วยรหัสหรือชื่อ Agent" emptyMessage="ไม่พบ Agent ที่ค้นหา" searchable required options={agents.map((agent) => ({ value: agent.id, label: `${agent.code} — ${agent.name}` }))} />
         </div>
       )}
+
+      <CustomerNameCombobox names={customerNames} disabledHint={agents !== null && !selectedAgentId ? "เลือก Agent ก่อน เพื่อค้นหาลูกค้าเดิมของ Agent คนนั้น" : undefined} />
+
+      <label htmlFor="drawId">
+        งวด
+        <AppDropdown id="drawId" name="drawId" defaultValue={draws[0]?.id ?? ""} required options={draws.map((draw) => ({ value: draw.id, label: draw.name, description: `ปิดรับ ${draw.cutoffAt}` }))} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" />
+      </label>
       </div>
 
       <h2>รายการ</h2>

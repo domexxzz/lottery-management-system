@@ -1,7 +1,11 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const PRISMA_SCHEMA_VERSION = 2;
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+  prismaSchemaVersion?: number;
+};
 
 function createClient(): PrismaClient {
   const connectionString = process.env.DATABASE_URL;
@@ -20,7 +24,11 @@ function createClient(): PrismaClient {
   });
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient();
+const cachedClientIsCurrent =
+  globalForPrisma.prisma !== undefined
+  && globalForPrisma.prismaSchemaVersion === PRISMA_SCHEMA_VERSION;
+
+export const prisma = cachedClientIsCurrent ? globalForPrisma.prisma! : createClient();
 
 /**
  * Schema ที่ client ตัวนี้ทำงานอยู่
@@ -37,5 +45,9 @@ export function databaseSchema(): string {
 }
 
 if (process.env.NODE_ENV !== "production") {
+  if (!cachedClientIsCurrent && globalForPrisma.prisma) {
+    void globalForPrisma.prisma.$disconnect();
+  }
   globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaSchemaVersion = PRISMA_SCHEMA_VERSION;
 }

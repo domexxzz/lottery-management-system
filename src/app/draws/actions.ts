@@ -9,7 +9,6 @@ import { AppError } from "@/lib/errors";
 export type ActionState = { error: string | null; message: string | null };
 
 const CreateSchema = z.object({
-  name: z.string().trim().min(1, "กรุณากรอกชื่อรอบ").max(120),
   opensAt: z.string().min(1, "กรุณาระบุเวลาเปิดรับ"),
   cutoffAt: z.string().min(1, "กรุณาระบุเวลาปิดรับ"),
 });
@@ -21,7 +20,6 @@ export async function createDrawAction(
   const actor = await requireActor();
 
   const parsed = CreateSchema.safeParse({
-    name: formData.get("name"),
     opensAt: formData.get("opensAt"),
     cutoffAt: formData.get("cutoffAt"),
   });
@@ -39,7 +37,7 @@ export async function createDrawAction(
 
   revalidatePath("/draws");
   revalidatePath("/draws/all");
-  return { error: null, message: "สร้างรอบแล้ว" };
+  return { error: null, message: "สร้างงวดแล้ว" };
 }
 
 export async function lockDrawAction(
@@ -55,7 +53,7 @@ export async function lockDrawAction(
     revalidatePath("/draws/all");
     return {
       error: null,
-      message: `ปิดรอบ "${outcome.drawName}" แล้ว · ล็อกบิล ${outcome.billsLocked} ใบ · ยกเลิกร่างค้าง ${outcome.draftsCancelled} ใบ`,
+      message: `ปิดงวด "${outcome.drawName}" แล้ว · ล็อกบิล ${outcome.billsLocked} ใบ · ยกเลิกร่างค้าง ${outcome.draftsCancelled} ใบ`,
     };
   } catch (error) {
     if (error instanceof AppError) return { error: error.message, message: null };

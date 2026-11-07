@@ -4,7 +4,8 @@ import { writeAudit, type TxClient } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import { commissionOf, itemPayout, netOf, sumMoney, toMoney, ZERO } from "@/lib/money";
-import { isWinning } from "@/lib/results/matching";
+import { isWinningAny } from "@/lib/results/matching";
+import { storedResultValues } from "@/lib/results/values";
 
 /**
  * คำนวณผู้ถูกรางวัลและสรุปการเงินต่อ Agent (LOT-15, LOT-18, LOT-20)
@@ -25,12 +26,12 @@ async function approvedResults(tx: TxClient, drawId: string) {
   const rows = await tx.result.findMany({
     where: { drawId, status: "APPROVED" },
     orderBy: { version: "desc" },
-    select: { prizeTypeId: true, value: true, version: true },
+    select: { prizeTypeId: true, value: true, values: true, version: true },
   });
 
-  const byPrizeType = new Map<string, string>();
+  const byPrizeType = new Map<string, string[]>();
   for (const row of rows) {
-    if (!byPrizeType.has(row.prizeTypeId)) byPrizeType.set(row.prizeTypeId, row.value);
+    if (!byPrizeType.has(row.prizeTypeId)) byPrizeType.set(row.prizeTypeId, storedResultValues(row));
   }
   return byPrizeType;
 }
@@ -110,12 +111,12 @@ export async function previewSettlement(
       bucket.stakes.push(item.stake);
       bucket.totalItems += 1;
 
-      const resultValue = resultsByPrizeType.get(item.prizeTypeId);
-      if (resultValue === undefined) continue;
+      const resultValues = resultsByPrizeType.get(item.prizeTypeId);
+      if (resultValues === undefined) continue;
 
-      const won = isWinning({
+      const won = isWinningAny({
         number: item.number,
-        resultValue,
+        resultValues,
         matchRule: item.prizeType.matchRule,
       });
 
@@ -205,12 +206,12 @@ export async function calculateSettlement(
       const billPayouts: Prisma.Decimal[] = [];
 
       for (const item of bill.items) {
-        const resultValue = resultsByPrizeType.get(item.prizeTypeId);
+        const resultValues = resultsByPrizeType.get(item.prizeTypeId);
         const won =
-          resultValue !== undefined &&
-          isWinning({
+          resultValues !== undefined &&
+          isWinningAny({
             number: item.number,
-            resultValue,
+            resultValues,
             matchRule: item.prizeType.matchRule,
           });
         const payout = won ? itemPayout(item.stake, item.payoutRateSnapshot) : ZERO;

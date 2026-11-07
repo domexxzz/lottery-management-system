@@ -27,7 +27,7 @@ export function AgentReportControls({ draws, agentLabel }: { draws: DrawOption[]
 
   return <section className={`agent-report-controls ${pending ? "is-loading" : ""}`} aria-label="ตัวกรองรายงาน">
     <div className="agent-report-filter-grid">
-      <label>รอบ<AppDropdown value={searchParams.get("draw") ?? ""} onValueChange={(value) => update("draw", value)} options={[{ value: "", label: "ทุกรอบ" }, ...draws.map((draw) => ({ value: draw.id, label: draw.name }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหารอบ" /></label>
+      <label>งวด<AppDropdown value={searchParams.get("draw") ?? ""} onValueChange={(value) => update("draw", value)} options={[{ value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.name }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" /></label>
       <label>ตั้งแต่วันที่<input type="date" value={searchParams.get("dateFrom") ?? ""} onChange={(event) => update("dateFrom", event.target.value)} /></label>
       <label>ถึงวันที่<input type="date" value={searchParams.get("dateTo") ?? ""} onChange={(event) => update("dateTo", event.target.value)} /></label>
       <label>สถานะ Settlement<AppDropdown value={searchParams.get("settlement") ?? ""} onValueChange={(value) => update("settlement", value)} options={[{ value: "", label: "ทุกสถานะ" }, { value: "PENDING", label: "รอ Settlement" }, { value: "DRAFT", label: "คำนวณแล้ว" }, { value: "RECONCILED", label: "ตรวจสอบยอดแล้ว" }, { value: "APPROVED", label: "อนุมัติแล้ว" }]} /></label>

@@ -49,8 +49,8 @@ export function BillFilters({
       </label>
 
       <label htmlFor="draw">
-        รอบ
-        <AppDropdown id="draw" name="draw" value={drawId} onValueChange={(value) => update("draw", value)} options={[{ value: "", label: "ทุกรอบ" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหารอบ" />
+        งวด
+        <AppDropdown id="draw" name="draw" value={drawId} onValueChange={(value) => update("draw", value)} options={[{ value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" />
       </label>
 
       {agents !== null && (

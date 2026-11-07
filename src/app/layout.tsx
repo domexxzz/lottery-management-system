@@ -31,7 +31,7 @@ const sarabun = localFont({
 
 export const metadata: Metadata = {
   title: "ระบบบริหารจัดการลอตเตอรี่",
-  description: "Agent, บิล, ปิดรอบ, ลงผล และสรุปการเงินแยกตาม Agent",
+  description: "Agent, บิล, ปิดงวด, ลงผล และสรุปการเงินแยกตาม Agent",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

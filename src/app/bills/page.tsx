@@ -94,7 +94,7 @@ export default async function BillsPage({
                 <tr>
                   <th scope="col">เลขบิล</th>
                   <th scope="col">ชื่อบิล</th>
-                  <th scope="col">รอบ</th>
+                  <th scope="col">งวด</th>
                   <th scope="col">Agent</th>
                   <th scope="col" className="num">รายการ</th>
                   <th scope="col" className="num">ยอดขาย</th>
@@ -106,7 +106,7 @@ export default async function BillsPage({
                 {bills.map((bill) => (
                   <tr key={bill.id}>
                     <td>
-                      <Link href={`/bills/${bill.id}`}>{bill.billNumber ?? "(ร่าง)"}</Link>
+                      <Link href={`/bills/${bill.id}#bill-items`}>{bill.billNumber ?? "(ร่าง)"}</Link>
                     </td>
                     <td>{canViewCustomerProfile ? <Link className="customer-profile-link" href={`/customers/${customerProfileKey(bill.title)}`}>{bill.title}<small>ดูโปรไฟล์ลูกค้า →</small></Link> : bill.title}</td>
                     <td>{bill.draw.name}</td>

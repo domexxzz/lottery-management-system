@@ -3,6 +3,7 @@ import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateResultValue } from "./matching";
+import { resultValueCount, storedResultValues } from "./values";
 import {
   canCorrectInDrawStatus,
   correctionInvalidatesSettlement,
@@ -45,6 +46,7 @@ export async function listResults(actor: Actor, drawId: string) {
         id: true,
         prizeTypeId: true,
         value: true,
+        values: true,
         version: true,
         status: true,
         rejectReason: true,
@@ -76,7 +78,7 @@ export async function listResults(actor: Actor, drawId: string) {
   };
 }
 
-export type BatchResultInput = { prizeTypeId: string; value: string };
+export type BatchResultInput = { prizeTypeId: string; value?: string; values?: string[] };
 
 /** บันทึกผลหลายรางวัลใน transaction เดียว — ถ้าแถวใดผิดจะไม่บันทึกทุกแถว */
 export async function enterResultsBatch(
@@ -123,15 +125,24 @@ export async function enterResultsBatch(
     const type = prizeTypeById.get(result.prizeTypeId);
     if (!type) throw new NotFoundError("ไม่พบประเภทรางวัล");
     if (!type.isActive) throw new ConflictError(`รางวัล ${type.code} ถูกปิดใช้งานแล้ว`);
-    const value = result.value.trim();
-    const problem = validateResultValue({
-      value,
-      digits: type.digits,
-      resultDigits: type.resultDigits,
-      matchRule: type.matchRule,
-    });
-    if (problem) throw new ValidationError(`รางวัล ${type.code}: ${problem}`);
-    return { prizeTypeId: type.id, value };
+    const values = (result.values ?? [result.value ?? ""]).map((value) => value.trim()).filter(Boolean);
+    const requiredCount = resultValueCount(type.code);
+    if (values.length !== requiredCount) {
+      throw new ValidationError(`รางวัล ${type.code}: ต้องกรอกเลขที่ออก ${requiredCount} เลข`);
+    }
+    if (new Set(values).size !== values.length) {
+      throw new ValidationError(`รางวัล ${type.code}: เลขที่ออกต้องไม่ซ้ำกัน`);
+    }
+    for (const value of values) {
+      const problem = validateResultValue({
+        value,
+        digits: type.digits,
+        resultDigits: type.resultDigits,
+        matchRule: type.matchRule,
+      });
+      if (problem) throw new ValidationError(`รางวัล ${type.code}: ${problem}`);
+    }
+    return { prizeTypeId: type.id, value: values[0]!, values };
   });
 
   return prisma.$transaction(async (tx) => {
@@ -141,7 +152,7 @@ export async function enterResultsBatch(
       const previous = await tx.result.findFirst({
         where: { drawId: draw.id, prizeTypeId: result.prizeTypeId },
         orderBy: { version: "desc" },
-        select: { version: true, status: true, value: true },
+        select: { version: true, status: true, value: true, values: true },
       });
       // ตรวจทุก version ไม่ใช่เฉพาะตัวล่าสุด มิฉะนั้นคำขอแก้ผลที่ยังเป็น DRAFT
       // จะกลายเป็นช่องให้กรอกผลทับแบบอนุมัติทันที ข้ามด่านสองคนไปเลย
@@ -162,13 +173,14 @@ export async function enterResultsBatch(
           drawId: draw.id,
           prizeTypeId: result.prizeTypeId,
           value: result.value,
+          values: result.values,
           version: (previous?.version ?? 0) + 1,
           status: autoApproved ? "APPROVED" : "DRAFT",
           makerId: actor.userId,
           checkerId: autoApproved ? actor.userId : null,
           checkedAt: autoApproved ? now : null,
         },
-        select: { id: true, value: true, version: true },
+        select: { id: true, value: true, values: true, version: true },
       });
       await writeAudit(tx, {
         organizationId: actor.organizationId,
@@ -178,8 +190,8 @@ export async function enterResultsBatch(
         action: "CREATE",
         entityType: "Result",
         entityId: created.id,
-        before: previous ? { value: previous.value, version: previous.version } : undefined,
-        after: { value: created.value, version: created.version, status: autoApproved ? "APPROVED" : "DRAFT" },
+        before: previous ? { values: storedResultValues(previous), version: previous.version } : undefined,
+        after: { values: created.values, version: created.version, status: autoApproved ? "APPROVED" : "DRAFT" },
       });
       if (autoApproved) {
         await writeAudit(tx, {
@@ -191,7 +203,7 @@ export async function enterResultsBatch(
           entityType: "Result",
           entityId: created.id,
           before: { status: previous?.status ?? null, previousVersion: previous?.version ?? null },
-          after: { status: "APPROVED", value: created.value, version: created.version },
+          after: { status: "APPROVED", values: created.values, version: created.version },
           reason: "บันทึกและยืนยันผลในขั้นตอนเดียว",
         });
       }
@@ -210,7 +222,7 @@ export async function enterResult(
 ): Promise<{ autoApproved: boolean }> {
   const result = await enterResultsBatch(actor, {
     drawId: input.drawId,
-    results: [{ prizeTypeId: input.prizeTypeId, value: input.value }],
+    results: [{ prizeTypeId: input.prizeTypeId, values: [input.value] }],
   });
   return { autoApproved: result.autoApproved };
 }
@@ -226,7 +238,7 @@ export async function enterResult(
  */
 export async function proposeResultCorrection(
   actor: Actor,
-  input: { drawId: string; prizeTypeId: string; value: string; reason: string },
+  input: { drawId: string; prizeTypeId: string; value?: string; values?: string[]; reason: string },
 ): Promise<{ resultId: string; version: number }> {
   requirePermission(actor, "result.proposeCorrection");
 
@@ -250,14 +262,24 @@ export async function proposeResultCorrection(
     throw new ConflictError("รอบนี้ปิดบัญชีแล้ว แก้ผลรางวัลไม่ได้");
   }
 
-  const value = input.value.trim();
-  const problem = validateResultValue({
-    value,
-    digits: prizeType.digits,
-    resultDigits: prizeType.resultDigits,
-    matchRule: prizeType.matchRule,
-  });
-  if (problem) throw new ValidationError(`รางวัล ${prizeType.code}: ${problem}`);
+  const values = (input.values ?? [input.value ?? ""]).map((value) => value.trim()).filter(Boolean);
+  const requiredCount = resultValueCount(prizeType.code);
+  if (values.length !== requiredCount) {
+    throw new ValidationError(`รางวัล ${prizeType.code}: ต้องกรอกเลขที่ออก ${requiredCount} เลข`);
+  }
+  if (new Set(values).size !== values.length) {
+    throw new ValidationError(`รางวัล ${prizeType.code}: เลขที่ออกต้องไม่ซ้ำกัน`);
+  }
+  for (const value of values) {
+    const problem = validateResultValue({
+      value,
+      digits: prizeType.digits,
+      resultDigits: prizeType.resultDigits,
+      matchRule: prizeType.matchRule,
+    });
+    if (problem) throw new ValidationError(`รางวัล ${prizeType.code}: ${problem}`);
+  }
+  const value = values[0]!;
 
   return prisma.$transaction(async (tx) => {
     // ถามทีละคำถาม ไม่ใช้ Promise.all บน tx เดียวกัน
@@ -271,7 +293,7 @@ export async function proposeResultCorrection(
     const approved = await tx.result.findFirst({
       where: { drawId: draw.id, prizeTypeId: prizeType.id, status: "APPROVED" },
       orderBy: { version: "desc" },
-      select: { id: true, version: true, value: true },
+      select: { id: true, version: true, value: true, values: true },
     });
     const newest = await tx.result.findFirst({
       where: { drawId: draw.id, prizeTypeId: prizeType.id },
@@ -285,10 +307,11 @@ export async function proposeResultCorrection(
     if (!approved || !newest) {
       throw new ConflictError("รางวัลนี้ยังไม่มีผลที่อนุมัติแล้ว ใช้การลงผลตามปกติแทน");
     }
-    if (approved.value === value) {
+    const approvedValues = storedResultValues(approved);
+    if (approvedValues.length === values.length && approvedValues.every((item, index) => item === values[index])) {
       throw new ValidationError("ค่าที่เสนอตรงกับผลเดิม ไม่มีอะไรต้องแก้");
     }
-    const previous = { version: newest.version, value: approved.value };
+    const previous = { version: newest.version, values: approvedValues };
 
     const created = await tx.result.create({
       data: {
@@ -296,6 +319,7 @@ export async function proposeResultCorrection(
         drawId: draw.id,
         prizeTypeId: prizeType.id,
         value,
+        values,
         version: previous.version + 1,
         // DRAFT เสมอ แม้ผู้เสนอจะเป็น Owner — การแก้ผลไม่มีทางลัดขั้นตอนเดียว
         status: "DRAFT",
@@ -312,8 +336,8 @@ export async function proposeResultCorrection(
       action: "CREATE",
       entityType: "Result",
       entityId: created.id,
-      before: { value: previous.value, version: previous.version, status: "APPROVED" },
-      after: { value, version: created.version, status: "DRAFT" },
+      before: { values: previous.values, version: previous.version, status: "APPROVED" },
+      after: { values, version: created.version, status: "DRAFT" },
       reason: `เสนอแก้ผลที่ประกาศแล้ว: ${reason}`,
     });
 
@@ -332,6 +356,7 @@ export async function approveResult(actor: Actor, resultId: string): Promise<voi
         status: true,
         makerId: true,
         value: true,
+        values: true,
         version: true,
         drawId: true,
         prizeTypeId: true,
@@ -355,7 +380,7 @@ export async function approveResult(actor: Actor, resultId: string): Promise<voi
               version: { lt: result.version },
             },
             orderBy: { version: "desc" },
-            select: { id: true, value: true, version: true },
+            select: { id: true, value: true, values: true, version: true },
           })
         : null;
 
@@ -421,9 +446,9 @@ export async function approveResult(actor: Actor, resultId: string): Promise<voi
       entityType: "Result",
       entityId: result.id,
       before: superseded
-        ? { status: "DRAFT", supersedes: { value: superseded.value, version: superseded.version } }
+        ? { status: "DRAFT", supersedes: { values: storedResultValues(superseded), version: superseded.version } }
         : { status: "DRAFT" },
-      after: { status: "APPROVED", value: result.value, version: result.version },
+      after: { status: "APPROVED", values: storedResultValues(result), version: result.version },
       reason: superseded ? "อนุมัติการแก้ผลที่ประกาศแล้ว" : undefined,
     });
   });

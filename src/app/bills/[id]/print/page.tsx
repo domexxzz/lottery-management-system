@@ -53,7 +53,7 @@ export default async function PrintBillPage({
           <dd>{bill.title}</dd>
         </div>
         <div>
-          <dt>รอบ</dt>
+          <dt>งวด</dt>
           <dd>{bill.draw.name}</dd>
         </div>
         <div>

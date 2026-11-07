@@ -5,7 +5,7 @@ import { AppError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-/** ดาวน์โหลดไฟล์กระทบยอดของรอบ (LOT-22) */
+/** ดาวน์โหลดไฟล์กระทบยอดของงวด (LOT-22) */
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const actor = await getActor();
   if (!actor) return NextResponse.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });

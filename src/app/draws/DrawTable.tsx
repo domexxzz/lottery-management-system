@@ -47,7 +47,7 @@ export function DrawTable({
   return <div className="table-wrap"><table className="draw-list-table">
     <thead>
       <tr>
-        <th scope="col">ชื่อรอบ</th>
+        <th scope="col">ชื่องวด</th>
         <th scope="col">เปิดรับ</th>
         <th scope="col">ปิดรับ</th>
         <th scope="col">บิล</th>
@@ -58,7 +58,7 @@ export function DrawTable({
       </tr>
     </thead>
     <tbody>
-      {draws.length === 0 && <tr><td colSpan={columnCount} className="draw-empty-row">ยังไม่มีรอบในระบบ</td></tr>}
+      {draws.length === 0 && <tr><td colSpan={columnCount} className="draw-empty-row">ยังไม่มีงวดในระบบ</td></tr>}
       {draws.map((draw) => {
         const displayStatus = getDrawDisplayStatus(draw);
         return <tr key={draw.id} className={displayStatus === "RECONCILED" ? "draw-row-reconciled" : undefined}>
@@ -74,16 +74,16 @@ export function DrawTable({
             {draw.lockedAt !== null && <span className="muted"> · {BANGKOK.format(draw.lockedAt)}</span>}
           </td>
           {canEnterResults && <td className="draw-result-cell">
-            {draw.status === "OPEN" ? <span className="draw-result-locked" title="ต้องปิดรอบก่อนจึงจะกรอกผลรางวัลได้">
-              <DashboardIcon name="lock" /> ปิดรอบก่อน
-            </span> : <Link href={`/draws/${draw.id}#result-entry-list`} className="draw-result-button" aria-label={`กรอกผลรางวัลรอบ ${draw.name}`}>
+            {draw.status === "OPEN" ? <span className="draw-result-locked" title="ต้องปิดงวดก่อนจึงจะกรอกผลรางวัลได้">
+              <DashboardIcon name="lock" /> ปิดงวดก่อน
+            </span> : <Link href={`/draws/${draw.id}#result-entry-list`} className="draw-result-button" aria-label={`กรอกผลรางวัลงวด ${draw.name}`}>
               <DashboardIcon name="edit" />
               {draw.status === "LOCKED" || draw.status === "RESULT_PENDING" ? "กรอกผลรางวัล" : "ดูผลรางวัล"}
             </Link>}
           </td>}
           {canReviewResults && <td className="draw-review-cell">
-            {draw.status === "OPEN" ? <button type="button" className="draw-review-waiting" title="ต้องปิดรอบก่อนจึงจะตรวจผลรางวัลได้" disabled>
-              <DashboardIcon name="lock" /> ปิดรอบก่อน
+            {draw.status === "OPEN" ? <button type="button" className="draw-review-waiting" title="ต้องปิดงวดก่อนจึงจะตรวจผลรางวัลได้" disabled>
+              <DashboardIcon name="lock" /> ปิดงวดก่อน
             </button> : draw.status === "LOCKED" ? <button type="button" className="draw-review-waiting" title="ยังไม่มีผลรางวัลส่งให้ตรวจ" disabled>
               <span aria-hidden="true">…</span> รอกรอกผล
             </button> : <DrawReviewButton href={`/draws/${draw.id}#result-entry-list`} drawName={draw.name} label={draw.status === "RESULT_PENDING" ? "ตรวจผลรางวัล" : "ดูผลรางวัล"} />}

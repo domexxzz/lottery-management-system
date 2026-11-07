@@ -30,7 +30,7 @@ export function OwnerBusinessCharts({ draws, agents, volume }: { draws: FinanceR
     </div>
 
     <div id="owner-chart" role="tabpanel" aria-labelledby={`owner-chart-${view}`} tabIndex={0}>
-    {view === "finance" && <><div className="owner-view-title"><strong>เงินเข้า–ออก แยกตามรอบ</strong><span>ตัวเลขจาก Settlement ที่คำนวณแล้ว</span></div>
+    {view === "finance" && <><div className="owner-view-title"><strong>เงินเข้า–ออก แยกตามงวด</strong><span>ตัวเลขจาก Settlement ที่คำนวณแล้ว</span></div>
       {draws.length > 0 && <div className="owner-finance-summary">
         <FinanceSummary label="ยอดขายรวม" icon="bill" value={total.gross} />
         <FinanceSummary label="จ่ายรางวัล" icon="winner" value={total.payout} />

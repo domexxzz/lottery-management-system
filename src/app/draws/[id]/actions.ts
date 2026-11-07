@@ -55,9 +55,15 @@ export async function enterResultsBatchAction(
 ): Promise<ActionState> {
   const actor = await requireActor();
   const drawId = String(formData.get("drawId") ?? "");
-  const results = [...formData.entries()]
-    .filter(([key, value]) => key.startsWith("result:") && String(value).trim() !== "")
-    .map(([key, value]) => ({ prizeTypeId: key.slice("result:".length), value: String(value) }));
+  const grouped = new Map<string, string[]>();
+  for (const [key, rawValue] of formData.entries()) {
+    if (!key.startsWith("result:")) continue;
+    const value = String(rawValue).trim();
+    if (value === "") continue;
+    const prizeTypeId = key.slice("result:".length);
+    grouped.set(prizeTypeId, [...(grouped.get(prizeTypeId) ?? []), value]);
+  }
+  const results = [...grouped].map(([prizeTypeId, values]) => ({ prizeTypeId, values }));
 
   let count = 0;
   try {
@@ -120,7 +126,7 @@ export async function proposeResultCorrectionAction(
     await proposeResultCorrection(actor, {
       drawId,
       prizeTypeId: String(formData.get("prizeTypeId") ?? ""),
-      value: String(formData.get("value") ?? ""),
+      values: formData.getAll("value").map(String),
       reason: String(formData.get("reason") ?? ""),
     });
   } catch (error) {
@@ -179,5 +185,5 @@ export async function approveSettlementAction(
   }
 
   revalidatePath(`/draws/${drawId}`);
-  return { error: null, message: "ปิดบัญชีรอบแล้ว" };
+  return { error: null, message: "ปิดบัญชีงวดแล้ว" };
 }

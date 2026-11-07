@@ -50,6 +50,14 @@ export function isWinning(input: MatchInput): boolean {
   }
 }
 
+export function isWinningAny(input: Omit<MatchInput, "resultValue"> & { resultValues: string[] }): boolean {
+  return input.resultValues.some((resultValue) => isWinning({
+    number: input.number,
+    matchRule: input.matchRule,
+    resultValue,
+  }));
+}
+
 /** รูปร่างของรางวัลหนึ่งประเภทเท่าที่กฎการตัดสินต้องรู้ */
 export type PrizeShape = {
   /** จำนวนหลักของเลขที่ผู้ซื้อแทง */

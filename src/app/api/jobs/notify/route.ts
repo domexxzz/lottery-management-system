@@ -17,7 +17,7 @@ function tokenMatches(provided: string, expected: string): boolean {
  * Endpoint สำหรับ scheduler เรียกส่งแจ้งเตือนหลักฐานที่รอตรวจ
  *
  * ใช้ token แยกจาก cutoff job เพราะเป็นคนละอำนาจ
- * ผู้ที่ตั้ง scheduler แจ้งเตือนไม่ควรปิดรอบรับบิลได้ไปด้วย
+ * ผู้ที่ตั้ง scheduler แจ้งเตือนไม่ควรปิดงวดรับบิลได้ไปด้วย
  *
  * งานเป็น idempotent: รายการที่แจ้งไปแล้วมีแถว Audit กำกับ จะไม่ถูกหยิบซ้ำ
  * เรียกถี่แค่ไหนก็ไม่ทำให้ข้อความซ้ำ

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  MANUAL_PRIZE_CODES,
   bangkokDate,
   buildGloPrizeSuggestions,
   parseGloDrawResult,
@@ -34,40 +33,28 @@ describe("GLO result adapter", () => {
 
   it("maps the first prize and last-two result to every derivable Rulebook code", () => {
     const suggestions = buildGloPrizeSuggestions(parseGloDrawResult(payload, "2024-03-01"));
-    expect(suggestions[1]?.value).toBe("603");
-    expect(suggestions[5]?.value).toBe("03");
-    expect(suggestions[6]?.value).toBe("09");
-    expect(suggestions[12]?.value).toBe("3603");
-    expect(suggestions[14]?.value).toBe("53603");
-    expect(suggestions[15]?.value).toBe("053603");
+    expect(suggestions[1]?.values).toEqual(["603"]);
+    expect(suggestions[3]?.values).toEqual(["975", "900"]);
+    expect(suggestions[4]?.values).toEqual(["382", "703"]);
+    expect(suggestions[5]?.values).toEqual(["03"]);
+    expect(suggestions[6]?.values).toEqual(["09"]);
+    expect(suggestions[12]?.values).toEqual(["3603"]);
+    expect(suggestions[14]?.values).toEqual(["53603"]);
+    expect(suggestions[15]?.values).toEqual(["053603"]);
     expect(Object.keys(suggestions).map(Number).sort((a, b) => a - b)).toEqual([
-      1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
     ]);
   });
 
-  /*
-   * เลขหน้า/เลขท้าย 3 ตัว GLO จับแยกจากรางวัลที่ 1 และจับรางวัลละ 2 เลข
-   * ถ้าเดาจากรางวัลที่ 1 จะได้ 053 กับ 603 ซึ่งไม่ใช่ผลจริง (975/900 กับ 382/703)
-   * และรางวัลที่ 4 จะซ้ำกับรางวัลที่ 1 พอดี อัตราจ่าย 450 เท่าจึงจ่ายผิดคนทั้งสองทาง
-   * จึงต้องไม่เสนอ ปล่อยให้คนกรอกเองจากเลขทางการที่หน้าจอแสดงไว้
-   */
-  it("never suggests the separately drawn front-three and back-three prizes", () => {
+  it("uses both separately drawn front-three and back-three numbers", () => {
     const official = parseGloDrawResult(payload, "2024-03-01");
     const suggestions = buildGloPrizeSuggestions(official);
-
-    for (const code of MANUAL_PRIZE_CODES) {
-      expect(suggestions[code]).toBeUndefined();
-    }
-
-    // กันการกลับไปเดาจากรางวัลที่ 1: ค่าที่เคยเสนอต้องไม่โผล่มาในรูปอื่น
-    const values = Object.values(suggestions).map((item) => item.value);
-    expect(values).not.toContain("053");
-    expect(official.front3).not.toContain("053");
-    expect(official.back3).not.toContain("603");
+    expect(suggestions[3]).toEqual({ values: ["975", "900"], source: "เลขหน้า 3 ตัวทางการทั้ง 2 เลข" });
+    expect(suggestions[4]).toEqual({ values: ["382", "703"], source: "เลขท้าย 3 ตัวทางการทั้ง 2 เลข" });
   });
 
   it("rejects a response for a different draw date", () => {
-    expect(() => parseGloDrawResult(payload, "2024-03-16")).toThrow(/ไม่ตรงกับวันที่รอบ/);
+    expect(() => parseGloDrawResult(payload, "2024-03-16")).toThrow(/ไม่ตรงกับวันที่งวด/);
   });
 
   it("derives the calendar date in Bangkok", () => {
