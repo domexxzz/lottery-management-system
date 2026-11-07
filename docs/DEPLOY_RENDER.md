@@ -175,6 +175,36 @@ image นั้นจึงรัน `prisma migrate deploy` ไม่ได้ 
 
 ---
 
+## ทำไม build ด้วย webpack ไม่ใช่ Turbopack
+
+`package.json` สั่ง `next build --webpack` เพราะ Turbopack กินหน่วยความจำเกิน
+ที่เครื่อง build ของ Render ให้มา
+
+อาการเวลามันพังอ่านแล้วเดาไม่ถูกเลย — build ล้มที่ขั้น prerender หน้า
+`/_global-error` ด้วย `TypeError: Cannot read properties of null (reading 'useContext')`
+พร้อม warning เรื่อง `key` prop รัว ๆ บน element ภายในของ Next เอง
+ไม่มีคำว่า memory หรือ OOM โผล่มาสักคำ สิ่งที่เกิดจริงคือ OOM killer
+ฆ่า worker ทิ้งกลางคัน React เลยเหลือ state ที่ใช้ต่อไม่ได้
+
+วัดจริงด้วยการ build ในคอนเทนเนอร์ที่จำกัดหน่วยความจำ
+
+| RAM | Turbopack | webpack |
+|---|---|---|
+| 512MB | SIGKILL | SIGKILL |
+| 768MB | — | ผ่าน |
+| 1GB | SIGKILL | ผ่าน |
+| 2GB | ผ่าน | — |
+
+ลด `experimental.cpus` จาก 4 เหลือ 1 **ไม่ช่วย** และตั้ง `--max-old-space-size`
+ก็ไม่ช่วย เพราะ Turbopack เขียนด้วย Rust ใช้หน่วยความจำฝั่ง native
+ซึ่งไม่ได้อยู่ใน heap ของ V8
+
+ตั้งไว้ที่ `package.json` ไม่ใช่เฉพาะใน `render.yaml` เพื่อให้ `npm run verify`
+ในเครื่อง build ด้วยวิธีเดียวกับที่ Render ทำ ไม่งั้นจะเจอปัญหา
+"ในเครื่องผ่าน บนเซิร์ฟเวอร์ล้ม" ซึ่งหาสาเหตุยากกว่ากันมาก
+
+---
+
 ## ทำไมไม่ใช้ `next start`
 
 `next.config.ts` ตั้ง `output: "standalone"` ไว้ และ Next 16 เตือนตรง ๆ เมื่อเรียก `next start` ว่า
