@@ -240,10 +240,11 @@ describe("ส่งทีละรายการเพราะปุ่มต�
 });
 
 describe("รูปและปุ่ม", () => {
-  test("ส่งรูปพร้อมปุ่มยืนยันและตีกลับ", async () => {
+  test("หลักฐานการสั่งซื้อส่งเป็นรูปพร้อมปุ่มยืนยันและตีกลับ", async () => {
     const { attachmentId } = await confirmedBillWithAttachment({
       customerReference: "ลูกค้า-ก",
       stake: "100",
+      type: "ORDER_EVIDENCE",
     });
     const spy = stubTelegram({ ok: true });
     await run();
@@ -262,9 +263,10 @@ describe("รูปและปุ่ม", () => {
   });
 
   test("อ่านรูปไม่ได้ ยังแจ้งเตือนต่อพร้อมปุ่มเหมือนเดิม", async () => {
-    const { attachmentId } = await confirmedBillWithAttachment({
+    await confirmedBillWithAttachment({
       customerReference: "ลูกค้า-ก",
       stake: "100",
+      type: "ORDER_EVIDENCE",
     });
     const spy = stubTelegram({ ok: true });
 
@@ -273,9 +275,67 @@ describe("รูปและปุ่ม", () => {
     expect(outcome).toMatchObject({ notified: 1 });
     const calls = spy.mock.calls as unknown as [string, RequestInit][];
     expect(calls[0]![0]).toContain("/sendMessage");
-    expect(sentText(spy)).toContain("อ่านไฟล์แนบไม่ได้");
+    expect(sentText(spy)).toContain("อ่านไฟล์รูปไม่ได้");
     expect(buttonsOf(spy)).toContain("ev:bv:");
-    expect(attachmentId.length).toBeGreaterThan(0);
+  });
+});
+
+/*
+ * สลิปมีเลขบัญชีและเลขอ้างอิงการโอนอยู่บนหน้าภาพ
+ * จึงไม่ส่งออกไปอยู่ในแชทที่คุมสิทธิ์ไม่ได้เท่าระบบ
+ * แต่ปุ่มยังทำงานกับทั้งบิล คำบรรยายจึงต้องบอกเสมอว่ามีอะไรที่ไม่ได้แสดง
+ */
+describe("ส่งเฉพาะรูปหลักฐาน ไม่ส่งสลิป", () => {
+  test("บิลมีทั้งหลักฐานและสลิป ส่งรูปเดียวคือหลักฐาน", async () => {
+    await attachmentsOnOneBill(["ORDER_EVIDENCE", "PAYMENT_EVIDENCE"]);
+    const spy = stubTelegram({ ok: true });
+
+    const outcome = await run();
+
+    // สองไฟล์ยังถูกนับว่าแจ้งแล้วทั้งคู่ เพราะปุ่มครอบทั้งบิล
+    expect(outcome).toMatchObject({ pending: 2, notified: 2 });
+
+    const calls = spy.mock.calls as unknown as [string, RequestInit][];
+    // ข้อความเดียว ไม่ใช่อัลบั้มและไม่ใช่สองข้อความอีกต่อไป
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![0]).toContain("/sendPhoto");
+    expect(calls[0]![0]).not.toContain("/sendMediaGroup");
+
+    const text = sentText(spy);
+    expect(text).toContain("หลักฐานการสั่งซื้อ รอตรวจ");
+    // ต้องบอกตรง ๆ ว่ากดยืนยันแล้วครอบอะไรบ้าง
+    expect(text).toContain("อีก 1 ไฟล์ไม่ได้ส่งมาในแชท");
+    expect(text).toContain("สลิปการชำระเงิน");
+    expect(text).toContain("กดยืนยันคือยืนยันทั้งบิล");
+  });
+
+  test("บิลมีแต่สลิป ยังแจ้งอยู่ แต่เป็นข้อความไม่มีรูป", async () => {
+    await attachmentsOnOneBill(["PAYMENT_EVIDENCE"]);
+    const spy = stubTelegram({ ok: true });
+
+    const outcome = await run();
+
+    // ไม่ส่งรูป ไม่ได้แปลว่าเงียบ ไม่งั้นสลิปค้างรอตรวจโดยไม่มีใครรู้
+    expect(outcome).toMatchObject({ pending: 1, notified: 1 });
+    const calls = spy.mock.calls as unknown as [string, RequestInit][];
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![0]).toContain("/sendMessage");
+    expect(calls[0]![1].body).not.toBeInstanceOf(FormData);
+    expect(sentText(spy)).toContain("ไม่ได้ส่งรูปมาในแชท (1 ไฟล์");
+    expect(buttonsOf(spy)).toContain("ev:bv:");
+  });
+
+  test("สลิปสองใบในบิลเดียว ไม่มีรูปหลุดออกไปสักใบ", async () => {
+    await attachmentsOnOneBill(["PAYMENT_EVIDENCE", "PAYMENT_EVIDENCE"]);
+    const spy = stubTelegram({ ok: true });
+
+    await run();
+
+    const calls = spy.mock.calls as unknown as [string, RequestInit][];
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![0]).toContain("/sendMessage");
+    expect(sentText(spy)).toContain("ไม่ได้ส่งรูปมาในแชท (2 ไฟล์");
+    expect(sentText(spy)).toContain("สลิปการชำระเงิน");
   });
 });
 
@@ -388,9 +448,27 @@ async function attachmentsOnOneBill(types: AttachmentType[]) {
   return { billId, ids };
 }
 
-describe("หลักฐานของบิลเดียวกันส่งพร้อมกัน", () => {
-  test("สองไฟล์ในบิลเดียว ส่งเป็นอัลบั้มแล้วตามด้วยข้อความที่มีปุ่มของทั้งสอง", async () => {
-    const { billId, ids } = await attachmentsOnOneBill(["ORDER_EVIDENCE", "PAYMENT_EVIDENCE"]);
+describe("จัดกลุ่มตามบิล", () => {
+  test("หลักฐานใบเดียวส่งเป็นรูปพร้อมปุ่ม", async () => {
+    await attachmentsOnOneBill(["ORDER_EVIDENCE"]);
+    const spy = stubTelegram({ ok: true });
+
+    await run();
+
+    const calls = spy.mock.calls as unknown as [string, RequestInit][];
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![0]).toContain("/sendPhoto");
+    // ไฟล์เดียวไม่ต้องมีคำว่าทั้งหมดบนปุ่ม
+    expect(buttonsOf(spy)).not.toContain("ทั้งหมด");
+  });
+
+  test("บิลคนละใบยังแยกข้อความกัน ไม่ปนเป็นข้อความเดียว", async () => {
+    await attachmentsOnOneBill(["ORDER_EVIDENCE"]);
+    await confirmedBillWithAttachment({
+      customerReference: "อีกบิล",
+      stake: "50",
+      type: "ORDER_EVIDENCE",
+    });
     const spy = stubTelegram({ ok: true });
 
     const outcome = await run();
@@ -398,18 +476,16 @@ describe("หลักฐานของบิลเดียวกันส่�
     expect(outcome).toMatchObject({ pending: 2, notified: 2 });
     const calls = spy.mock.calls as unknown as [string, RequestInit][];
     expect(calls).toHaveLength(2);
-    expect(calls[0]![0]).toContain("/sendMediaGroup");
-    expect(calls[1]![0]).toContain("/sendMessage");
+    expect(calls[0]![0]).toContain("/sendPhoto");
+    expect(calls[1]![0]).toContain("/sendPhoto");
+  });
 
-    // อัลบั้มต้องมีสองรูป และคำบรรยายอยู่ที่รูปแรกเท่านั้น
-    const media = JSON.parse(String((calls[0]![1].body as FormData).get("media"))) as {
-      caption?: string;
-    }[];
-    expect(media).toHaveLength(2);
-    expect(media[0]!.caption).toContain("2 ไฟล์");
-    expect(media[1]!.caption).toBeUndefined();
+  test("ปุ่มของบิลที่มีหลายไฟล์บอกว่าครอบทั้งหมด", async () => {
+    const { billId } = await attachmentsOnOneBill(["ORDER_EVIDENCE", "PAYMENT_EVIDENCE"]);
+    const spy = stubTelegram({ ok: true });
 
-    // ปุ่มชุดเดียวที่ทำงานกับทั้งบิล ไม่ใช่ปุ่มรายไฟล์
+    await run();
+
     const markup = JSON.parse(buttonsOf(spy)) as {
       inline_keyboard: { text: string; callback_data: string }[][];
     };
@@ -419,55 +495,15 @@ describe("หลักฐานของบิลเดียวกันส่�
     expect(JSON.stringify(markup)).toContain(`ev:br:${billId}`);
     expect(JSON.stringify(markup)).toContain("ยืนยันทั้งหมด");
     expect(JSON.stringify(markup)).toContain("ตีกลับทั้งหมด");
-    // ไม่มีปุ่มรายไฟล์หลงเหลือ
-    expect(JSON.stringify(markup)).not.toContain(`ev:v:${ids[0]}`);
   });
 
-  test("ไฟล์เดียวยังส่งเป็นรูปเดี่ยวพร้อมปุ่มเหมือนเดิม", async () => {
-    await attachmentsOnOneBill(["PAYMENT_EVIDENCE"]);
-    const spy = stubTelegram({ ok: true });
-
-    await run();
-
-    const calls = spy.mock.calls as unknown as [string, RequestInit][];
-    expect(calls).toHaveLength(1);
-    expect(calls[0]![0]).toContain("/sendPhoto");
-  });
-
-  test("บิลคนละใบยังแยกกลุ่มกัน ไม่ปนเป็นอัลบั้มเดียว", async () => {
-    await attachmentsOnOneBill(["PAYMENT_EVIDENCE"]);
-    await confirmedBillWithAttachment({ customerReference: "อีกบิล", stake: "50" });
-    const spy = stubTelegram({ ok: true });
-
-    const outcome = await run();
-
-    expect(outcome).toMatchObject({ pending: 2, notified: 2 });
-    const calls = spy.mock.calls as unknown as [string, RequestInit][];
-    // สองบิล = สองข้อความ ไม่ใช่อัลบั้มรวม
-    expect(calls).toHaveLength(2);
-    expect(calls[0]![0]).toContain("/sendPhoto");
-    expect(calls[1]![0]).toContain("/sendPhoto");
-  });
-
-  test("อัลบั้มส่งผ่านแต่ข้อความปุ่มล้ม ไม่บันทึกว่าแจ้งแล้ว", async () => {
+  test("ส่งล้ม ทั้งบิลไม่ถูกบันทึกว่าแจ้งแล้ว", async () => {
     await attachmentsOnOneBill(["ORDER_EVIDENCE", "PAYMENT_EVIDENCE"]);
-
-    let call = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        call += 1;
-        const ok = call === 1;
-        return new Response(
-          JSON.stringify(ok ? { ok: true } : { ok: false, description: "boom" }),
-          { status: ok ? 200 : 500, headers: { "Content-Type": "application/json" } },
-        );
-      }),
-    );
+    stubTelegram({ ok: false });
 
     const outcome = await run();
 
-    // ปุ่มไม่ถึงผู้ใช้ = ตรวจไม่ได้ จึงต้องถือว่ายังไม่ได้แจ้ง
+    // ปุ่มไม่ถึงผู้ใช้ = ตรวจไม่ได้ จึงต้องถือว่ายังไม่ได้แจ้งทั้งสองไฟล์
     expect(outcome.notified).toBe(0);
     expect(await notificationCount()).toBe(0);
   });

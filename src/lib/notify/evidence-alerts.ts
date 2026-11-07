@@ -6,7 +6,7 @@ import { getStorageProvider } from "@/lib/storage/provider";
 import type { PrivateObjectStorage } from "@/lib/storage/types";
 import { channelThreadId } from "./channels";
 import { buildBillCallbackData } from "./telegram-actions";
-import { sendTelegramMediaGroup, sendTelegramMessage, sendTelegramPhoto } from "./telegram";
+import { sendTelegramMessage, sendTelegramPhoto } from "./telegram";
 
 /**
  * แจ้งเตือนเมื่อมีหลักฐานหรือสลิปส่งเข้ามารอตรวจ
@@ -21,9 +21,15 @@ import { sendTelegramMediaGroup, sendTelegramMessage, sendTelegramPhoto } from "
  * กันส่งซ้ำด้วย AuditEvent ไม่ใช่คอลัมน์ใหม่หรือตัวแปรในหน่วยความจำ
  * เพราะต้องทนการรีสตาร์ต ใช้ได้กับหลาย instance และได้ร่องรอยตรวจสอบไปในตัว
  *
- * ข้อมูลที่ออกไปยังช่องทางภายนอกถูกจำกัดไว้เท่าที่จำเป็นต่อการตัดสินใจว่า
- * "ต้องเข้าไปตรวจหรือยัง" — ไม่ส่งรูปหลักฐาน ไม่ส่งรหัสอ้างอิงลูกค้า
- * และไม่ส่งเลขอ้างอิงการโอน คนอ่านกดลิงก์เข้ามาดูในระบบที่มีสิทธิ์คุมอยู่แล้ว
+ * ข้อมูลที่ออกไปยังช่องทางภายนอกถูกจำกัดไว้เท่าที่จำเป็นต่อการตัดสินใจ
+ * ไม่ส่งรหัสอ้างอิงลูกค้าและไม่ส่งเลขอ้างอิงการโอน
+ * คนอ่านกดลิงก์เข้ามาดูรายละเอียดในระบบที่มีสิทธิ์คุมอยู่แล้ว
+ *
+ * รูปที่ส่งเข้าแชทมีได้ใบเดียวคือหลักฐานการสั่งซื้อ สลิปการชำระเงินไม่ถูกส่ง
+ * เพราะสลิปมีเลขบัญชีและเลขอ้างอิงการโอนอยู่บนหน้าภาพ ซึ่งไม่ควรออกไปอยู่ใน
+ * แชทที่ควบคุมสิทธิ์ไม่ได้เท่าระบบ ส่วนปุ่มยังทำงานกับทั้งบิลเหมือนเดิม
+ * คำบรรยายจึงต้องบอกจำนวนไฟล์ที่ไม่ได้แสดงเสมอ ไม่งั้นคนกดยืนยันโดยไม่รู้ว่า
+ * ยืนยันอะไรไปบ้าง
  */
 
 const ENTITY_TYPE = "BillAttachment";
@@ -118,18 +124,50 @@ async function pendingAttachments(limit: number): Promise<PendingRow[]> {
   return rows.filter((row) => !notified.has(row.id)).slice(0, limit) as PendingRow[];
 }
 
+/**
+ * รูปที่ส่งเข้าแชท — หลักฐานการสั่งซื้อใบแรกของบิลเท่านั้น
+ *
+ * rows เรียงเก่าไปใหม่อยู่แล้ว find จึงได้ใบที่ส่งเข้ามาก่อน
+ * คืน undefined เมื่อบิลนั้นมีแต่สลิป ซึ่งยังต้องแจ้ง ไม่ใช่เงียบ
+ * ไม่งั้นสลิปจะค้างรอตรวจโดยไม่มีใครรู้
+ */
+function photoRowOf(rows: PendingRow[]): PendingRow | undefined {
+  return rows.find((row) => row.type === "ORDER_EVIDENCE");
+}
+
 /** คำบรรยายของกลุ่มหลักฐานที่เป็นของบิลเดียวกัน */
-function buildCaption(rows: PendingRow[]): string {
+function buildCaption(
+  rows: PendingRow[],
+  shown: PendingRow | undefined,
+  photoReadable: boolean,
+): string {
   const first = rows[0]!;
   const stake = Number(first.bill.totalStake ?? 0).toFixed(2);
-  const kinds = rows.map((row) => TYPE_LABEL[row.type]).join(" + ");
-  return [
-    rows.length === 1 ? `${kinds} รอตรวจ` : `${kinds} รอตรวจ (${rows.length} ไฟล์)`,
+  const hidden = rows.filter((row) => row !== shown);
+
+  const lines = [
+    `${TYPE_LABEL[(shown ?? first).type]} รอตรวจ`,
     `บิล ${first.bill.billNumber ?? "(ยังไม่ออกเลข)"} · รอบ ${first.bill.draw.name}`,
     `Agent ${first.bill.agent.code} · ยอด ${stake} บาท`,
     `ส่งเมื่อ ${formatTime(first.createdAt, first.organization.timezone)}`,
-    appUrl(`/bills/${first.bill.id}`),
-  ].join("\n");
+  ];
+
+  if (shown && !photoReadable) lines.push("(อ่านไฟล์รูปไม่ได้ ดูในระบบแทน)");
+
+  // ปุ่มทำงานกับทั้งบิล คนกดจึงต้องรู้ว่ามีอะไรที่ไม่ได้เห็นบ้าง
+  if (hidden.length > 0) {
+    const kinds = [...new Set(hidden.map((row) => TYPE_LABEL[row.type]))].join(" · ");
+    // "อีก" ใช้ได้เฉพาะเมื่อมีรูปแสดงอยู่แล้ว ไม่งั้นอ่านแล้วงงว่าอีกจากอะไร
+    lines.push(
+      shown
+        ? `อีก ${hidden.length} ไฟล์ไม่ได้ส่งมาในแชท: ${kinds}`
+        : `ไม่ได้ส่งรูปมาในแชท (${hidden.length} ไฟล์: ${kinds})`,
+    );
+    lines.push("กดยืนยันคือยืนยันทั้งบิล รวมไฟล์ที่ไม่ได้แสดง");
+  }
+
+  lines.push(appUrl(`/bills/${first.bill.id}`));
+  return lines.join("\n");
 }
 
 /**
@@ -188,44 +226,30 @@ export async function runEvidenceAlerts(
   let lastFailure: { reason: string; detail: string } | undefined;
 
   for (const group of groupByBill(rows)) {
-    const caption = buildCaption(group);
+    const shown = photoRowOf(group);
     const buttonRows = buildButtonRows(group);
 
     // รูปที่อ่านไม่ได้ไม่ใช่เหตุให้ไม่แจ้ง ยังส่งข้อความพร้อมปุ่มไปก่อนได้
-    const photos: { buffer: Buffer; fileName: string }[] = [];
-    for (const row of group) {
+    let photo: { buffer: Buffer; fileName: string } | undefined;
+    if (shown) {
       try {
-        photos.push({ buffer: await storage.download(row.storageKey), fileName: row.originalName });
+        photo = { buffer: await storage.download(shown.storageKey), fileName: shown.originalName };
       } catch {
-        logger.warn("evidence image unreadable", { entityId: row.id });
+        logger.warn("evidence image unreadable", { entityId: shown.id });
       }
     }
 
-    let result;
-    if (photos.length > 1) {
-      result = await sendTelegramMediaGroup({ photos, caption, threadId });
-      // อัลบั้มแนบปุ่มไม่ได้ ปุ่มจึงมาในข้อความถัดไป
-      if (result.ok) {
-        result = await sendTelegramMessage("เลือกการดำเนินการ", {
-          threadId,
+    const caption = buildCaption(group, shown, photo !== undefined);
+
+    const result = photo
+      ? await sendTelegramPhoto({
+          photo: photo.buffer,
+          fileName: photo.fileName,
+          caption,
           buttons: buttonRows,
-        });
-      }
-    } else if (photos.length === 1) {
-      result = await sendTelegramPhoto({
-        photo: photos[0]!.buffer,
-        fileName: photos[0]!.fileName,
-        caption,
-        buttons: buttonRows,
-        threadId,
-      });
-    } else {
-      result = await sendTelegramMessage(`${caption}
-(อ่านไฟล์แนบไม่ได้ ดูในระบบแทน)`, {
-        threadId,
-        buttons: buttonRows,
-      });
-    }
+          threadId,
+        })
+      : await sendTelegramMessage(caption, { threadId, buttons: buttonRows });
 
     if (!result.ok) {
       lastFailure = { reason: result.reason, detail: result.detail };
@@ -244,8 +268,9 @@ export async function runEvidenceAlerts(
           channel: "evidence",
           attachmentType: row.type,
           billNumber: row.bill.billNumber,
-          withPhoto: photos.length > 0,
+          withPhoto: photo !== undefined,
           groupedWith: group.length,
+          shownInChat: row.id === shown?.id,
         },
         reason: "แจ้งเตือนหลักฐานรอตรวจไปยัง Telegram",
       });
