@@ -37,7 +37,7 @@ export async function listDraws(
   });
 }
 
-export async function createDraw(actor: Actor, input: DrawInput): Promise<{ drawId: string }> {
+export async function createDraw(actor: Actor, input: DrawInput): Promise<{ drawId: string; duplicate: boolean }> {
   requirePermission(actor, "draw.manage");
 
   const officialCutoff = officialDrawCutoffAt(input.drawDate);
@@ -53,13 +53,10 @@ export async function createDraw(actor: Actor, input: DrawInput): Promise<{ draw
     throw new ValidationError("เวลาปิดรับต้องอยู่หลังเวลาเปิดรับ");
   }
 
-  const duplicate = await prisma.draw.findFirst({
-    where: { ...orgScope(actor), name },
-    select: { id: true },
-  });
-  if (duplicate) throw new ConflictError(`งวดวันที่ "${name}" ถูกสร้างไว้แล้ว`);
-
   const draw = await prisma.$transaction(async (tx) => {
+    const duplicateCount = await tx.draw.count({
+      where: { ...orgScope(actor), name },
+    });
     const created = await tx.draw.create({
       data: { organizationId: actor.organizationId, name, opensAt, cutoffAt, status: "OPEN" },
       select: { id: true, name: true, opensAt: true, cutoffAt: true, status: true },
@@ -77,13 +74,15 @@ export async function createDraw(actor: Actor, input: DrawInput): Promise<{ draw
         name: created.name,
         opensAt: created.opensAt.toISOString(),
         cutoffAt: created.cutoffAt.toISOString(),
+        duplicate: duplicateCount > 0,
+        duplicateSequence: duplicateCount + 1,
       },
     });
 
-    return created;
+    return { ...created, duplicateCount };
   });
 
-  return { drawId: draw.id };
+  return { drawId: draw.id, duplicate: draw.duplicateCount > 0 };
 }
 
 export type LockOutcome = {

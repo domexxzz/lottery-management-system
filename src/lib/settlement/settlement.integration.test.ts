@@ -7,7 +7,6 @@ import { approveResult, enterResult, proposeResultCorrection } from "@/lib/resul
 import {
   approveSettlement,
   calculateSettlement,
-  reconcileSettlement,
 } from "@/lib/settlement/service";
 
 /**
@@ -223,19 +222,15 @@ describe("ปิดบัญชีรอบ", () => {
     await calculateSettlement(f.actors.ADMIN, f.draw.id);
   }
 
-  test("ปิดบัญชีไม่ได้ถ้ายังตรวจสอบยอดไม่ครบ", async () => {
+  test("คำนวณ Settlement แล้ว Owner ปิดบัญชีได้ทันที", async () => {
     await readyToClose();
-    await expect(approveSettlement(f.actors.OWNER, f.draw.id)).rejects.toThrow(
-      /ยังไม่ได้ตรวจสอบยอด/,
-    );
+    await approveSettlement(f.actors.OWNER, f.draw.id);
+    expect((await prisma.draw.findUniqueOrThrow({ where: { id: f.draw.id } })).status).toBe("CLOSED");
   });
 
   test("ปิดบัญชีแล้วรอบและบิลเปลี่ยนสถานะ และคำนวณซ้ำไม่ได้อีก", async () => {
     await readyToClose();
 
-    for (const s of await prisma.settlement.findMany({ where: { drawId: f.draw.id } })) {
-      await reconcileSettlement(f.actors.ADMIN, s.id);
-    }
     await approveSettlement(f.actors.OWNER, f.draw.id);
 
     const draw = await prisma.draw.findUniqueOrThrow({ where: { id: f.draw.id } });
@@ -283,7 +278,7 @@ describe("Audit trail", () => {
 /**
  * แก้ผลหลังคำนวณเงินไปแล้ว
  *
- * จุดอันตรายที่สุดของทางแก้ผล: ถ้าปล่อยให้ยอดที่ตรวจสอบแล้วค้างอยู่บนผลเก่า
+ * จุดอันตรายที่สุดของทางแก้ผล: ถ้าปล่อยให้ยอดที่คำนวณแล้วค้างอยู่บนผลเก่า
  * ผู้อนุมัติคนถัดไปจะเซ็นปิดบัญชีบนตัวเลขที่ไม่ตรงกับผลที่ประกาศจริง
  */
 describe("แก้ผลหลังคำนวณแล้ว", () => {
@@ -299,16 +294,15 @@ describe("แก้ผลหลังคำนวณแล้ว", () => {
     const settlement = await prisma.settlement.findFirstOrThrow({
       where: { drawId: f.draw.id },
     });
-    await reconcileSettlement(f.actors.ADMIN, settlement.id);
     return settlement.id;
   }
 
-  test("อนุมัติการแก้ผลแล้วยอดที่ตรวจสอบไว้ถูกล้าง และรอบกลับไปรอคำนวณใหม่", async () => {
+  test("อนุมัติการแก้ผลแล้วยอดเดิมถูกล้าง และรอบกลับไปรอคำนวณใหม่", async () => {
     const settlementId = await settledDraw();
 
     expect(
       (await prisma.settlement.findUniqueOrThrow({ where: { id: settlementId } })).status,
-    ).toBe("RECONCILED");
+    ).toBe("DRAFT");
     expect((await prisma.draw.findUniqueOrThrow({ where: { id: f.draw.id } })).status).toBe(
       "SETTLED",
     );

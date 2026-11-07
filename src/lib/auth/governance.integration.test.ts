@@ -13,7 +13,6 @@ import {
 import {
   approveSettlement,
   calculateSettlement,
-  reconcileSettlement,
 } from "@/lib/settlement/service";
 import { searchBills } from "@/lib/reports/service";
 
@@ -165,7 +164,7 @@ describe("ผลรางวัลแบบตรวจรอบเดียว"
 });
 
 describe("Owner ปิดบัญชีรอบ", () => {
-  test("Owner ตรวจสอบยอดและอนุมัติปิดบัญชีด้วยตัวเองได้", async () => {
+  test("Owner ปิดบัญชีได้ทันทีหลังคำนวณ Settlement", async () => {
     await lockedDrawWithBill();
     await enterResult(f.actors.ADMIN, {
       drawId: f.draw.id,
@@ -173,11 +172,6 @@ describe("Owner ปิดบัญชีรอบ", () => {
       value: "123",
     });
     await calculateSettlement(f.actors.ADMIN, f.draw.id);
-
-    // Owner เป็นผู้รับผิดชอบสูงสุด จึงทำสองขั้นตอนต่อเนื่องได้
-    for (const s of await prisma.settlement.findMany({ where: { drawId: f.draw.id } })) {
-      await reconcileSettlement(f.actors.OWNER, s.id);
-    }
 
     await approveSettlement(f.actors.OWNER, f.draw.id);
 

@@ -324,7 +324,7 @@ model Draw {
   results     Result[]
   settlements Settlement[]
 
-  @@unique([organizationId, name])
+  @@index([organizationId, name])
   @@index([organizationId, status])
   @@index([status, cutoffAt])
   @@map("draws")

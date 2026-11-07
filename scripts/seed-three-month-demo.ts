@@ -140,8 +140,8 @@ async function main() {
   const customers = new Set<string>();
 
   for (const [drawIndex, drawSeed] of HISTORICAL_DRAWS.entries()) {
-    const existing = await prisma.draw.findUnique({
-      where: { organizationId_name: { organizationId: ORGANIZATION_ID, name: drawSeed.name } },
+    const existing = await prisma.draw.findFirst({
+      where: { organizationId: ORGANIZATION_ID, name: drawSeed.name },
       select: { id: true, _count: { select: { bills: true } } },
     });
     if (existing?._count.bills) continue;

@@ -8,6 +8,7 @@ export type AppDropdownOption = {
   label: string;
   description?: string;
   badge?: string;
+  disabled?: boolean;
 };
 
 type AppDropdownProps = {
@@ -132,6 +133,8 @@ export function AppDropdown({
           type="button"
           role="option"
           aria-selected={option.value === selectedValue}
+          aria-disabled={option.disabled || undefined}
+          disabled={option.disabled}
           className="app-dropdown-option"
           onClick={() => choose(option.value)}
           onKeyDown={(event) => {

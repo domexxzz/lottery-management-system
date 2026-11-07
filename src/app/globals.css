@@ -186,6 +186,8 @@ button, input, select, textarea { font-family: inherit; }
 .app-page .error { color: #ae3940; }
 .workspace-page { background: radial-gradient(circle at 80% 0%,rgb(31 164 168 / 5%),transparent 35%); }
 .workspace-card { min-width: 0; }
+.app-dropdown-option:disabled { cursor: not-allowed; opacity: .58; }
+.app-dropdown-option:disabled:hover { color: #173b50; background: #fff; }
 .page-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .page-hero-copy p { margin: .15rem 0 0; color: #71828d; font-size: .75rem; }
 .page-eyebrow { color: #138392 !important; font-size: .67rem !important; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }

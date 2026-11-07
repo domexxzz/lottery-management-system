@@ -16,7 +16,7 @@ const COUNTED_STATUSES: BillStatus[] = ["CONFIRMED", "LOCKED", "SETTLED"];
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const DATE_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
 const AGENT_STATUS: Record<string, string> = { ACTIVE: "ใช้งาน", SUSPENDED: "ระงับ", CLOSED: "ปิด" };
-const SETTLEMENT_STATUS: Record<string, string> = { DRAFT: "รอตรวจสอบยอด", RECONCILED: "ตรวจสอบยอดแล้ว", APPROVED: "ปิดบัญชีแล้ว" };
+const SETTLEMENT_STATUS: Record<string, string> = { DRAFT: "คำนวณแล้ว", RECONCILED: "คำนวณแล้ว", APPROVED: "ปิดบัญชีแล้ว" };
 
 export default async function AgentProfilePage({
   params,

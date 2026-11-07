@@ -8,7 +8,6 @@ import {
   enterResultAction,
   enterResultsBatchAction,
   proposeResultCorrectionAction,
-  reconcileAction,
   rejectResultAction,
   type ActionState,
 } from "./actions";
@@ -185,27 +184,6 @@ export function CalculateForm({ drawId }: { drawId: string }) {
       <p className="muted">
         คำนวณซ้ำได้ ผลลัพธ์เท่าเดิมเสมอ เพราะอ่านอัตราจ่ายที่ล็อกไว้ตอนยืนยันบิล
       </p>
-      <Feedback state={state} />
-    </form>
-  );
-}
-
-export function ReconcileForm({
-  drawId,
-  settlementId,
-}: {
-  drawId: string;
-  settlementId: string;
-}) {
-  const [state, formAction, pending] = useActionState(reconcileAction, INITIAL);
-
-  return (
-    <form action={formAction} className="inline-form">
-      <input type="hidden" name="drawId" value={drawId} />
-      <input type="hidden" name="settlementId" value={settlementId} />
-      <button type="submit" disabled={pending}>
-        {pending ? "..." : "ตรวจสอบยอดแล้ว"}
-      </button>
       <Feedback state={state} />
     </form>
   );

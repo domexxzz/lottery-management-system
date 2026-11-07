@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AppDropdown } from "../../AppDropdown";
 
 type OfficialResult = {
   drawDate: string;
@@ -16,12 +17,14 @@ type ImportData = {
   source: string;
 };
 
-export function GloResultImporter({ drawId, defaultDate }: { drawId: string; defaultDate: string }) {
+type DrawDateOption = { value: string; label: string };
+
+export function GloResultImporter({ drawId, dateOptions }: { drawId: string; dateOptions: DrawDateOption[] }) {
   const [data, setData] = useState<ImportData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [filledCount, setFilledCount] = useState(0);
-  const [drawDate, setDrawDate] = useState(defaultDate);
+  const [drawDate, setDrawDate] = useState(dateOptions[0]?.value ?? "");
 
   async function importResults() {
     if (loading) return;
@@ -62,7 +65,7 @@ export function GloResultImporter({ drawId, defaultDate }: { drawId: string; def
     <section className="glo-importer" aria-label="ดึงผลรางวัลจากสำนักงานสลากกินแบ่งรัฐบาล">
       <div className="glo-importer-heading">
         <div><strong>ดึงผลจากสำนักงานสลากฯ</strong><small>ระบบจะเติมแบบฟอร์มเท่านั้น ยังไม่บันทึกจนกว่า Admin จะตรวจและกดบันทึกผลทั้งหมด</small></div>
-        <label><span>วันที่ออกสลาก</span><input type="date" value={drawDate} onChange={(event) => setDrawDate(event.target.value)} required /></label>
+        <label><span>งวดผลสลาก</span><AppDropdown value={drawDate} onValueChange={setDrawDate} required searchable={dateOptions.length > 8} searchPlaceholder="ค้นหางวด" placeholder="เลือกงวดวันที่ 1 หรือ 16" options={dateOptions.map((option) => ({ ...option, description: "ผลสลากกินแบ่งรัฐบาล" }))} /></label>
         <button type="button" onClick={importResults} disabled={loading || !drawDate}>{loading ? "กำลังดึงผล..." : "ดึงผลจาก GLO"}</button>
       </div>
       {error && <p className="glo-import-error" role="alert">{error}</p>}

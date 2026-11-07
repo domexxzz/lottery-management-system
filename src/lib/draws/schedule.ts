@@ -96,21 +96,62 @@ export function defaultOfficialDrawWindow(raw: string): { opensAt: Date; cutoffA
   };
 }
 
-/** สร้างรายการงวดอนาคต โดยคืนเฉพาะวันที่ 1 และ 16 ที่ยังไม่ปิดรับ */
-export function upcomingOfficialDrawDates(now: Date, count = 12): string[] {
+/**
+ * งวดอัตโนมัติตามวันที่ไทย:
+ * วันที่ 1–15 เลือกงวด 16 เดือนปัจจุบัน และวันที่ 16 เป็นต้นไปเลือกงวด 1 เดือนถัดไป
+ */
+export function recommendedOfficialDrawDate(now: Date): string {
   const bangkokNow = new Date(now.getTime() + BANGKOK_UTC_OFFSET_HOURS * 60 * 60 * 1000);
   const year = bangkokNow.getUTCFullYear();
   const month = bangkokNow.getUTCMonth();
+  const day = bangkokNow.getUTCDate();
+  const selected = day < 16
+    ? new Date(Date.UTC(year, month, 16))
+    : new Date(Date.UTC(year, month + 1, 1));
+  return `${selected.getUTCFullYear()}-${String(selected.getUTCMonth() + 1).padStart(2, "0")}-${String(selected.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** งวดวันที่ 1 และ 16 ของเดือนปัจจุบันตามเวลาไทย */
+export function currentMonthOfficialDrawDates(now: Date): string[] {
+  const bangkokNow = new Date(now.getTime() + BANGKOK_UTC_OFFSET_HOURS * 60 * 60 * 1000);
+  const year = bangkokNow.getUTCFullYear();
+  const month = String(bangkokNow.getUTCMonth() + 1).padStart(2, "0");
+  return [`${year}-${month}-01`, `${year}-${month}-16`];
+}
+
+/** สร้างรายการงวดอนาคต โดยคืนเฉพาะวันที่ 1 และ 16 ที่ยังไม่ปิดรับ */
+export function upcomingOfficialDrawDates(now: Date, count = 12): string[] {
+  let cursor = recommendedOfficialDrawDate(now);
   const dates: string[] = [];
 
-  for (let monthOffset = 0; dates.length < count && monthOffset < 24; monthOffset += 1) {
-    const cursor = new Date(Date.UTC(year, month + monthOffset, 1));
-    for (const day of [1, 16]) {
-      const value = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      const cutoffAt = officialDrawCutoffAt(value);
-      if (cutoffAt && cutoffAt.getTime() > now.getTime()) dates.push(value);
-      if (dates.length === count) break;
-    }
+  while (dates.length < count) {
+    dates.push(cursor);
+    const date = parseDatePart(cursor)!;
+    const next = date.day === 1
+      ? new Date(Date.UTC(date.year, date.month, 16))
+      : new Date(Date.UTC(date.year, date.month + 1, 1));
+    cursor = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
+  }
+
+  return dates;
+}
+
+/** รายการงวดที่ผ่านมาสำหรับดึงผลทางการ เรียงจากงวดล่าสุดไปเก่าสุด */
+export function recentOfficialDrawDates(now: Date, count = 24): string[] {
+  const bangkokNow = new Date(now.getTime() + BANGKOK_UTC_OFFSET_HOURS * 60 * 60 * 1000);
+  const year = bangkokNow.getUTCFullYear();
+  const month = bangkokNow.getUTCMonth();
+  const day = bangkokNow.getUTCDate();
+  let cursor = day >= 16
+    ? new Date(Date.UTC(year, month, 16))
+    : new Date(Date.UTC(year, month, 1));
+  const dates: string[] = [];
+
+  while (dates.length < count) {
+    dates.push(`${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}-${String(cursor.getUTCDate()).padStart(2, "0")}`);
+    cursor = cursor.getUTCDate() === 16
+      ? new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1))
+      : new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() - 1, 16));
   }
 
   return dates;

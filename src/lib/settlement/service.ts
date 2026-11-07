@@ -249,7 +249,10 @@ export async function calculateSettlement(
           commission: preview.commission,
           net: preview.net,
           commissionRateSnapshot: preview.commissionRateSnapshot,
+          status: "DRAFT",
           calculatedAt: new Date(),
+          reconciledById: null,
+          reconciledAt: null,
         },
       });
     }
@@ -333,13 +336,6 @@ export async function approveSettlement(actor: Actor, drawId: string): Promise<v
     });
 
     if (settlements.length === 0) throw new ConflictError("ไม่มีรายการสรุปให้อนุมัติ");
-
-    const notReconciled = settlements.filter((s) => s.status === "DRAFT");
-    if (notReconciled.length > 0) {
-      throw new ConflictError(
-        `ยังมี ${notReconciled.length} รายการที่ยังไม่ได้ตรวจสอบยอด ต้องตรวจสอบยอดให้ครบก่อนปิดบัญชี`,
-      );
-    }
 
     const now = new Date();
     await tx.settlement.updateMany({

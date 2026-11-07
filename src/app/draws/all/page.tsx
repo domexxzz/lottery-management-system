@@ -21,7 +21,7 @@ export default async function AllDrawsPage({ searchParams }: { searchParams: Pro
   const params = await searchParams;
   const query = first(params.q)?.trim().toLocaleLowerCase("th-TH") ?? "";
   const requestedStatus = first(params.status) ?? "";
-  const allowedStatuses = new Set(["OPEN", "LOCKED", "RESULT_PENDING", "SETTLED", "RECONCILED", "CLOSED"]);
+  const allowedStatuses = new Set(["OPEN", "LOCKED", "RESULT_PENDING", "SETTLED", "CLOSED"]);
   const status = allowedStatuses.has(requestedStatus) ? requestedStatus : "";
   const allDraws = await listDraws(actor, null, "opensAt");
   const draws = allDraws.filter((draw) => (

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  currentMonthOfficialDrawDates,
   nextOfficialDrawDate,
   defaultOfficialDrawWindow,
   officialDrawCutoffAt,
   officialDrawName,
   parseBangkokDateTimeLocal,
+  recentOfficialDrawDates,
+  recommendedOfficialDrawDate,
   toBangkokDateTimeLocal,
   upcomingOfficialDrawDates,
 } from "./schedule";
@@ -42,6 +45,37 @@ describe("official draw schedule", () => {
       "2026-12-01",
       "2026-12-16",
       "2027-01-01",
+    ]);
+  });
+
+  it("lists past official dates from newest to oldest", () => {
+    expect(recentOfficialDrawDates(new Date("2026-11-08T00:00:00.000Z"), 4)).toEqual([
+      "2026-11-01",
+      "2026-10-16",
+      "2026-10-01",
+      "2026-09-16",
+    ]);
+    expect(recentOfficialDrawDates(new Date("2026-11-16T00:00:00.000Z"), 3)).toEqual([
+      "2026-11-16",
+      "2026-11-01",
+      "2026-10-16",
+    ]);
+  });
+
+  it("recommends the sixteenth before it and the first after it", () => {
+    expect(recommendedOfficialDrawDate(new Date("2026-11-08T00:00:00.000Z"))).toBe("2026-11-16");
+    expect(recommendedOfficialDrawDate(new Date("2026-11-16T00:00:00.000Z"))).toBe("2026-12-01");
+    expect(recommendedOfficialDrawDate(new Date("2026-11-25T00:00:00.000Z"))).toBe("2026-12-01");
+  });
+
+  it("includes both official dates from the current Bangkok month", () => {
+    expect(currentMonthOfficialDrawDates(new Date("2026-11-08T00:00:00.000Z"))).toEqual([
+      "2026-11-01",
+      "2026-11-16",
+    ]);
+    expect(currentMonthOfficialDrawDates(new Date("2026-11-30T18:00:00.000Z"))).toEqual([
+      "2026-12-01",
+      "2026-12-16",
     ]);
   });
 

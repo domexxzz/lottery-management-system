@@ -145,7 +145,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         {rankedAgents.length === 0 ? <p className="agent-empty">ไม่พบ Agent ตามตัวกรองที่เลือก</p> : <div className="agent-compact-list">{pageAgents.map(({ agent, stats }, pageIndex) => {
           const index = (currentPage - 1) * pageSize + pageIndex;
           const share = totalCurrentSales ? stats.currentSales / totalCurrentSales * 100 : 0;
-          const settlementLabel = stats.settlementStatus === "AGGREGATED" ? "รวมงวดที่คำนวณแล้ว" : stats.settlementStatus === "APPROVED" ? "อนุมัติแล้ว" : stats.settlementStatus === "RECONCILED" ? "ตรวจสอบยอดแล้ว" : stats.settlementStatus === "DRAFT" ? "รอตรวจสอบยอด" : "ยังไม่คำนวณ";
+          const settlementLabel = stats.settlementStatus === "AGGREGATED" ? "รวมงวดที่คำนวณแล้ว" : stats.settlementStatus === "APPROVED" ? "อนุมัติแล้ว" : stats.settlementStatus === "RECONCILED" || stats.settlementStatus === "DRAFT" ? "คำนวณแล้ว" : "ยังไม่คำนวณ";
           return <article className="agent-compact-row" key={agent.id}>
             <div className="agent-card-person"><b>{index + 1}</b><Link className="agent-profile-entry" href={`/agents/${agent.id}${currentDraw ? `?drawId=${currentDraw.id}` : ""}`}><strong>{agent.code} · {agent.name}</strong><small>{STATUS_LABEL[agent.status]} · คอม {agent.commissionRate.toFixed(2)}% · ดูโปรไฟล์เชิงลึก →</small></Link></div>
             <div className="agent-compact-sales"><span>ยอดขาย</span><strong>{MONEY.format(stats.currentSales)}</strong><div><i style={{ width: `${stats.currentSales / maxCurrentSales * 100}%` }}/></div><small>{share.toFixed(1)}%</small></div>

@@ -18,7 +18,7 @@ const ACTION_LABEL: Record<string, string> = {
   CONFIRM: "ยืนยันบิล", CANCEL: "ยกเลิกบิล", APPROVE: "อนุมัติ", REJECT: "ตีกลับ", LOCK: "ปิดรับงวด",
 };
 const DRAW_STEPS = ["OPEN", "LOCKED", "RESULT_PENDING", "SETTLED", "CLOSED"] as const;
-const STEP_LABEL: Record<string, string> = { OPEN: "เปิดรับ", LOCKED: "ปิดรับ", RESULT_PENDING: "กรอกผล", SETTLED: "ตรวจสอบยอด", CLOSED: "เสร็จสิ้น" };
+const STEP_LABEL: Record<string, string> = { OPEN: "เปิดรับ", LOCKED: "ปิดรับ", RESULT_PENDING: "กรอกผล", SETTLED: "รอปิดบัญชี", CLOSED: "เสร็จสิ้น" };
 
 export async function AdminDashboard({ actor, filters }: { actor: Actor; filters: DashboardFilter }) {
   const scope = orgScope(actor);
@@ -51,7 +51,7 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
     prisma.draw.count({ where: { ...scope, status: { in: ["LOCKED", "RESULT_PENDING"] } } }),
     prisma.billAttachment.count({ where: { ...scope, status: "VERIFIED", verifiedAt: { gte: todayStart }, verifiedById: actor.userId } }),
     prisma.billAttachment.count({ where: { ...scope, status: "REJECTED", verifiedAt: { gte: todayStart }, verifiedById: actor.userId } }),
-    prisma.settlement.count({ where: { ...scope, status: "DRAFT", ...(filters.drawId ? { drawId: filters.drawId } : {}) } }),
+    prisma.draw.count({ where: { ...scope, status: "SETTLED", ...(filters.drawId ? { id: filters.drawId } : {}) } }),
     prisma.bill.count({ where: { ...billWhere, cancelRequestedAt: { not: null }, cancelledAt: null } }),
     prisma.bill.count({ where: { ...billWhere, status: { in: ["CONFIRMED", "LOCKED"] }, attachments: { none: { type: "ORDER_EVIDENCE", replacedBy: null, status: { not: "REJECTED" } } } } }),
     prisma.billAttachment.count({ where: { ...scope, status: "REJECTED", replacedBy: null, bill: billWhere } }),
@@ -82,17 +82,17 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
   const drawAction = !currentDraw ? { label: "ดูรายการงวด", href: "/draws" }
     : currentDraw.status === "OPEN" ? { label: "จัดการงวด", href: `/draws/${currentDraw.id}` }
       : currentDraw.status === "LOCKED" || currentDraw.status === "RESULT_PENDING" ? { label: "กรอกผลรางวัล", href: `/draws/${currentDraw.id}` }
-        : { label: "ตรวจสอบยอด", href: `/draws/${currentDraw.id}` };
+        : { label: "ดูสรุป Settlement", href: `/draws/${currentDraw.id}` };
   const tasks = [
     { label: "หลักฐานรอตรวจ", detail: overdue ? `${overdue} หลักฐานรอเกิน 60 นาที` : "หลักฐานจากลูกค้าที่ยังไม่ได้ตรวจ", count: pendingEvidenceCount, href: "/evidence", icon: "evidence" as const },
     { label: "งวดรอลงผล", detail: "ปิดรับแล้วและรอกรอกหรือตรวจผลรางวัล", count: awaitingResultDraws, href: "/draws", icon: "draw" as const },
-    { label: "ยอดรอตรวจ", detail: "รายการคำนวณที่ยังไม่ได้ตรวจสอบยอด", count: pendingSettlements, href: currentDraw ? `/draws/${currentDraw.id}` : "/draws", icon: "report" as const },
+    { label: "งวดรอปิดบัญชี", detail: "คำนวณแล้วและรอ Owner ปิดบัญชี", count: pendingSettlements, href: currentDraw ? `/draws/${currentDraw.id}` : "/draws", icon: "report" as const },
   ];
 
   return <main className="dashboard-body admin-ops-dashboard">
     <div className="welcome-row admin-welcome">
       <DashboardHeading icon="audit" eyebrow="งานผู้ดูแลระบบ" title="ศูนย์งานปฏิบัติการ">
-        ดูงานค้าง ตรวจหลักฐาน กรอกผล และตรวจสอบยอดจากหน้าเดียว
+        ดูงานค้าง ตรวจหลักฐาน กรอกผล และติดตาม Settlement จากหน้าเดียว
       </DashboardHeading>
       <div className="admin-primary-actions"><Link href="/evidence"><Icon name="evidence"/><span><small>งานเร่งด่วน</small><strong>ตรวจหลักฐาน</strong></span><Icon name="arrow"/></Link><Link href={drawAction.href} className="secondary"><Icon name="draw"/><span><small>ขั้นตอนถัดไป</small><strong>{drawAction.label}</strong></span><Icon name="arrow"/></Link></div>
     </div>
@@ -116,7 +116,7 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
 
     <section className="admin-secondary-grid">
       <article className="dashboard-panel"><div className="panel-heading"><div><p className="eyebrow">Today&apos;s Priorities</p><h2>งานที่ต้องทำวันนี้</h2></div></div><div className="admin-task-list">{tasks.map((task) => <Link key={task.label} href={task.href}><span className={task.count ? "has-work" : "clear"}><Icon name={task.icon}/></span><div><strong>{task.label}</strong><small>{task.count ? task.detail : "ไม่มีรายการค้าง"}</small></div><b>{task.count}</b><Icon name="arrow"/></Link>)}</div></article>
-      <article className="dashboard-panel"><div className="panel-heading"><div><p className="eyebrow">Exceptions</p><h2>รายการที่ต้องระวัง</h2></div></div><div className="admin-alert-list"><Link href="/evidence"><span>!</span><div><strong>หลักฐานถูกตีกลับยังไม่แก้</strong><small>รอ Agent แนบไฟล์ใหม่</small></div><b>{rejectedOutstanding}</b></Link><Link href="/bills"><span>!</span><div><strong>บิลที่ไม่มีหลักฐานการสั่งซื้อ</strong><small>บิลยืนยันหรือปิดรับแล้ว</small></div><b>{missingEvidence}</b></Link><Link href={currentDraw ? `/draws/${currentDraw.id}` : "/draws"}><span>!</span><div><strong>รายการรอตรวจสอบยอด</strong><small>ต้องดำเนินการก่อนปิดบัญชี</small></div><b>{pendingSettlements}</b></Link></div></article>
+      <article className="dashboard-panel"><div className="panel-heading"><div><p className="eyebrow">Exceptions</p><h2>รายการที่ต้องระวัง</h2></div></div><div className="admin-alert-list"><Link href="/evidence"><span>!</span><div><strong>หลักฐานถูกตีกลับยังไม่แก้</strong><small>รอ Agent แนบไฟล์ใหม่</small></div><b>{rejectedOutstanding}</b></Link><Link href="/bills"><span>!</span><div><strong>บิลที่ไม่มีหลักฐานการสั่งซื้อ</strong><small>บิลยืนยันหรือปิดรับแล้ว</small></div><b>{missingEvidence}</b></Link><Link href={currentDraw ? `/draws/${currentDraw.id}` : "/draws"}><span>!</span><div><strong>งวดรอ Owner ปิดบัญชี</strong><small>คำนวณ Settlement เรียบร้อยแล้ว</small></div><b>{pendingSettlements}</b></Link></div></article>
     </section>
 
     <section className="dashboard-panel admin-activity"><div className="panel-heading"><div><p className="eyebrow">Audit Trail</p><h2>กิจกรรมล่าสุด</h2></div><Link href="/audit">ดูประวัติทั้งหมด <Icon name="arrow"/></Link></div>{recentAudit.length === 0 ? <p className="empty-state">ยังไม่มีกิจกรรม</p> : <div>{recentAudit.map((event) => <article key={event.id}><span className={event.action.includes("REJECT") || event.action === "CANCEL" ? "danger" : "normal"}><Icon name={event.action.includes("REJECT") || event.action === "CANCEL" ? "alert" : "audit"}/></span><div><strong>{ACTION_LABEL[event.action] ?? event.action}</strong><small>{event.entityType}{event.reason ? ` · ${event.reason}` : ""}</small></div><b>{event.actor?.displayName ?? "ระบบ"}</b><time>{DATE_TIME.format(event.createdAt)}</time></article>)}</div>}</section>

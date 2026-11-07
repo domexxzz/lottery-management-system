@@ -1,11 +1,12 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { defaultOfficialDrawWindow, officialDrawName, toBangkokDateTimeLocal } from "@/lib/draws/schedule";
+import { defaultOfficialDrawWindow, officialDrawName, parseBangkokDateTimeLocal, toBangkokDateTimeLocal } from "@/lib/draws/schedule";
 import { AppDropdown } from "../AppDropdown";
 import { createDrawAction, lockDrawAction, type ActionState } from "./actions";
 
 const INITIAL: ActionState = { error: null, message: null };
+const DATE_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
 
 function defaultWindow(drawDate: string) {
   const window = defaultOfficialDrawWindow(drawDate);
@@ -15,51 +16,71 @@ function defaultWindow(drawDate: string) {
   };
 }
 
-export function CreateDrawForm({ drawDates }: { drawDates: string[] }) {
+function displayDateTime(value: string) {
+  const date = parseBangkokDateTimeLocal(value);
+  return date ? `${DATE_TIME.format(date)} น.` : "ยังไม่ได้กำหนด";
+}
+
+export function CreateDrawForm({ drawDates, automaticDrawDate, createdDrawDates }: { drawDates: string[]; automaticDrawDate: string; createdDrawDates: string[] }) {
   const [state, formAction, pending] = useActionState(createDrawAction, INITIAL);
-  const [drawDate, setDrawDate] = useState(drawDates[0] ?? "");
-  const initialWindow = defaultWindow(drawDates[0] ?? "");
-  const [opensAt, setOpensAt] = useState(initialWindow.opensAt);
-  const [cutoffAt, setCutoffAt] = useState(initialWindow.cutoffAt);
+  const [drawDate, setDrawDate] = useState("");
+  const [opensAt, setOpensAt] = useState("");
+  const [cutoffAt, setCutoffAt] = useState("");
+  const [prepared, setPrepared] = useState(false);
   const drawName = officialDrawName(drawDate);
+  const createdDrawDateSet = new Set(createdDrawDates);
+  const isDuplicate = createdDrawDateSet.has(drawDate);
+
+  function applyAutomaticSchedule() {
+    const automaticDate = automaticDrawDate;
+    const window = defaultWindow(automaticDate);
+    setDrawDate(automaticDate);
+    setOpensAt(window.opensAt);
+    setCutoffAt(window.cutoffAt);
+    setPrepared(Boolean(automaticDate && window.opensAt && window.cutoffAt));
+  }
 
   return (
-    <form action={formAction}>
-      <label htmlFor="drawDate">
-        เลือกงวดที่จะเปิด
-        <AppDropdown
-          id="drawDate"
-          name="drawDate"
-          value={drawDate}
-          onValueChange={(value) => {
-            const window = defaultWindow(value);
-            setDrawDate(value);
-            setOpensAt(window.opensAt);
-            setCutoffAt(window.cutoffAt);
-          }}
-          required
-          options={drawDates.map((date) => ({
-            value: date,
-            label: officialDrawName(date) ?? date,
-            description: "เปิดก่อน 5 วัน · ปิดก่อน 1 วัน เวลา 14:00 น.",
-          }))}
-        />
-      </label>
+    <form action={formAction} onSubmit={(event) => {
+      if (isDuplicate && !window.confirm(`งวด ${drawName ?? drawDate} เคยถูกสร้างแล้ว ต้องการสร้างซ้ำหรือไม่?`)) {
+        event.preventDefault();
+      }
+    }}>
+      <input type="hidden" name="drawDate" value={drawDate} />
+      <input type="hidden" name="opensAt" value={opensAt} />
+      <input type="hidden" name="cutoffAt" value={cutoffAt} />
 
-      <label htmlFor="opensAt">
-        วันเวลาเปิดรับ
-        <input id="opensAt" name="opensAt" type="datetime-local" value={opensAt} onChange={(event) => setOpensAt(event.target.value)} required />
-      </label>
+      <div className="draw-create-toolbar" aria-label="วิธีตั้งค่างวด">
+        <button type="button" className={prepared ? "active" : ""} onClick={applyAutomaticSchedule}>สร้างอัตโนมัติ</button>
+      </div>
 
-      <label htmlFor="cutoffAt">
-        วันเวลาปิดรับ
-        <input id="cutoffAt" name="cutoffAt" type="datetime-local" value={cutoffAt} onChange={(event) => setCutoffAt(event.target.value)} required />
-      </label>
+      {!prepared && <div className="draw-create-empty" aria-live="polite"><strong>ยังไม่ได้เตรียมข้อมูลงวด</strong><span>กด “สร้างอัตโนมัติ” เพื่อให้ระบบคำนวณงวดและเวลา แล้วตรวจสอบก่อนยืนยัน</span></div>}
 
-      <p className="draw-name-preview" role="status">
-        ชื่องวด: <strong>{drawName ?? "ยังไม่มีงวดที่เปิดได้"}</strong>
-        <span>เปิดก่อนงวด 5 วัน · ปิดก่อนงวด 1 วัน เวลา 14:00 น. · แก้ไขได้</span>
-      </p>
+      {prepared && <section className="draw-schedule-preview" aria-label="ข้อมูลก่อนสร้างงวด" aria-live="polite">
+        <div><span>งวดที่จะสร้าง</span><strong>{drawName ?? "ยังไม่มีงวดที่เปิดได้"}</strong><small>เลือกอัตโนมัติตามวันที่ปัจจุบัน</small></div>
+        <div><span>วันเวลาเปิดรับ</span><strong>{displayDateTime(opensAt)}</strong><small>ก่อนวันงวด 5 วัน</small></div>
+        <div><span>วันเวลาปิดรับ</span><strong>{displayDateTime(cutoffAt)}</strong><small>ก่อนวันงวด 1 วัน เวลา 14:00 น.</small></div>
+      </section>}
+
+      {prepared && <section className="draw-manual-settings" aria-label="แก้ไขงวดและวันเวลา">
+        <p className="draw-edit-hint"><strong>แก้ไขข้อมูลก่อนยืนยัน</strong><span>สามารถเปลี่ยนงวด วันเวลาเปิดรับ และวันเวลาปิดรับได้</span></p>
+        <label htmlFor="drawDate">เลือกงวดที่จะเปิด<AppDropdown id="drawDate" value={drawDate} onValueChange={(value) => {
+          const window = defaultWindow(value);
+          setDrawDate(value);
+          setOpensAt(window.opensAt);
+          setCutoffAt(window.cutoffAt);
+          setPrepared(Boolean(value && window.opensAt && window.cutoffAt));
+        }} required options={drawDates.map((date) => ({
+          value: date,
+          label: officialDrawName(date) ?? date,
+          description: createdDrawDateSet.has(date) ? "เคยสร้างแล้ว แต่สามารถสร้างซ้ำได้" : "งวดวันที่ 1 หรือ 16",
+          badge: createdDrawDateSet.has(date) ? "มีงวดเดิม" : undefined,
+        }))} /></label>
+        <label htmlFor="opensAt">วันเวลาเปิดรับ<input id="opensAt" type="datetime-local" value={opensAt} onChange={(event) => setOpensAt(event.target.value)} required /></label>
+        <label htmlFor="cutoffAt">วันเวลาปิดรับ<input id="cutoffAt" type="datetime-local" value={cutoffAt} onChange={(event) => setCutoffAt(event.target.value)} required /></label>
+      </section>}
+
+      {prepared && isDuplicate && <p className="draw-duplicate-warning" role="status"><strong>กำลังสร้างงวดซ้ำ</strong><span>งวด {drawName} เคยถูกสร้างแล้ว ระบบจะเก็บรายการใหม่นี้เป็นคนละงวด</span></p>}
 
       {state.error !== null && (
         <p className="error" role="alert">
@@ -68,9 +89,7 @@ export function CreateDrawForm({ drawDates }: { drawDates: string[] }) {
       )}
       {state.message !== null && <p role="status">{state.message}</p>}
 
-      <button type="submit" disabled={pending || !drawDate || !opensAt || !cutoffAt}>
-        {pending ? "กำลังบันทึก..." : "สร้างงวด"}
-      </button>
+      {prepared && <div className="draw-create-submit"><small>ตรวจสอบข้อมูลด้านบนก่อนยืนยัน ระบบจะยังไม่สร้างจนกดปุ่มนี้</small><button type="submit" disabled={pending || !drawDate || !opensAt || !cutoffAt}>{pending ? "กำลังบันทึก..." : isDuplicate ? "ยืนยันสร้างงวดซ้ำ" : "ยืนยันสร้างงวด"}</button></div>}
     </form>
   );
 }

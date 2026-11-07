@@ -31,15 +31,18 @@ export async function createDrawAction(
   }
 
   try {
-    await createDraw(actor, parsed.data);
+    const outcome = await createDraw(actor, parsed.data);
+    revalidatePath("/draws");
+    revalidatePath("/draws/all");
+    return {
+      error: null,
+      message: outcome.duplicate ? "สร้างงวดซ้ำแล้ว ระบบเก็บเป็นคนละงวด" : "สร้างงวดแล้ว",
+    };
   } catch (error) {
     if (error instanceof AppError) return { error: error.message, message: null };
     throw error;
   }
 
-  revalidatePath("/draws");
-  revalidatePath("/draws/all");
-  return { error: null, message: "สร้างงวดแล้ว" };
 }
 
 export async function lockDrawAction(

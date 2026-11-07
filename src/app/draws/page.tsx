@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getActor } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { listDraws } from "@/lib/draws/service";
-import { officialDrawName, upcomingOfficialDrawDates } from "@/lib/draws/schedule";
+import { currentMonthOfficialDrawDates, officialDrawName, upcomingOfficialDrawDates } from "@/lib/draws/schedule";
 import { CreateDrawForm } from "./DrawForms";
 import { DRAW_STATUS_LABEL, DrawTable, getDrawDisplayStatus } from "./DrawTable";
 import "./draws.css";
@@ -21,8 +21,16 @@ export default async function DrawsPage() {
   const canEnterResults = can(actor.role, "result.enter");
   const canReviewResults = can(actor.role, "result.approve") && !canEnterResults;
   const existingDrawNames = new Set(draws.map((draw) => draw.name));
-  const upcomingDrawDates = upcomingOfficialDrawDates(new Date())
-    .filter((date) => !existingDrawNames.has(officialDrawName(date) ?? ""));
+  const now = new Date();
+  const upcomingDrawDates = upcomingOfficialDrawDates(now);
+  const selectableDrawDates = Array.from(new Set([
+    ...currentMonthOfficialDrawDates(now),
+    ...upcomingDrawDates,
+  ]))
+    .sort((left, right) => left.localeCompare(right));
+  const createdDrawDates = selectableDrawDates
+    .filter((date) => existingDrawNames.has(officialDrawName(date) ?? ""));
+  const automaticDrawDate = upcomingDrawDates[0] ?? selectableDrawDates[0] ?? "";
 
   return (
     <main className="workspace-page">
@@ -34,7 +42,7 @@ export default async function DrawsPage() {
           <div className="draw-section-heading">
             <div><p className="page-eyebrow">Create New Draw</p><h2 id="create-draw-heading">สร้างงวดใหม่</h2><p>เลือกเฉพาะงวดวันที่ 1 หรือ 16 ระบบกำหนดเวลาเปิด–ปิดรับให้อัตโนมัติ</p></div>
           </div>
-          <CreateDrawForm drawDates={upcomingDrawDates} />
+          <CreateDrawForm drawDates={selectableDrawDates} automaticDrawDate={automaticDrawDate} createdDrawDates={createdDrawDates} />
           <p className="draw-form-note">เมื่อถึงเวลาปิดรับ งานอัตโนมัติจะล็อกบิลที่ยืนยันแล้วและยกเลิกบิลร่างที่ค้างอยู่</p>
         </section>}
 

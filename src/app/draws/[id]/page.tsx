@@ -8,13 +8,12 @@ import { listResults } from "@/lib/results/service";
 import { displayResultValues, resultValueCount, storedResultValues } from "@/lib/results/values";
 import { listSettlements } from "@/lib/settlement/service";
 import { NotFoundError } from "@/lib/errors";
-import { bangkokDate } from "@/lib/glo/results";
+import { officialDrawName, recentOfficialDrawDates } from "@/lib/draws/schedule";
 import {
   ApproveResultForm,
   ApproveSettlementForm,
   CalculateForm,
   ProposeCorrectionForm,
-  ReconcileForm,
   RejectResultForm,
   SaveAllResultsForm,
 } from "./DrawForms";
@@ -38,8 +37,8 @@ const RESULT_STATUS: Record<string, string> = {
 };
 
 const SETTLEMENT_STATUS: Record<string, string> = {
-  DRAFT: "รอตรวจสอบยอด",
-  RECONCILED: "ตรวจสอบยอดแล้ว",
+  DRAFT: "คำนวณแล้ว",
+  RECONCILED: "คำนวณแล้ว",
   APPROVED: "ปิดบัญชีแล้ว",
 };
 
@@ -73,7 +72,6 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
   const canApproveResult = can(actor.role, "result.approve");
   const canProposeCorrection = can(actor.role, "result.proposeCorrection");
   const canCalculate = can(actor.role, "settlement.calculate");
-  const canReconcile = can(actor.role, "settlement.reconcile");
   const canApproveSettlement = can(actor.role, "settlement.approve");
 
   const approvedCount = approvedByPrizeType.size;
@@ -82,12 +80,16 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
   const pendingCorrections = prizeTypes.filter(
     (pt) => approvedByPrizeType.has(pt.id) && latestByPrizeType.get(pt.id)?.status === "DRAFT",
   ).length;
+  const gloDateOptions = recentOfficialDrawDates(new Date(), 24).map((date) => ({
+    value: date,
+    label: officialDrawName(date) ?? date,
+  }));
 
   return (
     <main className="workspace-page draw-detail-page">
       <section className="card workspace-card" aria-labelledby="draw-heading">
         <p><Link href="/draws">← กลับไปรายการงวด</Link></p>
-        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Draw & Settlement</p><h1 id="draw-heading">{draw.name}</h1><p>บันทึกผลครั้งเดียวแล้วดำเนินการตรวจสอบยอดต่อได้ทันที</p></div><span className={`status-pill ${draw.status === "CLOSED" ? "success" : draw.status === "RESULT_PENDING" ? "warning" : "info"}`}>{DRAW_STATUS[draw.status] ?? draw.status}</span></header>
+        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Draw & Settlement</p><h1 id="draw-heading">{draw.name}</h1><p>บันทึกผลและคำนวณ Settlement จากข้อมูลจริงของงวด</p></div><span className={`status-pill ${draw.status === "CLOSED" ? "success" : draw.status === "RESULT_PENDING" ? "warning" : "info"}`}>{DRAW_STATUS[draw.status] ?? draw.status}</span></header>
         <div className="draw-detail-summary"><div><span>ผลที่อนุมัติแล้ว</span><strong>{approvedCount} / {prizeTypes.length}</strong></div><div><span>Settlement</span><strong>{settlementData.settlements.length}</strong><small>Agent</small></div><div><span>สถานะงวด</span><strong>{DRAW_STATUS[draw.status] ?? draw.status}</strong></div></div>
 
         <h2>ผลรางวัล</h2>
@@ -98,11 +100,11 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
           {pendingCorrections > 0 && (
             <p className="notice" role="status">
               มีคำขอแก้ผลรางวัลรออนุมัติ {pendingCorrections} รายการ · ผลเดิมยังมีผลบังคับจนกว่า
-              Owner จะอนุมัติ และเมื่ออนุมัติแล้วงวดนี้ต้องคำนวณและตรวจสอบยอดใหม่
+              Owner จะอนุมัติ และเมื่ออนุมัติแล้วงวดนี้ต้องคำนวณ Settlement ใหม่
             </p>
           )}
           {canEnter && draw.status !== "CLOSED" && <div className="result-entry-guide"><span className="result-entry-guide-icon"><DashboardIcon name="edit" /></span><div><strong>กรอกและยืนยันผลรางวัล</strong><small>ตรวจเลขให้ถูกต้องก่อนบันทึก เมื่อกดแล้วผลจะได้รับการยืนยันทันทีโดยไม่ต้องตรวจซ้ำ</small></div><a href="#result-entry-list">กรอกผลด้านล่าง ↓</a></div>}
-          {canEnter && editableCount > 0 && draw.status !== "CLOSED" && <GloResultImporter drawId={draw.id} defaultDate={bangkokDate(draw.cutoffAt)} />}
+          {canEnter && editableCount > 0 && draw.status !== "CLOSED" && <GloResultImporter drawId={draw.id} dateOptions={gloDateOptions} />}
           <div className="table-wrap" id="result-entry-list"><table className="result-entry-table">
             <thead>
               <tr>
@@ -240,7 +242,6 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                   <th scope="col" className="num">คอม</th>
                   <th scope="col" className="num">สุทธิ</th>
                   <th scope="col">สถานะ</th>
-                  {canReconcile && <th scope="col">การจัดการ</th>}
                 </tr>
               </thead>
               <tbody>
@@ -259,25 +260,15 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                       {s.net.toFixed(2)}
                     </td>
                     <td>{SETTLEMENT_STATUS[s.status] ?? s.status}</td>
-                    {canReconcile && (
-                      <td>
-                        {s.status === "DRAFT" && (
-                          <ReconcileForm drawId={draw.id} settlementId={s.id} />
-                        )}
-                        {s.reconciledBy != null && (
-                          <span className="muted">{s.reconciledBy.displayName}</span>
-                        )}
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>
             </table></div>
 
-            {canReconcile && (
+            {canCalculate && (
               <p>
                 <a href={`/api/draws/${draw.id}/reconciliation`}>
-                  ดาวน์โหลดรายงานตรวจสอบยอด (CSV)
+                  ดาวน์โหลดสรุป Settlement (CSV)
                 </a>
               </p>
             )}

@@ -15,20 +15,13 @@ export const DRAW_STATUS_LABEL: Record<string, string> = {
   LOCKED: "ปิดรับแล้ว",
   RESULT_PENDING: "รอผล",
   SETTLED: "คำนวณแล้ว",
-  RECONCILED: "ตรวจสอบยอดแล้ว",
   CLOSED: "ปิดบัญชี",
 };
 
 export type DrawRow = Awaited<ReturnType<typeof listDraws>>[number];
 
 export function getDrawDisplayStatus(draw: DrawRow): string {
-  const reconciled = draw.status === "SETTLED"
-    && draw.settlements.length > 0
-    && draw.settlements.every((settlement) => (
-      settlement.status === "RECONCILED" || settlement.status === "APPROVED"
-    ));
-
-  return reconciled ? "RECONCILED" : draw.status;
+  return draw.status;
 }
 
 export function DrawTable({
@@ -61,14 +54,13 @@ export function DrawTable({
       {draws.length === 0 && <tr><td colSpan={columnCount} className="draw-empty-row">ยังไม่มีงวดในระบบ</td></tr>}
       {draws.map((draw) => {
         const displayStatus = getDrawDisplayStatus(draw);
-        return <tr key={draw.id} className={displayStatus === "RECONCILED" ? "draw-row-reconciled" : undefined}>
+        return <tr key={draw.id}>
           <td><Link href={`/draws/${draw.id}`}>{draw.name}</Link></td>
           <td>{BANGKOK.format(draw.opensAt)}</td>
           <td>{BANGKOK.format(draw.cutoffAt)}</td>
           <td>{draw._count.bills}</td>
           <td>
-            <span className={`status-pill ${displayStatus === "RECONCILED" ? "reconciled" : draw.status === "OPEN" || draw.status === "CLOSED" ? "success" : draw.status === "RESULT_PENDING" ? "warning" : "info"}`}>
-              {displayStatus === "RECONCILED" && <span aria-hidden="true">✓ </span>}
+            <span className={`status-pill ${draw.status === "OPEN" || draw.status === "CLOSED" ? "success" : draw.status === "RESULT_PENDING" ? "warning" : "info"}`}>
               {DRAW_STATUS_LABEL[displayStatus] ?? displayStatus}
             </span>
             {draw.lockedAt !== null && <span className="muted"> · {BANGKOK.format(draw.lockedAt)}</span>}

@@ -13,7 +13,7 @@ const STEPS = [
   { key: "OPEN", label: "เปิดรับ", detail: "กำลังรับบิล" },
   { key: "LOCKED", label: "ปิดรับ", detail: "เตรียมลงผล" },
   { key: "RESULT_PENDING", label: "ตรวจผล", detail: "รอผลครบ" },
-  { key: "SETTLED", label: "ตรวจสอบยอด", detail: "ตรวจยอด Agent" },
+  { key: "SETTLED", label: "รอปิดบัญชี", detail: "คำนวณ Settlement แล้ว" },
   { key: "CLOSED", label: "ปิดงวด", detail: "เสร็จสมบูรณ์" },
 ] as const;
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -86,7 +86,7 @@ export async function ManagementDashboard({ actor, filters }: { actor: Actor; fi
     { label: "สุทธิ", value: summary.net, tone: summary.net < 0 ? "red" : "green", icon: "report" as const },
   ];
   const tasks = [
-    { label: "รอปิดบัญชี", detail: "งวดที่ตรวจสอบยอดแล้วและพร้อมปิดบัญชี", count: awaitingClose, href: "/draws" },
+    { label: "รอปิดบัญชี", detail: "งวดที่คำนวณ Settlement แล้วและพร้อมปิดบัญชี", count: awaitingClose, href: "/draws" },
     { label: "คำขอแก้ไข", detail: "คำขอแก้ไขหรือยกเลิกบิลที่รอพิจารณา", count: pendingCancellations, href: "/bills" },
     { label: "ความผิดปกติ", detail: "รายการที่มียอดสุทธิติดลบและควรตรวจสอบ", count: anomalyCount, href: "/reports" },
   ];

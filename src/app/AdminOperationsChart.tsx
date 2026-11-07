@@ -22,7 +22,7 @@ export function AdminOperationsChart({ daily, backlog }: { daily: DailyPoint[]; 
   const line = points.map((point) => `${point.x},${point.y}`).join(" ");
   const backlogRows = [
     { label: "หลักฐานรอตรวจ", value: backlog.evidence, color: "#15949b" },
-    { label: "รอตรวจสอบยอด", value: backlog.settlement, color: "#efad3b" },
+    { label: "รอ Owner ปิดบัญชี", value: backlog.settlement, color: "#efad3b" },
     { label: "คำขอยกเลิก", value: backlog.cancellation, color: "#7566b1" },
     { label: "หลักฐานตีกลับ", value: backlog.rejected, color: "#d8545b" },
   ];

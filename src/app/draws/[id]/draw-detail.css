@@ -68,3 +68,19 @@
   margin: 0 0 0.25rem;
   font-size: 0.8rem;
 }
+
+.glo-importer-heading .app-dropdown {
+  width: 220px;
+}
+
+.glo-importer-heading .app-dropdown-trigger {
+  min-height: 36px;
+  background: #fff;
+  font-size: 0.64rem;
+}
+
+@media (max-width: 650px) {
+  .glo-importer-heading .app-dropdown {
+    width: 100%;
+  }
+}

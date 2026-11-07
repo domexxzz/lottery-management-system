@@ -1,12 +1,17 @@
 import { getActor, orgScope, requirePermission } from "@/lib/auth/context";
 import { prisma } from "@/lib/db";
 import { AppError, ConflictError, NotFoundError, UnauthorizedError } from "@/lib/errors";
-import { bangkokDate, buildGloPrizeSuggestions, fetchGloDrawResult } from "@/lib/glo/results";
+import { buildGloPrizeSuggestions, fetchGloDrawResult } from "@/lib/glo/results";
+import { officialDrawCutoffAt } from "@/lib/draws/schedule";
 import { apiError, assertSameOrigin } from "@/lib/http";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
-const bodySchema = z.object({ drawDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "วันที่งวดไม่ถูกต้อง").optional() });
+const bodySchema = z.object({
+  drawDate: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "วันที่งวดไม่ถูกต้อง")
+    .refine((value) => officialDrawCutoffAt(value) !== null, "เลือกได้เฉพาะงวดวันที่ 1 หรือ 16"),
+});
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -27,7 +32,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const body = bodySchema.safeParse(await request.json().catch(() => ({})));
     if (!body.success) throw new AppError(body.error.issues[0]?.message ?? "วันที่งวดไม่ถูกต้อง", 422, "VALIDATION_FAILED");
-    const requestedDate = body.data.drawDate ?? bangkokDate(draw.cutoffAt);
+    const requestedDate = body.data.drawDate;
     const official = await fetchGloDrawResult(requestedDate);
     return Response.json({
       data: {
