@@ -1,0 +1,166 @@
+# Blueprint สำหรับ Render — ดูขั้นตอนใช้งานที่ docs/DEPLOY_RENDER.md
+#
+# ทำไมไม่ใช้ Dockerfile ที่มีอยู่
+#   runner stage ของ Dockerfile คัดเฉพาะ @prisma กับ .prisma เข้า image
+#   แต่ CLI ของ Prisma อยู่ในแพ็กเกจ `prisma` ซึ่งเป็น devDependency และไม่ถูกคัดไป
+#   image นั้นจึงรัน `prisma migrate deploy` ไม่ได้ ทั้งที่ migrate ต้องรันก่อนสตาร์ตแอป
+#   runtime: node ได้ devDependencies มาด้วย จึงรัน migrate และ seed ได้จริง
+#   และ worker ใช้ build เดียวกันได้โดยไม่ต้อง build image ซ้ำ
+#   Dockerfile ยังอยู่สำหรับปลายทางอื่นที่ไม่ใช่ Render
+#
+# ไม่มีบริการใดในไฟล์นี้ใช้ instance ฟรีได้ เพราะ
+#   - web ฟรีจะ spin down หลังไม่มี traffic 15 นาที บิลที่ถึงเวลา Cutoff จะไม่ถูกปิด
+#   - Postgres ฟรีหมดอายุ 30 วันหลังสร้าง แล้วถูกลบพร้อมข้อมูลทั้งหมด
+#   - cron และ worker ไม่มี instance ฟรีให้เลือก
+
+databases:
+  - name: lottery-postgres
+    # ตรงกับ postgres:17-alpine ที่ใช้ตอน dev และใน CI
+    postgresMajorVersion: "17"
+    # แผนถูกสุดที่ไม่หมดอายุ · ขยายได้ทีหลังโดยไม่ต้องย้ายข้อมูล
+    plan: 0.1c-256mb
+    diskSizeGB: 10
+    region: singapore
+    databaseName: lottery
+    user: lottery
+
+envVarGroups:
+  # ค่าที่ web, worker และ cron ใช้ร่วมกัน
+  #
+  # กลุ่ม env ของ Render ใส่ sync:false ไม่ได้ ไฟล์นี้จึงประกาศได้แค่ค่าที่ไม่ใช่ความลับ
+  # ความลับที่ต้องใช้ทั้ง web และ worker (Telegram, storage) ให้เพิ่มเข้ากลุ่มนี้
+  # ด้วยมือใน Dashboard ครั้งเดียว แล้วทุกบริการได้ไปพร้อมกัน ไม่ต้องกรอกซ้ำทีละตัว
+  - name: lottery-shared
+    envVars:
+      # NODE_ENV=production ทำให้ npm ci ข้าม devDependencies
+      # แต่ prisma CLI กับ tsx เป็น devDependency และต้องใช้ตอน runtime
+      # (preDeployCommand รัน prisma migrate · cron และ worker รันผ่าน tsx)
+      # ทุก buildCommand จึงต้องมี --include=dev กำกับไว้
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+
+      - key: SESSION_TTL_MINUTES
+        value: "480"
+      - key: SESSION_COOKIE_NAME
+        value: lottery_session
+
+      # Render ไม่มี S3 ของตัวเอง และดิสก์ของ Render ผูกกับ instance เดียว
+      # แชร์ข้ามบริการไม่ได้ จึงต้องใช้ S3 ภายนอก (Cloudflare R2, AWS S3, Backblaze B2)
+      # ค่า endpoint, bucket, region และคีย์ ให้ใส่ในกลุ่มนี้ด้วยมือ
+      - key: STORAGE_PROVIDER
+        value: s3
+      # R2 และ B2 ต้องเป็น true · AWS S3 ใช้ false ได้
+      - key: STORAGE_FORCE_PATH_STYLE
+        value: "true"
+      - key: STORAGE_SIGNED_URL_TTL
+        value: "300"
+
+      - key: ATTACHMENT_MAX_FILE_SIZE_MB
+        value: "5"
+      - key: ATTACHMENT_MAX_FILES_PER_BILL
+        value: "5"
+      - key: ATTACHMENT_MAX_IMAGE_PIXELS
+        value: "40000000"
+      - key: BILL_ORDER_EVIDENCE_REQUIRED
+        value: "true"
+      - key: BILL_PAYMENT_EVIDENCE_REQUIRED
+        value: "false"
+
+      - key: TYPHOON_BASE_URL
+        value: https://api.opentyphoon.ai/v1
+      - key: TYPHOON_MODEL
+        value: typhoon-v2.1-12b-instruct
+      - key: TYPHOON_TIMEOUT_MS
+        value: "30000"
+
+      - key: GLO_API_TIMEOUT_MS
+        value: "15000"
+      - key: TELEGRAM_TIMEOUT_MS
+        value: "15000"
+
+services:
+  - type: web
+    name: lottery-web
+    runtime: node
+    region: singapore
+    plan: starter
+    # branch ที่ Render จะตามให้ · เปลี่ยนเป็น main เมื่อ merge แล้ว
+    branch: main
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
+    # migrate ต้องจบก่อนสตาร์ตแอปตัวใหม่ ไม่งั้นโค้ดใหม่วิ่งชนตารางเก่า
+    # Render จะไม่สลับ traffic ไปเวอร์ชันใหม่ถ้าคำสั่งนี้ fail
+    preDeployCommand: npx prisma migrate deploy
+    startCommand: npm start
+    # เช็กว่าต่อฐานข้อมูลได้จริง ไม่ใช่แค่ process ยังอยู่
+    healthCheckPath: /api/health
+    envVars:
+      - fromGroup: lottery-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lottery-postgres
+          property: connectionString
+      # ใช้ในลิงก์ที่ส่งเข้า Telegram · ใส่ URL จริงของบริการนี้หลัง deploy รอบแรก
+      - key: APP_BASE_URL
+        sync: false
+      - key: TYPHOON_API_KEY
+        sync: false
+      # token ของ job สองตัวแยกกัน เพราะเป็นคนละอำนาจ
+      # ไม่ตั้ง = endpoint ปิดตัวเอง (503) ซึ่งปลอดภัยกว่าเปิดทิ้งไว้
+      - key: CUTOFF_JOB_TOKEN
+        generateValue: true
+      - key: NOTIFY_JOB_TOKEN
+        generateValue: true
+
+  # ตัวเฝ้า Telegram
+  #
+  # ต้องเป็น worker ไม่ใช่ cron เพราะปุ่ม "ยืนยัน"/"ตีกลับ" ใน Telegram
+  # ต้องมีคนคอยรับ callback จาก getUpdates อยู่ตลอด
+  # endpoint /api/jobs/notify ส่งแจ้งเตือนกับสรุปรายวันให้ แต่ไม่ได้อ่าน inbox
+  # ถ้าใช้แค่ cron ยิง endpoint นั้น ปุ่มจะกดไม่ติด
+  #
+  # watcher ตัวนี้ทำครบสามอย่างในลูปเดียว: รับการกดปุ่ม, ส่งแจ้งเตือนหลักฐาน, สรุปรายวัน
+  - type: worker
+    name: lottery-notify
+    runtime: node
+    region: singapore
+    plan: starter
+    branch: main
+    buildCommand: npm ci --include=dev && npx prisma generate
+    startCommand: npm run job:notify:watch
+    envVars:
+      - fromGroup: lottery-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lottery-postgres
+          property: connectionString
+      - key: APP_BASE_URL
+        sync: false
+      # long polling ค้างสายได้ถึง 25 วินาที ปุ่มจึงตอบสนองเกือบทันที
+      - key: NOTIFY_WATCH_INTERVAL_SECONDS
+        value: "25"
+
+  # ปิดรอบที่ถึงเวลา Cutoff
+  #
+  # เรียก script ตรงเข้าฐานข้อมูล ไม่ผ่าน HTTP จึงทำงานได้แม้ web กำลัง deploy อยู่
+  # งานเป็น idempotent รอบที่ปิดแล้วไม่ถูกหยิบซ้ำ เรียกถี่เกินไปไม่เป็นอันตราย
+  #
+  # ทุกนาทีทำให้ช่องว่างระหว่างเวลา Cutoff จริงกับเวลาที่บิลถูกล็อกไม่เกิน 1 นาที
+  # Render คิดเงินตามเวลาที่ job รัน ถ้ายอมให้ช่องว่างกว้างขึ้นเพื่อลดค่าใช้จ่าย
+  # เปลี่ยนเป็น "*/5 * * * *" ได้ แต่แปลว่าบิลอาจเข้ามาได้อีกไม่เกิน 5 นาทีหลัง Cutoff
+  - type: cron
+    name: lottery-cutoff
+    runtime: node
+    region: singapore
+    plan: starter
+    branch: main
+    schedule: "* * * * *"
+    buildCommand: npm ci --include=dev && npx prisma generate
+    startCommand: npm run job:cutoff
+    envVars:
+      - fromGroup: lottery-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lottery-postgres
+          property: connectionString
