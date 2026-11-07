@@ -124,7 +124,7 @@ export async function uploadBillAttachment(
   });
   if (idempotent) {
     if (idempotent.organizationId !== actor.organizationId || idempotent.billId !== billId) throw new ConflictError("Upload token ถูกใช้งานแล้ว");
-    const duplicateCount = await prisma.billAttachment.count({ where: { organizationId: actor.organizationId, checksum: idempotent.checksum } });
+    const duplicateCount = await countDuplicates(actor, idempotent.checksum);
     return attachmentDto(idempotent, duplicateCount);
   }
 
@@ -247,7 +247,7 @@ export async function uploadBillAttachment(
       });
       return row;
     });
-    const duplicateCount = await prisma.billAttachment.count({ where: { organizationId: actor.organizationId, checksum: created.checksum } });
+    const duplicateCount = await countDuplicates(actor, created.checksum);
     return attachmentDto(created, duplicateCount);
   } catch (error) {
     try {
@@ -262,6 +262,25 @@ export async function uploadBillAttachment(
   }
 }
 
+/**
+ * ขอบเขตการนับรูปซ้ำ
+ *
+ * ทุกเส้นทางต้องใช้ตัวเดียวกัน ไม่งั้นรูปใบเดียวกันได้ตัวเลขต่างกันตามว่า
+ * ผู้ใช้เห็นมันตอนอัปโหลดหรือตอนเปิดหน้าใหม่ และ Agent จะรู้ว่ามีตัวแทน
+ * คนอื่นถือรูปเดียวกันอยู่ ทั้งที่มองข้ามตัวแทนไม่ได้
+ *
+ * ใช้ billScope แทนการเขียนเงื่อนไข agentId เอง เพราะเป็นตัวที่ระบบใช้ร่วมกัน
+ * และมีเทสคุมอยู่แล้ว การคัดลอกเงื่อนไขไปไว้หลายที่คือสาเหตุที่มันเพี้ยนกัน
+ */
+function duplicateScope(actor: Actor): Prisma.BillAttachmentWhereInput {
+  return { organizationId: actor.organizationId, bill: billScope(actor) };
+}
+
+/** จำนวนรูปที่ checksum ตรงกัน เฉพาะในขอบเขตที่ผู้ใช้คนนี้มองเห็น */
+async function countDuplicates(actor: Actor, checksum: string): Promise<number> {
+  return prisma.billAttachment.count({ where: { ...duplicateScope(actor), checksum } });
+}
+
 export async function listBillAttachments(actor: Actor, billId: string) {
   requirePermission(actor, "evidence.view");
   await visibleBill(actor, billId);
@@ -273,11 +292,7 @@ export async function listBillAttachments(actor: Actor, billId: string) {
   const checksums = [...new Set(rows.map((row) => row.checksum))];
   const counts = checksums.length === 0 ? [] : await prisma.billAttachment.groupBy({
     by: ["checksum"],
-    where: {
-      organizationId: actor.organizationId,
-      checksum: { in: checksums },
-      ...(actor.role === "AGENT" ? { bill: { agentId: actor.agentId ?? "__no_agent__" } } : {}),
-    },
+    where: { ...duplicateScope(actor), checksum: { in: checksums } },
     _count: { _all: true },
   });
   const countByChecksum = new Map(counts.map((row) => [row.checksum, row._count._all]));
@@ -288,11 +303,7 @@ export async function listBillAttachments(actor: Actor, billId: string) {
 export async function duplicateEvidenceHistory(actor: Actor, attachmentId: string) {
   const attachment = await attachmentForActor(actor, attachmentId);
   return prisma.billAttachment.findMany({
-    where: {
-      organizationId: actor.organizationId,
-      checksum: attachment.checksum,
-      ...(actor.role === "AGENT" ? { bill: { agentId: actor.agentId ?? "__no_agent__" } } : {}),
-    },
+    where: { ...duplicateScope(actor), checksum: attachment.checksum },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,

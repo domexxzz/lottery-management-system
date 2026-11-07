@@ -5,6 +5,8 @@ import { freshFixtures, type Fixtures } from "@/test/fixtures";
 import { createDraftBill, confirmBill, replaceDraftItems } from "@/lib/bills/service";
 import {
   deleteDraftAttachment,
+  duplicateEvidenceHistory,
+  listBillAttachments,
   reviewAttachment,
   signedAttachmentUrl,
   uploadBillAttachment,
@@ -175,5 +177,71 @@ describe("private bill evidence with real MinIO", () => {
     await confirmBill(f.actors.AGENT1, billId);
     await expect(deleteDraftAttachment(f.actors.AGENT1, first.id)).rejects.toThrow(/บิลยังเป็นร่าง/);
     await expect(reviewAttachment(f.actors.AGENT1, first.id, "VERIFIED")).rejects.toThrow(/ไม่มีสิทธิ์/);
+  });
+});
+
+/*
+ * การนับรูปซ้ำต้องให้ตัวเลขเดียวกันทุกเส้นทาง
+ *
+ * เส้นทางตอนอัปโหลดเคยนับข้ามทั้งองค์กรโดยไม่กรอง Agent ต่างจากตอนเปิดหน้าใหม่
+ * รูปใบเดียวกันจึงขึ้นเลขต่างกันแล้วแต่ว่าดูตอนไหน และ Agent รู้ว่ามีตัวแทน
+ * คนอื่นถือรูปเดียวกันอยู่ ทั้งที่กฎขอบเขตห้ามมองข้ามตัวแทน
+ */
+describe("นับรูปซ้ำตามขอบเขตที่มองเห็น", () => {
+  async function sameImageOnBothAgents() {
+    const bytes = await image("#7711aa");
+
+    const mine = await createDraftBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ของฉัน" });
+    await replaceDraftItems(f.actors.AGENT1, mine.billId, [
+      { prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" },
+    ]);
+    const theirs = await createDraftBill(f.actors.AGENT2, { drawId: f.draw.id, title: "ของคนอื่น" });
+    await replaceDraftItems(f.actors.AGENT2, theirs.billId, [
+      { prizeTypeId: f.prizeTypes.threeTop.id, number: "456", stake: "10" },
+    ]);
+
+    await uploadBillAttachment(f.actors.AGENT2, theirs.billId, {
+      type: "ORDER_EVIDENCE", fileName: "a.png", declaredMimeType: "image/png",
+      bytes, idempotencyKey: crypto.randomUUID(),
+    });
+    const uploaded = await uploadBillAttachment(f.actors.AGENT1, mine.billId, {
+      type: "ORDER_EVIDENCE", fileName: "b.png", declaredMimeType: "image/png",
+      bytes, idempotencyKey: crypto.randomUUID(),
+    });
+    return { billId: mine.billId, uploaded };
+  }
+
+  test("Agent ไม่เห็นว่าตัวแทนคนอื่นถือรูปเดียวกัน และตัวเลขไม่เปลี่ยนตอนเปิดหน้าใหม่", async () => {
+    const { billId, uploaded } = await sameImageOnBothAgents();
+
+    // ตอนอัปโหลดต้องไม่นับใบของ AGENT2
+    expect(uploaded.duplicateCount).toBe(1);
+
+    // เปิดหน้าใหม่ต้องได้เลขเดิม ไม่ใช่เลขที่กระโดดเพราะคนละเส้นทาง
+    const listed = await listBillAttachments(f.actors.AGENT1, billId);
+    expect(listed[0]!.duplicateCount).toBe(uploaded.duplicateCount);
+
+    // ประวัติก็ต้องไม่โผล่ใบของตัวแทนคนอื่น
+    const history = await duplicateEvidenceHistory(f.actors.AGENT1, uploaded.id);
+    expect(history).toHaveLength(1);
+  });
+
+  test("Owner เห็นครบทั้งองค์กร เพราะเป็นคนตรวจว่ามีการเวียนรูปซ้ำ", async () => {
+    const { billId, uploaded } = await sameImageOnBothAgents();
+
+    const listed = await listBillAttachments(f.actors.OWNER, billId);
+    expect(listed[0]!.duplicateCount).toBe(2);
+
+    const history = await duplicateEvidenceHistory(f.actors.OWNER, uploaded.id);
+    expect(history).toHaveLength(2);
+  });
+
+  test("รูปคนละใบไม่ถูกนับรวมกัน", async () => {
+    const billId = await draft();
+    const uploaded = await uploadBillAttachment(f.actors.AGENT1, billId, {
+      type: "ORDER_EVIDENCE", fileName: "only.png", declaredMimeType: "image/png",
+      bytes: await image("#0a7f4f"), idempotencyKey: crypto.randomUUID(),
+    });
+    expect(uploaded.duplicateCount).toBe(1);
   });
 });
