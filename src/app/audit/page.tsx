@@ -13,6 +13,14 @@ const DATE_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeSt
 const RESULT_LABEL: Record<ResultStatus, string> = { DRAFT: "รอตรวจ", APPROVED: "ตรวจแล้ว", REJECTED: "ตีกลับ" };
 function first(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] : value; }
 
+/*
+ * ทุกหน้าในแอปนี้ผูกกับ session ของผู้ใช้ จึงต้องไม่ถูกทำเป็น static
+ *
+ * นอกจากเรื่องความถูกต้องแล้ว ยังตัดงาน static generation ตอน build ออกด้วย
+ * ซึ่งเป็นขั้นที่กินหน่วยความจำจนถูก OOM killer ฆ่าบนเครื่อง build ขนาดเล็ก
+ */
+export const dynamic = "force-dynamic";
+
 export default async function InspectionHistoryPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await getActor();
   if (!actor) redirect("/login");
