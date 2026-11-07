@@ -177,8 +177,12 @@ image นั้นจึงรัน `prisma migrate deploy` ไม่ได้ 
 
 ## NODE_ENV ต้องเป็น production ตอน build ไม่งั้นพัง
 
-`buildCommand` ขึ้นต้นด้วย `export NODE_ENV=production` และทุกบริการยังตั้ง
-`NODE_ENV` ไว้ที่ตัวมันเองซ้ำกับในกลุ่มอีกชั้น ทั้งสองอย่างไม่ใช่ของฟุ่มเฟือย
+การบังคับค่านี้อยู่ใน **`scripts/build.mjs`** ซึ่ง `npm run build` เรียกใช้
+ตั้งไว้ในโค้ดโดยตั้งใจ เพราะถ้าไปตั้งใน `render.yaml` อย่างเดียว ค่าจะไม่มีผล
+จนกว่าผู้ให้บริการจะ sync ไฟล์นั้นสำเร็จ ส่วนโค้ดใน repo มีผลทุกครั้งที่ build
+
+`buildCommand` ยัง `export NODE_ENV=production` และทุกบริการยังตั้ง `NODE_ENV`
+ไว้ที่ตัวมันเองซ้ำอีกชั้น ทั้งหมดนี้ไม่ใช่ของฟุ่มเฟือย
 
 เมื่อ `NODE_ENV` ไม่ใช่ production ตอน build Next จะหยิบ React ตัว development
 มาใช้ แล้ว prerender จะล้มด้วย
