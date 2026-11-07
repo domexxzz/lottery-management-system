@@ -38,31 +38,36 @@ export type DrawSummary = {
   pendingSettlement: boolean;
 };
 
-export async function drawSummary(actor: Actor, drawId: string): Promise<DrawSummary> {
+export async function drawSummary(actor: Actor, drawId?: string): Promise<DrawSummary> {
   requirePermission(actor, "bill.viewOwn");
 
-  const draw = await prisma.draw.findFirst({
+  const draw = drawId ? await prisma.draw.findFirst({
     where: { id: drawId, ...orgScope(actor) },
     select: { id: true, name: true, status: true },
-  });
-  if (!draw) throw new NotFoundError("ไม่พบรอบ");
+  }) : null;
+  if (drawId && !draw) throw new NotFoundError("ไม่พบรอบ");
 
-  const where = { ...reportScope(actor), drawId: draw.id, status: { in: COUNTED_STATUSES } };
+  const where: Prisma.BillWhereInput = {
+    ...reportScope(actor),
+    ...(draw ? { drawId: draw.id } : {}),
+    status: { in: COUNTED_STATUSES },
+  };
 
-  const [billAgg, itemAgg, settlements] = await Promise.all([
+  const [billAgg, itemAgg, billDraws, settlements] = await Promise.all([
     prisma.bill.aggregate({
       where,
       _count: { _all: true },
       _sum: { totalStake: true, totalPayout: true },
     }),
     prisma.billItem.aggregate({ where: { bill: where }, _count: { _all: true } }),
+    prisma.bill.findMany({ where, distinct: ["drawId"], select: { drawId: true } }),
     prisma.settlement.findMany({
       where: {
-        drawId: draw.id,
         ...orgScope(actor),
+        ...(draw ? { drawId: draw.id } : {}),
         ...(actor.role === "AGENT" && { agentId: actor.agentId ?? "__no_agent__" }),
       },
-      select: { commission: true, net: true },
+      select: { drawId: true, commission: true, net: true },
     }),
   ]);
 
@@ -71,21 +76,27 @@ export async function drawSummary(actor: Actor, drawId: string): Promise<DrawSum
   const commission = sumMoney(settlements.map((s) => s.commission));
   const net = sumMoney(settlements.map((s) => s.net));
 
+  const settledDrawIds = new Set(settlements.map((settlement) => settlement.drawId));
+  const pendingSettlement = draw
+    ? settlements.length === 0
+    : billDraws.some((bill) => !settledDrawIds.has(bill.drawId));
+
   return {
-    drawId: draw.id,
-    drawName: draw.name,
-    drawStatus: draw.status,
+    drawId: draw?.id ?? "all",
+    drawName: draw?.name ?? "ทุกรอบ",
+    drawStatus: draw?.status ?? "ALL",
     billCount: billAgg._count._all,
     itemCount: itemAgg._count._all,
     gross,
     payout,
     commission,
     net,
-    pendingSettlement: settlements.length === 0,
+    pendingSettlement,
   };
 }
 
 export type AgentRow = {
+  agentId: string;
   agentCode: string;
   agentName: string;
   billCount: number;
@@ -96,11 +107,11 @@ export type AgentRow = {
 };
 
 /** รายงานแยกตาม Agent (LOT-27) */
-export async function byAgent(actor: Actor, drawId: string): Promise<AgentRow[]> {
+export async function byAgent(actor: Actor, drawId?: string): Promise<AgentRow[]> {
   requirePermission(actor, "bill.viewOwn");
 
   const bills = await prisma.bill.findMany({
-    where: { ...reportScope(actor), drawId, status: { in: COUNTED_STATUSES } },
+    where: { ...reportScope(actor), ...(drawId ? { drawId } : {}), status: { in: COUNTED_STATUSES } },
     select: {
       agentId: true,
       totalStake: true,
@@ -111,13 +122,19 @@ export async function byAgent(actor: Actor, drawId: string): Promise<AgentRow[]>
 
   const settlements = await prisma.settlement.findMany({
     where: {
-      drawId,
       ...orgScope(actor),
+      ...(drawId ? { drawId } : {}),
       ...(actor.role === "AGENT" && { agentId: actor.agentId ?? "__no_agent__" }),
     },
     select: { agentId: true, commission: true, net: true },
   });
-  const settlementByAgent = new Map(settlements.map((s) => [s.agentId, s]));
+  const settlementByAgent = new Map<string, { commissions: Prisma.Decimal[]; nets: Prisma.Decimal[] }>();
+  for (const settlement of settlements) {
+    const bucket = settlementByAgent.get(settlement.agentId) ?? { commissions: [], nets: [] };
+    bucket.commissions.push(settlement.commission);
+    bucket.nets.push(settlement.net);
+    settlementByAgent.set(settlement.agentId, bucket);
+  }
 
   const buckets = new Map<
     string,
@@ -139,13 +156,14 @@ export async function byAgent(actor: Actor, drawId: string): Promise<AgentRow[]>
     .map(([agentId, b]) => {
       const settlement = settlementByAgent.get(agentId);
       return {
+        agentId,
         agentCode: b.code,
         agentName: b.name,
         billCount: b.bills,
         gross: sumMoney(b.stakes),
         payout: sumMoney(b.payouts),
-        commission: settlement?.commission ?? ZERO,
-        net: settlement?.net ?? ZERO,
+        commission: sumMoney(settlement?.commissions ?? []),
+        net: sumMoney(settlement?.nets ?? []),
       };
     })
     .sort((a, b) => a.agentCode.localeCompare(b.agentCode));
@@ -161,12 +179,12 @@ export type PrizeTypeRow = {
 };
 
 /** รายงานแยกตามประเภทรางวัล 1 ถึง 16 (LOT-30) */
-export async function byPrizeType(actor: Actor, drawId: string): Promise<PrizeTypeRow[]> {
+export async function byPrizeType(actor: Actor, drawId?: string): Promise<PrizeTypeRow[]> {
   requirePermission(actor, "bill.viewOwn");
 
   const items = await prisma.billItem.findMany({
     where: {
-      bill: { ...reportScope(actor), drawId, status: { in: COUNTED_STATUSES } },
+      bill: { ...reportScope(actor), ...(drawId ? { drawId } : {}), status: { in: COUNTED_STATUSES } },
     },
     select: {
       stake: true,
@@ -213,6 +231,7 @@ export type BillSearchFilter = {
   drawId?: string | undefined;
   agentId?: string | undefined;
   status?: BillStatus | undefined;
+  winnerOnly?: boolean | undefined;
 };
 
 /**
@@ -238,6 +257,7 @@ export async function searchBills(actor: Actor, filter: BillSearchFilter) {
       ...agentFilter,
       ...(filter.drawId !== undefined && { drawId: filter.drawId }),
       ...(filter.status !== undefined && { status: filter.status }),
+      ...(filter.winnerOnly && { totalPayout: { gt: 0 } }),
       ...(query !== undefined &&
         query !== "" && {
           OR: [

@@ -38,6 +38,7 @@ export async function createDrawAction(
   }
 
   revalidatePath("/draws");
+  revalidatePath("/draws/all");
   return { error: null, message: "สร้างรอบแล้ว" };
 }
 
@@ -51,6 +52,7 @@ export async function lockDrawAction(
   try {
     const outcome = await lockDrawManually(actor, drawId);
     revalidatePath("/draws");
+    revalidatePath("/draws/all");
     return {
       error: null,
       message: `ปิดรอบ "${outcome.drawName}" แล้ว · ล็อกบิล ${outcome.billsLocked} ใบ · ยกเลิกร่างค้าง ${outcome.draftsCancelled} ใบ`,

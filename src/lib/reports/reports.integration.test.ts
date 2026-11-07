@@ -50,7 +50,7 @@ async function settledDraw() {
     await enterResult(f.actors.ADMIN, { drawId: f.draw.id, ...v });
   }
   for (const d of await prisma.result.findMany({ where: { drawId: f.draw.id, status: "DRAFT" } })) {
-    await approveResult(f.actors.CHECKER, d.id);
+    await approveResult(f.actors.ADMIN, d.id);
   }
 
   return calculateSettlement(f.actors.ADMIN, f.draw.id);
@@ -105,6 +105,60 @@ describe("รายงานตรงกับ Settlement", () => {
 
     // 3 ตัวโต๊ด: A1 แทง 999 ไม่ใช่โต๊ดของ 123
     expect(byCode.get(2)!.winnerCount).toBe(0);
+  });
+
+  test("ตัวกรองทุกรอบรวมยอดและ Settlement ของ Agent จากหลายรอบ", async () => {
+    await settledDraw();
+    const firstSummary = await drawSummary(f.actors.OWNER, f.draw.id);
+    const secondDraw = await prisma.draw.create({
+      data: {
+        organizationId: f.org.id,
+        name: "งวดทดสอบรอบสอง",
+        opensAt: new Date("2026-01-01T00:00:00.000Z"),
+        cutoffAt: new Date("2026-01-02T00:00:00.000Z"),
+        status: "CLOSED",
+      },
+    });
+    await prisma.bill.create({
+      data: {
+        organizationId: f.org.id,
+        agentId: f.agents.agent1.id,
+        drawId: secondDraw.id,
+        billNumber: "ALL-SECOND-001",
+        title: "ลูกค้ารอบสอง",
+        status: "SETTLED",
+        totalStake: "50",
+        totalPayout: "5",
+        createdById: f.users.agentUser1.id,
+        confirmedAt: new Date(),
+      },
+    });
+    await prisma.settlement.create({
+      data: {
+        organizationId: f.org.id,
+        drawId: secondDraw.id,
+        agentId: f.agents.agent1.id,
+        gross: "50",
+        payout: "5",
+        commission: "10",
+        net: "35",
+        commissionRateSnapshot: "20",
+        status: "APPROVED",
+      },
+    });
+
+    const summary = await drawSummary(f.actors.OWNER);
+    const agents = await byAgent(f.actors.OWNER);
+    const agent1 = agents.find((row) => row.agentId === f.agents.agent1.id)!;
+
+    expect(summary.drawId).toBe("all");
+    expect(summary.drawName).toBe("ทุกรอบ");
+    expect(summary.gross.equals(firstSummary.gross.plus(50))).toBe(true);
+    expect(summary.payout.equals(firstSummary.payout.plus(5))).toBe(true);
+    expect(summary.commission.equals(firstSummary.commission.plus(10))).toBe(true);
+    expect(summary.net.equals(firstSummary.net.plus(35))).toBe(true);
+    expect(agent1.gross.greaterThanOrEqualTo(50)).toBe(true);
+    expect(agent1.commission.greaterThanOrEqualTo(10)).toBe(true);
   });
 });
 

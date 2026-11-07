@@ -43,7 +43,9 @@ export function LockDrawForm({ drawId }: { drawId: string }) {
   const [state, formAction, pending] = useActionState(lockDrawAction, INITIAL);
 
   return (
-    <form action={formAction}>
+    <form action={formAction} onSubmit={(event) => {
+      if (!window.confirm("ปิดรับรอบนี้และยกเลิกบิลร่างที่ค้างอยู่ใช่ไหม?")) event.preventDefault();
+    }}>
       <input type="hidden" name="drawId" value={drawId} />
       {state.error !== null && (
         <p className="error" role="alert">

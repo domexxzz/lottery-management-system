@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { NotFoundError, ValidationError } from "@/lib/errors";
+import { validatePrizeShape } from "@/lib/results/matching";
 
 /**
  * Rulebook ของรางวัล 1 ถึง 16
@@ -19,6 +20,8 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 export type PrizeTypeInput = {
   name: string;
   digits: string;
+  /** เว้นว่าง = เท่ากับ digits · รางวัลวิ่งต้องกรอก */
+  resultDigits: string;
   matchRule: MatchRule;
   payoutRate: string;
   maxStakePerItem: string;
@@ -45,6 +48,20 @@ function parseDigits(raw: string): number {
   const value = Number(raw);
   if (!Number.isInteger(value) || value < MIN_DIGITS || value > MAX_DIGITS) {
     throw new ValidationError(`จำนวนหลักต้องเป็นจำนวนเต็ม ${MIN_DIGITS} ถึง ${MAX_DIGITS}`);
+  }
+  return value;
+}
+
+/** เว้นว่าง = ใช้ค่าเดียวกับ digits ซึ่งถูกต้องสำหรับรางวัลที่เทียบเลขตรง */
+function parseOptionalResultDigits(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+
+  const value = Number(trimmed);
+  if (!Number.isInteger(value) || value < MIN_DIGITS || value > MAX_DIGITS) {
+    throw new ValidationError(
+      `จำนวนหลักของผลรางวัลต้องเป็นจำนวนเต็ม ${MIN_DIGITS} ถึง ${MAX_DIGITS} หรือเว้นว่าง`,
+    );
   }
   return value;
 }
@@ -76,6 +93,7 @@ export async function listPrizeTypes(actor: Actor) {
       code: true,
       name: true,
       digits: true,
+      resultDigits: true,
       matchRule: true,
       payoutRate: true,
       maxStakePerItem: true,
@@ -104,8 +122,13 @@ export async function updatePrizeType(
   }
 
   const digits = parseDigits(input.digits);
+  const resultDigits = parseOptionalResultDigits(input.resultDigits);
   const payoutRate = parsePayoutRate(input.payoutRate);
   const maxStakePerItem = parseOptionalLimit(input.maxStakePerItem);
+
+  // กันการตั้งค่าที่ทำให้รางวัลนั้นไม่มีทางถูกได้เลย หรือลงผลไม่ได้
+  const shapeProblem = validatePrizeShape({ digits, resultDigits, matchRule: input.matchRule });
+  if (shapeProblem) throw new ValidationError(shapeProblem);
 
   const existing = await prisma.prizeType.findFirst({
     where: { id: prizeTypeId, ...orgScope(actor) },
@@ -114,6 +137,7 @@ export async function updatePrizeType(
       code: true,
       name: true,
       digits: true,
+      resultDigits: true,
       matchRule: true,
       payoutRate: true,
       maxStakePerItem: true,
@@ -128,6 +152,7 @@ export async function updatePrizeType(
       data: {
         name,
         digits,
+        resultDigits,
         matchRule: input.matchRule,
         payoutRate,
         maxStakePerItem,
@@ -146,6 +171,7 @@ export async function updatePrizeType(
       before: {
         name: existing.name,
         digits: existing.digits,
+        resultDigits: existing.resultDigits,
         matchRule: existing.matchRule,
         payoutRate: existing.payoutRate.toFixed(4),
         maxStakePerItem: existing.maxStakePerItem?.toFixed(2) ?? null,
@@ -154,6 +180,7 @@ export async function updatePrizeType(
       after: {
         name,
         digits,
+        resultDigits,
         matchRule: input.matchRule,
         payoutRate: payoutRate.toFixed(4),
         maxStakePerItem: maxStakePerItem?.toFixed(2) ?? null,

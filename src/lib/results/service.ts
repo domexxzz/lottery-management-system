@@ -3,15 +3,17 @@ import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateResultValue } from "./matching";
+import {
+  canCorrectInDrawStatus,
+  correctionInvalidatesSettlement,
+  shouldApproveResultOnEntry,
+} from "./policy";
 
 /**
- * ลงผลรางวัลแบบ Maker-Checker (LOT-10, LOT-11)
+ * ลงผลรางวัลแบบ One-step review
  *
- * Maker กรอกผลเป็น Draft · Checker อนุมัติหรือตีกลับ
- * ผลที่ยังไม่ Approved จะไม่ถูกนำไปคำนวณเงิน
- *
- * ระบบบังคับว่า Maker กับ Checker ของผลใบเดียวกันต้องเป็นคนละคน
- * แม้ Owner จะมีสิทธิ์ทั้งสองอย่างก็ทำคนเดียวทั้งกระบวนการไม่ได้
+ * Admin/Owner บันทึกและยืนยันผลในครั้งเดียว ลดขั้นตอนตรวจซ้ำ
+ * ฟังก์ชัน approve/reject ยังรองรับ DRAFT เก่าที่อาจค้างจากระบบเวอร์ชันก่อน
  */
 
 export async function listResults(actor: Actor, drawId: string) {
@@ -19,7 +21,7 @@ export async function listResults(actor: Actor, drawId: string) {
 
   const draw = await prisma.draw.findFirst({
     where: { id: drawId, ...orgScope(actor) },
-    select: { id: true, name: true, status: true },
+    select: { id: true, name: true, status: true, cutoffAt: true },
   });
   if (!draw) throw new NotFoundError("ไม่พบรอบ");
 
@@ -27,7 +29,14 @@ export async function listResults(actor: Actor, drawId: string) {
     prisma.prizeType.findMany({
       where: { ...orgScope(actor), isActive: true },
       orderBy: { code: "asc" },
-      select: { id: true, code: true, name: true, digits: true, matchRule: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        digits: true,
+        resultDigits: true,
+        matchRule: true,
+      },
     }),
     prisma.result.findMany({
       where: { drawId: draw.id, ...orgScope(actor) },
@@ -49,19 +58,180 @@ export async function listResults(actor: Actor, drawId: string) {
 
   // แสดงเฉพาะ version ล่าสุดของแต่ละประเภทรางวัล
   const latest = new Map<string, (typeof results)[number]>();
+  // ผลที่มีผลบังคับอยู่จริง ซึ่งอาจไม่ใช่ version ล่าสุดเมื่อมีคำขอแก้ค้างอยู่
+  // หน้าจอต้องแยกสองอย่างนี้ ไม่งั้นคำขอแก้ที่ยังไม่อนุมัติจะทำให้ช่องกรอกผลเปิดอีกครั้ง
+  const approved = new Map<string, (typeof results)[number]>();
   for (const r of results) {
     if (!latest.has(r.prizeTypeId)) latest.set(r.prizeTypeId, r);
+    if (r.status === "APPROVED" && !approved.has(r.prizeTypeId)) {
+      approved.set(r.prizeTypeId, r);
+    }
   }
 
-  return { draw, prizeTypes, latestByPrizeType: latest };
+  return {
+    draw,
+    prizeTypes,
+    latestByPrizeType: latest,
+    approvedByPrizeType: approved,
+  };
 }
 
-/** Maker กรอกผล — สร้าง version ใหม่เสมอ ไม่ทับของเดิม เพื่อให้ตรวจย้อนหลังได้ */
+export type BatchResultInput = { prizeTypeId: string; value: string };
+
+/** บันทึกผลหลายรางวัลใน transaction เดียว — ถ้าแถวใดผิดจะไม่บันทึกทุกแถว */
+export async function enterResultsBatch(
+  actor: Actor,
+  input: { drawId: string; results: BatchResultInput[] },
+): Promise<{ autoApproved: boolean; count: number }> {
+  requirePermission(actor, "result.enter");
+
+  if (input.results.length === 0) throw new ValidationError("กรุณากรอกผลอย่างน้อย 1 รายการ");
+  if (input.results.length > 50) throw new ValidationError("บันทึกผลได้ไม่เกิน 50 รายการต่อครั้ง");
+  const prizeTypeIds = input.results.map((result) => result.prizeTypeId);
+  if (new Set(prizeTypeIds).size !== prizeTypeIds.length) {
+    throw new ValidationError("มีประเภทรางวัลซ้ำในคำขอ");
+  }
+
+  const [draw, prizeType] = await Promise.all([
+    prisma.draw.findFirst({
+      where: { id: input.drawId, ...orgScope(actor) },
+      select: { id: true, status: true },
+    }),
+    prisma.prizeType.findMany({
+      where: { id: { in: prizeTypeIds }, ...orgScope(actor) },
+      select: {
+        id: true,
+        code: true,
+        digits: true,
+        resultDigits: true,
+        matchRule: true,
+        isActive: true,
+      },
+    }),
+  ]);
+
+  if (!draw) throw new NotFoundError("ไม่พบรอบ");
+  if (prizeType.length !== input.results.length) throw new NotFoundError("ไม่พบประเภทรางวัลบางรายการ");
+
+  // ลงผลได้เฉพาะรอบที่ปิดรับแล้ว เพื่อไม่ให้ผลรั่วก่อนปิดรับ
+  if (draw.status !== "LOCKED" && draw.status !== "RESULT_PENDING") {
+    throw new ConflictError("ลงผลได้เฉพาะรอบที่ปิดรับแล้วและยังไม่ปิดบัญชี");
+  }
+
+  const prizeTypeById = new Map(prizeType.map((item) => [item.id, item]));
+  const validated = input.results.map((result) => {
+    const type = prizeTypeById.get(result.prizeTypeId);
+    if (!type) throw new NotFoundError("ไม่พบประเภทรางวัล");
+    if (!type.isActive) throw new ConflictError(`รางวัล ${type.code} ถูกปิดใช้งานแล้ว`);
+    const value = result.value.trim();
+    const problem = validateResultValue({
+      value,
+      digits: type.digits,
+      resultDigits: type.resultDigits,
+      matchRule: type.matchRule,
+    });
+    if (problem) throw new ValidationError(`รางวัล ${type.code}: ${problem}`);
+    return { prizeTypeId: type.id, value };
+  });
+
+  return prisma.$transaction(async (tx) => {
+    const autoApproved = shouldApproveResultOnEntry(actor.role);
+    const now = new Date();
+    for (const result of validated) {
+      const previous = await tx.result.findFirst({
+        where: { drawId: draw.id, prizeTypeId: result.prizeTypeId },
+        orderBy: { version: "desc" },
+        select: { version: true, status: true, value: true },
+      });
+      // ตรวจทุก version ไม่ใช่เฉพาะตัวล่าสุด มิฉะนั้นคำขอแก้ผลที่ยังเป็น DRAFT
+      // จะกลายเป็นช่องให้กรอกผลทับแบบอนุมัติทันที ข้ามด่านสองคนไปเลย
+      const approvedAlready = await tx.result.findFirst({
+        where: { drawId: draw.id, prizeTypeId: result.prizeTypeId, status: "APPROVED" },
+        select: { id: true },
+      });
+      if (approvedAlready) {
+        // การกรอกผลใช้สำหรับผลที่ยังไม่ประกาศเท่านั้น
+        // ผลที่อนุมัติแล้วถูกใช้คำนวณเงินไปแล้ว ต้องแก้ผ่านด่านสองคน
+        throw new ConflictError(
+          "มีผลบางรางวัลได้รับการอนุมัติแล้ว การแก้ผลที่ประกาศแล้วต้องใช้การเสนอแก้ผลซึ่ง Owner เป็นผู้อนุมัติ",
+        );
+      }
+      const created = await tx.result.create({
+        data: {
+          organizationId: actor.organizationId,
+          drawId: draw.id,
+          prizeTypeId: result.prizeTypeId,
+          value: result.value,
+          version: (previous?.version ?? 0) + 1,
+          status: autoApproved ? "APPROVED" : "DRAFT",
+          makerId: actor.userId,
+          checkerId: autoApproved ? actor.userId : null,
+          checkedAt: autoApproved ? now : null,
+        },
+        select: { id: true, value: true, version: true },
+      });
+      await writeAudit(tx, {
+        organizationId: actor.organizationId,
+        actorId: actor.userId,
+        requestId: actor.requestId,
+        ipAddress: actor.ipAddress,
+        action: "CREATE",
+        entityType: "Result",
+        entityId: created.id,
+        before: previous ? { value: previous.value, version: previous.version } : undefined,
+        after: { value: created.value, version: created.version, status: autoApproved ? "APPROVED" : "DRAFT" },
+      });
+      if (autoApproved) {
+        await writeAudit(tx, {
+          organizationId: actor.organizationId,
+          actorId: actor.userId,
+          requestId: actor.requestId,
+          ipAddress: actor.ipAddress,
+          action: "APPROVE",
+          entityType: "Result",
+          entityId: created.id,
+          before: { status: previous?.status ?? null, previousVersion: previous?.version ?? null },
+          after: { status: "APPROVED", value: created.value, version: created.version },
+          reason: "บันทึกและยืนยันผลในขั้นตอนเดียว",
+        });
+      }
+    }
+    if (draw.status === "LOCKED") {
+      await tx.draw.update({ where: { id: draw.id }, data: { status: "RESULT_PENDING" } });
+    }
+    return { autoApproved, count: validated.length };
+  });
+}
+
+/** รองรับ Action เดิมที่บันทึกทีละรางวัล โดยใช้ transaction path เดียวกับ batch */
 export async function enterResult(
   actor: Actor,
   input: { drawId: string; prizeTypeId: string; value: string },
-): Promise<void> {
-  requirePermission(actor, "result.enter");
+): Promise<{ autoApproved: boolean }> {
+  const result = await enterResultsBatch(actor, {
+    drawId: input.drawId,
+    results: [{ prizeTypeId: input.prizeTypeId, value: input.value }],
+  });
+  return { autoApproved: result.autoApproved };
+}
+
+/**
+ * เสนอแก้ผลรางวัลที่ประกาศไปแล้ว (LOT-36)
+ *
+ * ไม่เขียนทับผลเดิมและไม่ลบทิ้ง แต่สร้าง version ถัดไปในสถานะ DRAFT
+ * ผลเดิมยังเป็นผลที่มีผลบังคับจนกว่า Owner จะอนุมัติตัวใหม่
+ * ดังนั้นการเสนอแก้เพียงอย่างเดียวไม่กระทบตัวเลขการเงินใด ๆ
+ *
+ * ผู้เสนอกับผู้อนุมัติต้องเป็นคนละคน ด่านนี้บังคับตอนอนุมัติใน approveResult
+ */
+export async function proposeResultCorrection(
+  actor: Actor,
+  input: { drawId: string; prizeTypeId: string; value: string; reason: string },
+): Promise<{ resultId: string; version: number }> {
+  requirePermission(actor, "result.proposeCorrection");
+
+  const reason = input.reason.trim();
+  if (reason === "") throw new ValidationError("ต้องระบุเหตุผลที่ขอแก้ผลรางวัล");
 
   const [draw, prizeType] = await Promise.all([
     prisma.draw.findFirst({
@@ -70,39 +240,55 @@ export async function enterResult(
     }),
     prisma.prizeType.findFirst({
       where: { id: input.prizeTypeId, ...orgScope(actor) },
-      select: { id: true, digits: true, matchRule: true, isActive: true },
+      select: { id: true, code: true, digits: true, resultDigits: true, matchRule: true },
     }),
   ]);
 
   if (!draw) throw new NotFoundError("ไม่พบรอบ");
   if (!prizeType) throw new NotFoundError("ไม่พบประเภทรางวัล");
-  if (!prizeType.isActive) throw new ConflictError("ประเภทรางวัลนี้ถูกปิดใช้งานแล้ว");
-
-  // ลงผลได้เฉพาะรอบที่ปิดรับแล้ว เพื่อไม่ให้ผลรั่วก่อนปิดรับ
-  if (draw.status !== "LOCKED" && draw.status !== "RESULT_PENDING") {
-    throw new ConflictError("ลงผลได้เฉพาะรอบที่ปิดรับแล้วและยังไม่ปิดบัญชี");
+  if (!canCorrectInDrawStatus(draw.status)) {
+    throw new ConflictError("รอบนี้ปิดบัญชีแล้ว แก้ผลรางวัลไม่ได้");
   }
 
   const value = input.value.trim();
   const problem = validateResultValue({
     value,
     digits: prizeType.digits,
+    resultDigits: prizeType.resultDigits,
     matchRule: prizeType.matchRule,
   });
-  if (problem) throw new ValidationError(problem);
+  if (problem) throw new ValidationError(`รางวัล ${prizeType.code}: ${problem}`);
 
-  await prisma.$transaction(async (tx) => {
-    const previous = await tx.result.findFirst({
+  return prisma.$transaction(async (tx) => {
+    // ถามทีละคำถาม ไม่ใช้ Promise.all บน tx เดียวกัน
+    // เพราะ transaction client ถือ connection เดียว การยิงพร้อมกันทำให้คิวรีซ้อนกัน
+    const pending = await tx.result.findFirst({
+      where: { drawId: draw.id, prizeTypeId: prizeType.id, status: "DRAFT" },
+      select: { id: true },
+    });
+    // ผลที่มีผลบังคับอยู่ขณะนี้ — ไม่ใช่ version ล่าสุด เพราะ version ล่าสุด
+    // อาจเป็นคำขอที่เพิ่งถูกตีกลับไป ซึ่งต้องเสนอใหม่ได้
+    const approved = await tx.result.findFirst({
+      where: { drawId: draw.id, prizeTypeId: prizeType.id, status: "APPROVED" },
+      orderBy: { version: "desc" },
+      select: { id: true, version: true, value: true },
+    });
+    const newest = await tx.result.findFirst({
       where: { drawId: draw.id, prizeTypeId: prizeType.id },
       orderBy: { version: "desc" },
-      select: { version: true, status: true, value: true },
+      select: { version: true },
     });
 
-    if (previous?.status === "APPROVED") {
-      throw new ConflictError(
-        "ผลของรางวัลนี้ได้รับการอนุมัติแล้ว การแก้ผลหลังอนุมัติต้องกำหนดขั้นตอนเพิ่ม (LOT-36)",
-      );
+    if (pending) {
+      throw new ConflictError("มีคำขอแก้ผลของรางวัลนี้ค้างอยู่แล้ว รอการอนุมัติหรือตีกลับก่อน");
     }
+    if (!approved || !newest) {
+      throw new ConflictError("รางวัลนี้ยังไม่มีผลที่อนุมัติแล้ว ใช้การลงผลตามปกติแทน");
+    }
+    if (approved.value === value) {
+      throw new ValidationError("ค่าที่เสนอตรงกับผลเดิม ไม่มีอะไรต้องแก้");
+    }
+    const previous = { version: newest.version, value: approved.value };
 
     const created = await tx.result.create({
       data: {
@@ -110,16 +296,13 @@ export async function enterResult(
         drawId: draw.id,
         prizeTypeId: prizeType.id,
         value,
-        version: (previous?.version ?? 0) + 1,
+        version: previous.version + 1,
+        // DRAFT เสมอ แม้ผู้เสนอจะเป็น Owner — การแก้ผลไม่มีทางลัดขั้นตอนเดียว
         status: "DRAFT",
         makerId: actor.userId,
       },
-      select: { id: true, value: true, version: true },
+      select: { id: true, version: true },
     });
-
-    if (draw.status === "LOCKED") {
-      await tx.draw.update({ where: { id: draw.id }, data: { status: "RESULT_PENDING" } });
-    }
 
     await writeAudit(tx, {
       organizationId: actor.organizationId,
@@ -129,9 +312,12 @@ export async function enterResult(
       action: "CREATE",
       entityType: "Result",
       entityId: created.id,
-      before: previous ? { value: previous.value, version: previous.version } : undefined,
-      after: { value: created.value, version: created.version, status: "DRAFT" },
+      before: { value: previous.value, version: previous.version, status: "APPROVED" },
+      after: { value, version: created.version, status: "DRAFT" },
+      reason: `เสนอแก้ผลที่ประกาศแล้ว: ${reason}`,
     });
+
+    return { resultId: created.id, version: created.version };
   });
 }
 
@@ -141,15 +327,84 @@ export async function approveResult(actor: Actor, resultId: string): Promise<voi
   await prisma.$transaction(async (tx) => {
     const result = await tx.result.findFirst({
       where: { id: resultId, ...orgScope(actor) },
-      select: { id: true, status: true, makerId: true, value: true, version: true },
+      select: {
+        id: true,
+        status: true,
+        makerId: true,
+        value: true,
+        version: true,
+        drawId: true,
+        prizeTypeId: true,
+      },
     });
 
     if (!result) throw new NotFoundError("ไม่พบผลรางวัล");
+    // รองรับ retry และปุ่มจากหน้าที่เปิดค้างก่อนระบบเปลี่ยนเป็น one-step
+    if (result.status === "APPROVED") return;
     if (result.status !== "DRAFT") throw new ConflictError("ผลนี้ถูกตรวจไปแล้ว");
 
-    // หัวใจของ Maker-Checker — คนกรอกกับคนอนุมัติต้องคนละคน
-    if (result.makerId === actor.userId) {
-      throw new ForbiddenError("ผู้กรอกผลกับผู้อนุมัติผลต้องไม่ใช่คนเดียวกัน");
+    // version แรกคือการลงผลครั้งแรก ซึ่งจบในขั้นตอนเดียวได้
+    // version ที่สูงกว่าคือการแก้ผลที่ประกาศไปแล้ว ต้องผ่านด่านสองคน
+    const superseded =
+      result.version > 1
+        ? await tx.result.findFirst({
+            where: {
+              drawId: result.drawId,
+              prizeTypeId: result.prizeTypeId,
+              status: "APPROVED",
+              version: { lt: result.version },
+            },
+            orderBy: { version: "desc" },
+            select: { id: true, value: true, version: true },
+          })
+        : null;
+
+    if (superseded) {
+      requirePermission(actor, "result.approveCorrection");
+      if (result.makerId === actor.userId) {
+        throw new ForbiddenError("ผู้เสนอแก้ผลกับผู้อนุมัติต้องไม่ใช่คนเดียวกัน");
+      }
+
+      const draw = await tx.draw.findUniqueOrThrow({
+        where: { id: result.drawId },
+        select: { id: true, status: true },
+      });
+      if (!canCorrectInDrawStatus(draw.status)) {
+        throw new ConflictError("รอบนี้ปิดบัญชีแล้ว แก้ผลรางวัลไม่ได้");
+      }
+
+      // ตัวเลขการเงินที่คำนวณไว้อ้างอิงผลเก่า จึงใช้ไม่ได้อีกตั้งแต่วินาทีนี้
+      // ล้างสถานะการตรวจสอบยอดและดึงรอบกลับไปรอคำนวณใหม่ในทรานแซกชันเดียวกัน
+      if (correctionInvalidatesSettlement(draw.status)) {
+        const reset = await tx.settlement.updateMany({
+          where: { drawId: draw.id },
+          data: {
+            status: "DRAFT",
+            reconciledById: null,
+            reconciledAt: null,
+            approvedById: null,
+            approvedAt: null,
+          },
+        });
+
+        await tx.draw.update({
+          where: { id: draw.id },
+          data: { status: "RESULT_PENDING" },
+        });
+
+        await writeAudit(tx, {
+          organizationId: actor.organizationId,
+          actorId: actor.userId,
+          requestId: actor.requestId,
+          ipAddress: actor.ipAddress,
+          action: "UPDATE",
+          entityType: "Draw",
+          entityId: draw.id,
+          before: { status: "SETTLED" },
+          after: { status: "RESULT_PENDING", settlementsReset: reset.count },
+          reason: "ผลรางวัลถูกแก้หลังคำนวณ ต้องคำนวณและตรวจสอบยอดใหม่",
+        });
+      }
     }
 
     await tx.result.update({
@@ -165,8 +420,11 @@ export async function approveResult(actor: Actor, resultId: string): Promise<voi
       action: "APPROVE",
       entityType: "Result",
       entityId: result.id,
-      before: { status: "DRAFT" },
+      before: superseded
+        ? { status: "DRAFT", supersedes: { value: superseded.value, version: superseded.version } }
+        : { status: "DRAFT" },
       after: { status: "APPROVED", value: result.value, version: result.version },
+      reason: superseded ? "อนุมัติการแก้ผลที่ประกาศแล้ว" : undefined,
     });
   });
 }
@@ -185,10 +443,6 @@ export async function rejectResult(actor: Actor, resultId: string, reason: strin
 
     if (!result) throw new NotFoundError("ไม่พบผลรางวัล");
     if (result.status !== "DRAFT") throw new ConflictError("ผลนี้ถูกตรวจไปแล้ว");
-    if (result.makerId === actor.userId) {
-      throw new ForbiddenError("ผู้กรอกผลกับผู้ตรวจผลต้องไม่ใช่คนเดียวกัน");
-    }
-
     await tx.result.update({
       where: { id: result.id },
       data: {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { AppDropdown } from "../AppDropdown";
 import { updatePrizeTypeAction, type ActionState } from "./actions";
 
 const INITIAL: ActionState = { error: null, message: null };
@@ -10,6 +11,8 @@ export type PrizeTypeRowData = {
   code: number;
   name: string;
   digits: number;
+  /** ว่าง = เท่ากับ digits */
+  resultDigits: string;
   matchRule: string;
   payoutRate: string;
   maxStakePerItem: string;
@@ -43,7 +46,16 @@ export function PrizeTypeRow({ data }: { data: PrizeTypeRowData }) {
             max={6}
             defaultValue={data.digits}
             required
-            aria-label={`จำนวนหลักของรางวัลที่ ${data.code}`}
+            aria-label={`จำนวนหลักของเลขที่แทงของรางวัลที่ ${data.code}`}
+          />
+          <input
+            name="resultDigits"
+            type="number"
+            min={1}
+            max={6}
+            defaultValue={data.resultDigits}
+            placeholder="ผล = เท่าเลขแทง"
+            aria-label={`จำนวนหลักของผลรางวัลที่ ${data.code}`}
           />
           <input
             name="payoutRate"
@@ -60,15 +72,12 @@ export function PrizeTypeRow({ data }: { data: PrizeTypeRowData }) {
             aria-label={`วงเงินต่อรายการของรางวัลที่ ${data.code}`}
           />
 
-          <select
+          <AppDropdown
             name="matchRule"
             defaultValue={data.matchRule}
-            aria-label={`วิธีตัดสินรางวัลที่ ${data.code}`}
-          >
-            <option value="EXACT">ตรงทุกหลัก</option>
-            <option value="PERMUTATION">โต๊ด</option>
-            <option value="CONTAINS_DIGIT">วิ่ง</option>
-          </select>
+            ariaLabel={`วิธีตัดสินรางวัลที่ ${data.code}`}
+            options={[{ value: "EXACT", label: "ตรงทุกหลัก" }, { value: "PERMUTATION", label: "โต๊ด" }, { value: "CONTAINS_DIGIT", label: "วิ่ง" }]}
+          />
 
           <label className="inline-check">
             <input type="checkbox" name="isActive" defaultChecked={data.isActive} />

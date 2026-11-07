@@ -45,7 +45,7 @@ function parseOptionalLimit(raw: string, label: string): Prisma.Decimal | null {
 }
 
 export async function listAgents(actor: Actor) {
-  requirePermission(actor, "agent.manage");
+  requirePermission(actor, "report.viewAllAgents");
 
   return prisma.agent.findMany({
     where: orgScope(actor),

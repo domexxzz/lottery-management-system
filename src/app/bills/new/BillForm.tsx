@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
+import { AppDropdown } from "../../AppDropdown";
 import { checkNumberField, checkRowComplete, checkStakeField } from "@/lib/bills/fieldChecks";
 import { createBillAction, type ActionState } from "../actions";
 
@@ -33,14 +34,7 @@ export function BillForm({
       stake: "",
     },
   ]);
-  const [agentSearch, setAgentSearch] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState("");
-  const [agentMenuOpen, setAgentMenuOpen] = useState(false);
-
-  const normalizedAgentSearch = agentSearch.trim().toLocaleLowerCase("th");
-  const filteredAgents = (agents ?? []).filter((agent) =>
-    `${agent.code} ${agent.name}`.toLocaleLowerCase("th").includes(normalizedAgentSearch),
-  );
 
   const digitsOf = (prizeTypeId: string) =>
     prizeTypes.find((p) => p.id === prizeTypeId)?.digits ?? 0;
@@ -86,65 +80,13 @@ export function BillForm({
 
       <label htmlFor="drawId">
         รอบ
-        <select id="drawId" name="drawId" required>
-          {draws.map((draw) => (
-            <option key={draw.id} value={draw.id}>
-              {draw.name} — ปิดรับ {draw.cutoffAt}
-            </option>
-          ))}
-        </select>
+        <AppDropdown id="drawId" name="drawId" defaultValue={draws[0]?.id ?? ""} required options={draws.map((draw) => ({ value: draw.id, label: draw.name, description: `ปิดรับ ${draw.cutoffAt}` }))} searchable={draws.length > 6} searchPlaceholder="ค้นหารอบ" />
       </label>
 
       {agents !== null && (
         <div className="agent-picker">
           <label htmlFor="agentSearch">Agent ที่เป็นเจ้าของบิล</label>
-          <input type="hidden" name="agentId" value={selectedAgentId} />
-          <input
-            id="agentSearch"
-            type="search"
-            value={agentSearch}
-            placeholder="ค้นหาด้วยรหัสหรือชื่อ Agent"
-            autoComplete="off"
-            role="combobox"
-            aria-expanded={agentMenuOpen}
-            aria-controls="agent-options"
-            aria-autocomplete="list"
-            onFocus={() => setAgentMenuOpen(true)}
-            onBlur={() => setAgentMenuOpen(false)}
-            onChange={(event) => {
-              setAgentSearch(event.target.value);
-              setSelectedAgentId("");
-              setAgentMenuOpen(true);
-            }}
-          />
-          {agentMenuOpen && (
-            <div id="agent-options" className="agent-options" role="listbox">
-              {filteredAgents.length === 0 ? (
-                <p className="muted">ไม่พบ Agent ที่ค้นหา</p>
-              ) : (
-                filteredAgents.map((agent) => (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    role="option"
-                    aria-selected={selectedAgentId === agent.id}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      setSelectedAgentId(agent.id);
-                      setAgentSearch(`${agent.code} — ${agent.name}`);
-                      setAgentMenuOpen(false);
-                    }}
-                  >
-                    <strong>{agent.code}</strong>
-                    <span>{agent.name}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-          {selectedAgentId === "" && agentSearch !== "" && (
-            <small className="error">กรุณาเลือก Agent จากรายการ</small>
-          )}
+          <AppDropdown id="agentSearch" name="agentId" value={selectedAgentId} onValueChange={setSelectedAgentId} placeholder="เลือก Agent" searchPlaceholder="ค้นหาด้วยรหัสหรือชื่อ Agent" emptyMessage="ไม่พบ Agent ที่ค้นหา" searchable required options={agents.map((agent) => ({ value: agent.id, label: `${agent.code} — ${agent.name}` }))} />
         </div>
       )}
       </div>
@@ -162,29 +104,34 @@ export function BillForm({
         <tbody>
           {rows.map((row, i) => {
             const issue = rowIssues[i];
+            const requiredDigits = digitsOf(row.prizeTypeId);
             return (
               <tr key={row.id}>
                 <td>
-                  <select
+                  <AppDropdown
                     name="prizeTypeId"
                     value={row.prizeTypeId}
-                    onChange={(e) => updateRow(i, { prizeTypeId: e.target.value })}
-                    aria-label={`ประเภทรางวัล แถวที่ ${i + 1}`}
-                  >
-                    {prizeTypes.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.code}. {p.name} ({p.digits} หลัก)
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={(prizeTypeId) => {
+                      const digits = digitsOf(prizeTypeId);
+                      updateRow(i, { prizeTypeId, number: row.number.slice(0, digits) });
+                    }}
+                    ariaLabel={`ประเภทรางวัล แถวที่ ${i + 1}`}
+                    options={prizeTypes.map((prize) => ({ value: prize.id, label: `${prize.code}. ${prize.name}`, description: `${prize.digits} หลัก` }))}
+                    searchable={prizeTypes.length > 6}
+                    searchPlaceholder="ค้นหาประเภทรางวัล"
+                  />
                 </td>
                 <td>
                   <input
                     name="number"
                     inputMode="numeric"
-                    maxLength={12}
+                    pattern="[0-9]*"
+                    maxLength={requiredDigits}
                     value={row.number}
-                    onChange={(e) => updateRow(i, { number: e.target.value })}
+                    placeholder={`${requiredDigits} หลัก`}
+                    onChange={(e) => updateRow(i, {
+                      number: e.target.value.replace(/\D/g, "").slice(0, requiredDigits),
+                    })}
                     aria-label={`เลข แถวที่ ${i + 1}`}
                     aria-invalid={issue?.number != null}
                   />

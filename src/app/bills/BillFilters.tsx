@@ -1,5 +1,8 @@
 "use client";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { AppDropdown } from "../AppDropdown";
+
 type Option = { id: string; label: string };
 
 export function BillFilters({
@@ -7,6 +10,7 @@ export function BillFilters({
   drawId,
   agentId,
   status,
+  winnerOnly,
   draws,
   agents,
   statuses,
@@ -15,16 +19,25 @@ export function BillFilters({
   drawId: string;
   agentId: string;
   status: string;
+  winnerOnly: boolean;
   draws: Option[];
   agents: Option[] | null;
   statuses: Option[];
 }) {
-  function submitSelectedFilter(event: React.ChangeEvent<HTMLSelectElement>) {
-    event.currentTarget.form?.requestSubmit();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  function update(key: string, value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set(key, value); else params.delete(key);
+    params.delete("page");
+    router.replace(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false });
   }
 
   return (
     <form method="get" className="bill-filters">
+      {winnerOnly && <input type="hidden" name="winner" value="1" />}
       <label htmlFor="q">
         ค้นหา
         <input
@@ -37,40 +50,19 @@ export function BillFilters({
 
       <label htmlFor="draw">
         รอบ
-        <select id="draw" name="draw" defaultValue={drawId} onChange={submitSelectedFilter}>
-          <option value="">ทุกรอบ</option>
-          {draws.map((draw) => (
-            <option key={draw.id} value={draw.id}>
-              {draw.label}
-            </option>
-          ))}
-        </select>
+        <AppDropdown id="draw" name="draw" value={drawId} onValueChange={(value) => update("draw", value)} options={[{ value: "", label: "ทุกรอบ" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหารอบ" />
       </label>
 
       {agents !== null && (
         <label htmlFor="agent">
           Agent
-          <select id="agent" name="agent" defaultValue={agentId} onChange={submitSelectedFilter}>
-            <option value="">ทุก Agent</option>
-            {agents.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {agent.label}
-              </option>
-            ))}
-          </select>
+          <AppDropdown id="agent" name="agent" value={agentId} onValueChange={(value) => update("agent", value)} options={[{ value: "", label: "ทุก Agent" }, ...agents.map((agent) => ({ value: agent.id, label: agent.label }))]} searchable={agents.length > 6} searchPlaceholder="ค้นหา Agent" />
         </label>
       )}
 
       <label htmlFor="status">
         สถานะ
-        <select id="status" name="status" defaultValue={status} onChange={submitSelectedFilter}>
-          <option value="">ทุกสถานะ</option>
-          {statuses.map((statusOption) => (
-            <option key={statusOption.id} value={statusOption.id}>
-              {statusOption.label}
-            </option>
-          ))}
-        </select>
+        <AppDropdown id="status" name="status" value={status} onValueChange={(value) => update("status", value)} options={[{ value: "", label: "ทุกสถานะ" }, ...statuses.map((option) => ({ value: option.id, label: option.label }))]} />
       </label>
     </form>
   );

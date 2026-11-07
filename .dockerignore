@@ -1,0 +1,10 @@
+.git
+.next
+node_modules
+coverage
+.qa
+*.log
+.env
+.env.local
+.env.*.local
+docs/*.docx

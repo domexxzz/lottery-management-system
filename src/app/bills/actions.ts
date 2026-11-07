@@ -93,7 +93,8 @@ export async function confirmBillAction(
   }
 
   revalidatePath(`/bills/${billId}`);
-  return { error: null };
+  revalidatePath("/bills");
+  redirect("/bills");
 }
 
 export async function requestCancelAction(

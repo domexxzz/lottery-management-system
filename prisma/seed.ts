@@ -19,8 +19,10 @@ const PRIZE_TYPES = [
   { code: 5, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", payoutRate: "90.0000" },
   { code: 6, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", payoutRate: "90.0000" },
   { code: 7, name: "2 ตัวโต๊ด", digits: 2, matchRule: "PERMUTATION", payoutRate: "45.0000" },
-  { code: 8, name: "วิ่งบน", digits: 1, matchRule: "CONTAINS_DIGIT", payoutRate: "3.2000" },
-  { code: 9, name: "วิ่งล่าง", digits: 1, matchRule: "CONTAINS_DIGIT", payoutRate: "4.2000" },
+  // รางวัลวิ่ง: แทงหลักเดียว แต่เทียบกับผลที่ยาวกว่า จึงต้องระบุ resultDigits
+  // วิ่งบนเทียบกับเลข 3 ตัวบน · วิ่งล่างเทียบกับเลข 2 ตัวล่าง
+  { code: 8, name: "วิ่งบน", digits: 1, resultDigits: 3, matchRule: "CONTAINS_DIGIT", payoutRate: "3.2000" },
+  { code: 9, name: "วิ่งล่าง", digits: 1, resultDigits: 2, matchRule: "CONTAINS_DIGIT", payoutRate: "4.2000" },
   { code: 10, name: "3 ตัวบนกลับ", digits: 3, matchRule: "PERMUTATION", payoutRate: "150.0000" },
   { code: 11, name: "2 ตัวบนกลับ", digits: 2, matchRule: "PERMUTATION", payoutRate: "45.0000" },
   { code: 12, name: "4 ตัวบน", digits: 4, matchRule: "EXACT", payoutRate: "6000.0000" },
@@ -46,6 +48,7 @@ async function main() {
   }
 
   const passwordHash = await hashPassword(seedPassword);
+  const mustChangePassword = process.env.SEED_MUST_CHANGE_PASSWORD !== "false";
 
   const org = await prisma.organization.upsert({
     where: { id: "seed-org" },
@@ -57,12 +60,11 @@ async function main() {
     },
   });
 
-  // ผู้ใช้ครบ 4 บทบาทตาม Permission Matrix
+  // Admin รับผิดชอบงานปฏิบัติการและงานตรวจสอบทั้งหมด
   const users = [
     { login: "owner", displayName: "เจ้าของกิจการ", role: "OWNER" as const },
     { login: "admin", displayName: "ผู้ดูแลระบบ", role: "ADMIN" as const },
-    { login: "checker", displayName: "ผู้ตรวจสอบ", role: "CHECKER" as const },
-    { login: "agent1", displayName: "ตัวแทน กรุงเทพ", role: "AGENT" as const },
+    { login: "agent", displayName: "ตัวแทน กรุงเทพ", role: "AGENT" as const },
     { login: "agent2", displayName: "ตัวแทน เชียงใหม่", role: "AGENT" as const },
     { login: "agent3", displayName: "ตัวแทน หาดใหญ่", role: "AGENT" as const },
   ];
@@ -70,14 +72,20 @@ async function main() {
   for (const u of users) {
     await prisma.user.upsert({
       where: { organizationId_login: { organizationId: org.id, login: u.login } },
-      update: {},
+      update: {
+        displayName: u.displayName,
+        passwordHash,
+        role: u.role,
+        status: "ACTIVE",
+        mustChangePassword,
+      },
       create: {
         organizationId: org.id,
         login: u.login,
         displayName: u.displayName,
         passwordHash,
         role: u.role,
-        mustChangePassword: true,
+        mustChangePassword,
       },
     });
   }
@@ -88,6 +96,7 @@ async function main() {
       update: {
         name: pt.name,
         digits: pt.digits,
+        resultDigits: "resultDigits" in pt ? pt.resultDigits : null,
         matchRule: pt.matchRule,
         payoutRate: pt.payoutRate,
       },
@@ -96,6 +105,7 @@ async function main() {
         code: pt.code,
         name: pt.name,
         digits: pt.digits,
+        resultDigits: "resultDigits" in pt ? pt.resultDigits : null,
         matchRule: pt.matchRule,
         payoutRate: pt.payoutRate,
       },
@@ -105,7 +115,10 @@ async function main() {
   for (const [index, a] of AGENTS.entries()) {
     const user = await prisma.user.findUniqueOrThrow({
       where: {
-        organizationId_login: { organizationId: org.id, login: `agent${index + 1}` },
+        organizationId_login: {
+          organizationId: org.id,
+          login: index === 0 ? "agent" : `agent${index + 1}`,
+        },
       },
     });
 

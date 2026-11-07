@@ -23,7 +23,6 @@ datasource db {
 enum Role {
   OWNER
   ADMIN
-  CHECKER
   AGENT
 }
 
@@ -66,6 +65,29 @@ enum SettlementStatus {
   APPROVED // Owner อนุมัติ ปิดรอบ
 }
 
+enum AttachmentType {
+  ORDER_EVIDENCE
+  PAYMENT_EVIDENCE
+  OTHER
+}
+
+enum AttachmentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PaymentVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+}
+
 /// วิธีตัดสินว่ารายการถูกรางวัลหรือไม่
 enum MatchRule {
   /// เลขตรงกันทุกหลัก เช่น 3 ตัวบน
@@ -89,32 +111,50 @@ enum AuditAction {
   LOGOUT
   SUSPEND
   REACTIVATE
+  FILE_UPLOADED
+  FILE_DELETED
+  FILE_REPLACED
+  FILE_VERIFIED
+  FILE_REJECTED
+  PAYMENT_VERIFIED
+  PAYMENT_REJECTED
+  BILL_SUBMITTED
+  /// ส่งแจ้งเตือนออกไปยังช่องทางภายนอกสำเร็จแล้ว
+  /// ใช้เป็นตัวกันส่งซ้ำด้วย จึงต้องบันทึกหลังส่งสำเร็จเท่านั้น
+  /// ถ้าบันทึกก่อนส่ง การส่งที่ล้มเหลวจะถูกมองว่าส่งไปแล้วและเงียบหายไป
+  NOTIFICATION_SENT
+  /// Owner ถามผู้ช่วย AI — บันทึกว่ามีข้อมูลสรุปออกไปยังผู้ให้บริการภายนอก
+  /// เก็บเฉพาะ metadata ไม่เก็บเนื้อคำถามและคำตอบ (D-5 ยังไม่ปิด)
+  ASSISTANT_QUERY
 }
 
 // ---------------------------------------------------------------- tenancy
 
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
+  id       String  @id @default(cuid())
+  name     String
   /// IANA timezone เช่น Asia/Bangkok — ใช้ตัดสิน Cutoff
-  timezone  String   @default("Asia/Bangkok")
-  isActive  Boolean  @default(true)
+  timezone String  @default("Asia/Bangkok")
+  isActive Boolean @default(true)
 
   /// ตัวนับเลขบิล เพิ่มแบบ atomic ด้วย UPDATE ... RETURNING ตอนยืนยันบิล
   /// ใช้ตัวนับระดับองค์กรเพื่อให้เลขบิลไม่ซ้ำข้ามรอบ
-  billSequence Int @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  billSequence Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  users       User[]
-  agents      Agent[]
-  draws       Draw[]
-  prizeTypes  PrizeType[]
-  bills       Bill[]
-  billItems   BillItem[]
-  results     Result[]
-  settlements Settlement[]
-  auditEvents AuditEvent[]
+  users                  User[]
+  agents                 Agent[]
+  draws                  Draw[]
+  prizeTypes             PrizeType[]
+  bills                  Bill[]
+  billItems              BillItem[]
+  results                Result[]
+  settlements            Settlement[]
+  auditEvents            AuditEvent[]
+  billAttachments        BillAttachment[]
+  billPayments           BillPayment[]
+  ownerChatConversations OwnerChatConversation[]
 
   @@map("organizations")
 }
@@ -130,6 +170,13 @@ model User {
   role         Role
   status       UserStatus @default(ACTIVE)
 
+  /// บัญชี Telegram ที่ผูกไว้ สำหรับกดยืนยันหรือตีกลับหลักฐานจากในแชท
+  ///
+  /// ต้องผูกก่อนจึงจะกดปุ่มในแชทได้ เพราะทุกการเปลี่ยนสถานะต้องรู้ว่าใครทำ
+  /// ถ้าปล่อยให้ใครในกลุ่มก็กดได้ Audit จะบันทึกได้แค่ว่า "บอททำ"
+  /// ซึ่งเท่ากับไม่มีผู้รับผิดชอบ และขัดหลักข้อแรกของระบบ
+  telegramUserId     String?   @unique
+
   /// บังคับเปลี่ยนรหัสผ่านในการ login ครั้งถัดไป
   mustChangePassword Boolean   @default(true)
   lastLoginAt        DateTime?
@@ -141,14 +188,18 @@ model User {
   agent    Agent?    @relation("AgentUser")
   sessions Session[]
 
-  createdBills       Bill[]     @relation("BillCreatedBy")
-  cancelledBills     Bill[]     @relation("BillCancelledBy")
-  cancelRequestBills Bill[]     @relation("BillCancelRequestedBy")
-  madeResults      Result[]     @relation("ResultMaker")
-  checkedResults   Result[]     @relation("ResultChecker")
-  approvedSettle   Settlement[] @relation("SettlementApprover")
-  reconciledSettle Settlement[] @relation("SettlementReconciler")
-  auditEvents      AuditEvent[]
+  createdBills           Bill[]                  @relation("BillCreatedBy")
+  cancelledBills         Bill[]                  @relation("BillCancelledBy")
+  cancelRequestBills     Bill[]                  @relation("BillCancelRequestedBy")
+  madeResults            Result[]                @relation("ResultMaker")
+  checkedResults         Result[]                @relation("ResultChecker")
+  approvedSettle         Settlement[]            @relation("SettlementApprover")
+  reconciledSettle       Settlement[]            @relation("SettlementReconciler")
+  auditEvents            AuditEvent[]
+  uploadedAttachments    BillAttachment[]        @relation("AttachmentUploader")
+  verifiedAttachments    BillAttachment[]        @relation("AttachmentVerifier")
+  verifiedPayments       BillPayment[]           @relation("PaymentVerifier")
+  ownerChatConversations OwnerChatConversation[] @relation("OwnerChatConversationOwner")
 
   @@unique([organizationId, login])
   @@index([organizationId, role])
@@ -156,13 +207,13 @@ model User {
 }
 
 model Session {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// SHA-256 ของ session token — ไม่เก็บ token ดิบ
-  tokenHash String   @unique
+  tokenHash String    @unique
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   revokedAt DateTime?
   ipAddress String?
   userAgent String?
@@ -183,7 +234,7 @@ model Agent {
   name String
 
   /// อัตราคอมมิชชันเป็นเปอร์เซ็นต์ของยอดขาย เช่น 25.0000 = 25%
-  commissionRate Decimal @db.Decimal(7, 4)
+  commissionRate Decimal  @db.Decimal(7, 4)
   /// วงเงินรวมต่อรอบ null = ไม่จำกัด
   creditLimit    Decimal? @db.Decimal(18, 2)
   /// วงเงินสูงสุดต่อเลขหนึ่งรายการ null = ไม่จำกัด
@@ -218,13 +269,23 @@ model PrizeType {
   code Int
   name String
 
-  /// จำนวนหลักของเลขที่รับ เช่น 3 สำหรับสามตัวบน
-  digits Int
+  /// จำนวนหลักของเลขที่ผู้ซื้อแทง เช่น 3 สำหรับสามตัวบน
+  digits       Int
+  /// จำนวนหลักของ "ผลรางวัลที่ประกาศ" ซึ่งไม่จำเป็นต้องเท่ากับ digits
+  ///
+  /// null = เท่ากับ digits ใช้กับรางวัลที่เทียบเลขต่อเลขตรง ๆ (EXACT, PERMUTATION)
+  ///
+  /// รางวัลวิ่ง (CONTAINS_DIGIT) ต้องตั้งค่านี้ เพราะผู้ซื้อแทงหลักเดียว
+  /// แต่ผลที่ใช้เทียบยาวกว่า เช่น วิ่งบน digits = 1 และ resultDigits = 3
+  /// (เทียบกับเลข 3 ตัวบน) ส่วนวิ่งล่าง resultDigits = 2
+  ///
+  /// ถ้าไม่ตั้ง ระบบจะปฏิเสธการลงผลของรางวัลนั้น ไม่เดาค่าให้
+  resultDigits Int?
   /// วิธีตัดสินว่าถูกรางวัล — ดู MatchRule
-  matchRule MatchRule @default(EXACT)
+  matchRule    MatchRule @default(EXACT)
 
   /// อัตราจ่ายต่อเงินเดิมพัน 1 หน่วย เช่น 900.0000 = จ่าย 900 บาทต่อ 1 บาท
-  payoutRate Decimal @db.Decimal(12, 4)
+  payoutRate      Decimal  @db.Decimal(12, 4)
   /// วงเงินสูงสุดต่อรายการ null = ไม่จำกัด
   maxStakePerItem Decimal? @db.Decimal(18, 2)
 
@@ -246,9 +307,9 @@ model Draw {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  name    String
+  name     String
   /// เวลาเริ่มรับบิล
-  opensAt DateTime
+  opensAt  DateTime
   /// เวลาปิดรับบิล — ถึงเวลานี้ worker จะล็อกบิลทั้งรอบ
   cutoffAt DateTime
 
@@ -289,12 +350,12 @@ model Bill {
   status BillStatus @default(DRAFT)
 
   /// ยอดเดิมพันรวมของบิล คำนวณจาก BillItem ตอนยืนยัน
-  totalStake Decimal @default(0) @db.Decimal(18, 2)
+  totalStake  Decimal @default(0) @db.Decimal(18, 2)
   /// ยอดที่ต้องจ่ายรวม เติมหลัง settlement
   totalPayout Decimal @default(0) @db.Decimal(18, 2)
 
   createdById String
-  createdBy   User   @relation("BillCreatedBy", fields: [createdById], references: [id])
+  createdBy   User      @relation("BillCreatedBy", fields: [createdById], references: [id])
   confirmedAt DateTime?
 
   cancelledById String?
@@ -312,7 +373,9 @@ model Bill {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items BillItem[]
+  items       BillItem[]
+  attachments BillAttachment[]
+  payment     BillPayment?
 
   @@unique([organizationId, billNumber])
   @@index([organizationId, drawId, status])
@@ -350,6 +413,85 @@ model BillItem {
   @@map("bill_items")
 }
 
+// ---------------------------------------------------------------- private evidence
+
+/// Metadata ของไฟล์หลักฐานจริงซึ่งเก็บใน Private Object Storage
+/// ไม่เก็บ Signed URL หรือ binary ลง PostgreSQL
+model BillAttachment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  billId String
+  bill   Bill   @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  paymentId String?
+  payment   BillPayment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  type           AttachmentType
+  storageKey     String         @unique
+  originalName   String
+  mimeType       String
+  fileSize       Int
+  checksum       String
+  idempotencyKey String?        @unique
+
+  uploadedById String
+  uploadedBy   User   @relation("AttachmentUploader", fields: [uploadedById], references: [id])
+
+  status          AttachmentStatus @default(PENDING)
+  verifiedById    String?
+  verifiedBy      User?            @relation("AttachmentVerifier", fields: [verifiedById], references: [id])
+  verifiedAt      DateTime?
+  rejectionReason String?
+
+  /// ไฟล์ใหม่อ้างกลับไปยังไฟล์ที่ถูกตีกลับ โดยเก็บไฟล์เดิมไว้เพื่อ Audit
+  replacesId String?         @unique
+  replaces   BillAttachment? @relation("AttachmentReplacement", fields: [replacesId], references: [id])
+  replacedBy BillAttachment? @relation("AttachmentReplacement")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// เก็บ checksum สำหรับตรวจสอบย้อนหลัง แต่อนุญาตให้นำรูปเดิมมาแนบซ้ำได้
+  @@index([organizationId, checksum])
+  @@index([billId, status])
+  @@index([organizationId, status, createdAt])
+  @@map("bill_attachments")
+}
+
+/// ข้อมูลการชำระเงินแยกจากไฟล์หลักฐาน เพื่อไม่ให้ metadata ทางธุรกิจปะปนกับไฟล์
+model BillPayment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  billId String @unique
+  bill   Bill   @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  amount               Decimal  @db.Decimal(18, 2)
+  paidAt               DateTime
+  paymentMethod        String
+  bankName             String?
+  transactionReference String?
+  note                 String?
+
+  verificationStatus PaymentVerificationStatus @default(PENDING)
+  verifiedById       String?
+  verifiedBy         User?                     @relation("PaymentVerifier", fields: [verifiedById], references: [id])
+  verifiedAt         DateTime?
+  rejectionReason    String?
+
+  attachments BillAttachment[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  /// PostgreSQL อนุญาต NULL ซ้ำได้ จึงบังคับเฉพาะเลขอ้างอิงที่มีค่าจริง
+  @@unique([organizationId, transactionReference])
+  @@index([organizationId, verificationStatus, createdAt])
+  @@map("bill_payments")
+}
+
 // ---------------------------------------------------------------- results
 
 model Result {
@@ -363,20 +505,20 @@ model Result {
   prizeType   PrizeType @relation(fields: [prizeTypeId], references: [id])
 
   /// เลขที่ออก
-  value String
+  value   String
   /// เพิ่มทีละ 1 เมื่อมีการแก้ผลหลังประกาศ
-  version Int @default(1)
+  version Int    @default(1)
 
   status ResultStatus @default(DRAFT)
 
-  makerId     String
-  maker       User     @relation("ResultMaker", fields: [makerId], references: [id])
-  enteredAt   DateTime @default(now())
+  makerId   String
+  maker     User     @relation("ResultMaker", fields: [makerId], references: [id])
+  enteredAt DateTime @default(now())
 
-  /// ต้องไม่ใช่คนเดียวกับ maker — บังคับใน service layer
-  checkerId  String?
-  checker    User?     @relation("ResultChecker", fields: [checkerId], references: [id])
-  checkedAt  DateTime?
+  /// ปกติต้องไม่ใช่คนเดียวกับ maker ยกเว้น Owner แก้และอนุมัติผลหลังถูกตีกลับ
+  checkerId    String?
+  checker      User?     @relation("ResultChecker", fields: [checkerId], references: [id])
+  checkedAt    DateTime?
   rejectReason String?
 
   @@unique([drawId, prizeTypeId, version])
@@ -435,7 +577,7 @@ model AuditEvent {
   actorId String?
   actor   User?   @relation(fields: [actorId], references: [id])
 
-  action AuditAction
+  action     AuditAction
   /// ชื่อตาราง เช่น Bill, Result, Settlement
   entityType String
   entityId   String
@@ -455,4 +597,36 @@ model AuditEvent {
   @@index([organizationId, actorId, createdAt])
   @@index([organizationId, createdAt])
   @@map("audit_events")
+}
+
+// ---------------------------------------------------------------- owner assistant history
+
+/// ประวัติห้องสนทนาของ Owner แยกตามองค์กรและบัญชีผู้ใช้
+model OwnerChatConversation {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownerId        String
+  owner          User               @relation("OwnerChatConversationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  title          String             @db.VarChar(120)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  messages       OwnerChatMessage[]
+
+  @@index([organizationId, ownerId, updatedAt])
+  @@map("owner_chat_conversations")
+}
+
+model OwnerChatMessage {
+  id             String                @id @default(cuid())
+  conversationId String
+  conversation   OwnerChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           ChatMessageRole
+  content        String
+  sequence       Int
+  createdAt      DateTime              @default(now())
+
+  @@unique([conversationId, sequence])
+  @@index([conversationId, createdAt])
+  @@map("owner_chat_messages")
 }

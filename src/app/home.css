@@ -32,7 +32,7 @@
 .filter-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
 .filter-heading h2 { margin: .05rem 0 0; font-size: 1rem; }
 .filter-heading button { padding: .42rem .7rem; border: 1px solid #dce6eb; color: #547080; background: #f8fafb; font-size: .7rem; }
-.filter-fields { display: grid; grid-template-columns: 1.15fr 1.15fr 1fr .85fr .85fr; gap: .65rem; }
+.filter-fields { display: grid; grid-template-columns: 1.2fr 1fr .9fr .9fr; gap: .65rem; }
 .filter-fields label { display: grid; gap: .3rem; color: #617482; font-size: .67rem; font-weight: 700; }
 .filter-fields select, .filter-fields input { width: 100%; min-width: 0; height: 40px; padding: 0 .65rem; border: 1px solid #dce5ea; border-radius: 9px; color: #193b52; background: #fbfcfd; font: inherit; font-size: .75rem; }
 .filter-fields select:focus, .filter-fields input:focus { border-color: #35a3ad; outline: 3px solid rgb(53 163 173 / 12%); }
@@ -49,27 +49,7 @@
 .sales-line { fill: none; stroke: #138b9a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .line-chart circle { fill: #fff; stroke: #138b9a; stroke-width: 3; vector-effect: non-scaling-stroke; }
 .chart-days { display: grid; grid-template-columns: repeat(7, 1fr); color: #71808c; font-size: .66rem; text-align: center; }
-.risk-panel { display: flex; flex-direction: column; }
-.risk-badge { padding: .25rem .55rem; border-radius: 99px; font-size: .65rem; font-weight: 800; white-space: nowrap; }
-.risk-low .risk-badge { color: #167b57; background: #e6f6ee; }
-.risk-medium .risk-badge { color: #91600d; background: #fff2cf; }
-.risk-high .risk-badge { color: #a8373e; background: #fdebed; }
-.risk-gauge { position: relative; width: min(220px, 90%); margin: .3rem auto 0; }
-.risk-gauge svg { display: block; width: 100%; }
-.risk-gauge path { fill: none; stroke-width: 14; stroke-linecap: round; }
-.gauge-track { stroke: #edf2f4; }
-.gauge-value { stroke: #24a97b; }
-.risk-medium .gauge-value { stroke: #d9a128; }
-.risk-high .gauge-value { stroke: #d4545a; }
-.risk-gauge > div { position: absolute; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; align-items: center; }
-.risk-gauge strong { color: #17374e; font-size: 1.55rem; }
-.risk-gauge span { color: #87949e; font-size: .65rem; }
-.risk-detail { margin: .15rem 0 .8rem; color: #71808c; font-size: .7rem; text-align: center; }
-.risk-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: auto; border-top: 1px solid #e8eef1; padding-top: .85rem; }
-.risk-stats > div { display: flex; align-items: center; flex-direction: column; border-right: 1px solid #e8eef1; }
-.risk-stats > div:last-child { border-right: 0; }
-.risk-stats strong { color: #17374e; font-size: 1rem; }
-.risk-stats span { color: #87949e; font-size: .58rem; text-align: center; }
+.count-summary-panel{display:flex;flex-direction:column}.count-summary-list{display:grid;gap:.65rem}.count-summary-list>a{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.75rem;padding:.8rem;border:1px solid #e1e9ed;border-radius:11px;color:inherit;background:#f9fbfc;text-decoration:none;transition:border-color .16s,box-shadow .16s,transform .16s,background .16s}.count-summary-list>a:hover,.count-summary-list>a:focus-visible{border-color:#8fcdd2;background:#fff;box-shadow:0 8px 20px rgb(20 117 132 / 12%);outline:none;transform:translateY(-2px)}.count-summary-list>a:active{transform:translateY(0)}.count-summary-list>a>span{display:grid;width:42px;height:42px;place-items:center;border-radius:10px;color:#148493;background:#e5f4f5}.count-summary-list>a>span .dash-icon{width:21px;height:21px}.count-summary-list>a>div{display:flex;min-width:0;flex-direction:column}.count-summary-list>a>.dash-icon{width:17px;color:#91a1aa}.count-summary-list small{color:#768791;font-size:.65rem}.count-summary-list strong{color:#15364d;font-size:1.4rem;line-height:1.15;font-variant-numeric:tabular-nums}.count-summary-list .winner-summary{border-color:#efd99c;background:linear-gradient(135deg,#fffaf0,#fff5d7);box-shadow:0 7px 18px rgb(179 126 21 / 10%)}.count-summary-list .winner-summary:hover,.count-summary-list .winner-summary:focus-visible{border-color:#d8ad3a;background:linear-gradient(135deg,#fffdf7,#ffefbd);box-shadow:0 9px 22px rgb(179 126 21 / 18%)}.count-summary-list .winner-summary>span{color:#a66b08;background:#ffebaf}.count-summary-list .winner-summary strong{color:#895906}.count-summary-list .winner-summary em{margin-top:.12rem;color:#aa8a4d;font-size:.56rem;font-style:normal}
 .operations-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(270px, .85fr) minmax(250px, .72fr); gap: .9rem; margin-bottom: .9rem; }
 .agent-ranking { gap: .68rem; }
 .agent-rank { grid-template-columns: 28px minmax(0, 1fr) auto; }

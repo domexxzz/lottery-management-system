@@ -3,7 +3,13 @@ import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
 import { confirmBill, createDraftBill, getBill, replaceDraftItems } from "@/lib/bills/service";
 import { lockDrawManually } from "@/lib/draws/service";
-import { approveResult, enterResult, rejectResult } from "@/lib/results/service";
+import {
+  approveResult,
+  enterResult,
+  enterResultsBatch,
+  proposeResultCorrection,
+  rejectResult,
+} from "@/lib/results/service";
 import {
   approveSettlement,
   calculateSettlement,
@@ -14,11 +20,8 @@ import { searchBills } from "@/lib/reports/service";
 /**
  * ด่านกำกับที่ต้องไม่พังโดยไม่มีใครรู้
  *
- * สองเรื่อง: Maker-Checker และการแยกข้อมูลระหว่าง Agent
- *
- * สำคัญ: ทดสอบด้วย OWNER ที่มีสิทธิ์ทั้งสองบทบาท เพราะถ้าใช้ ADMIN
- * จะติดด่านสิทธิ์ตามบทบาทก่อน แล้ว test จะผ่านทั้งที่ด่าน Maker-Checker
- * ไม่เคยถูกเรียกเลย
+ * สามเรื่อง: One-step result review, การแก้ผลที่ประกาศแล้ว
+ * และการแยกข้อมูลระหว่าง Agent
  */
 
 let f: Fixtures;
@@ -44,44 +47,54 @@ async function lockedDrawWithBill() {
   return billId;
 }
 
-describe("Maker-Checker ของผลรางวัล", () => {
-  test("ผู้กรอกผลอนุมัติผลของตัวเองไม่ได้ แม้มีสิทธิ์ทั้งสองอย่าง", async () => {
+describe("ผลรางวัลแบบตรวจรอบเดียว", () => {
+  test("บันทึกหลายแถวพร้อมกันและ rollback ทั้งชุดเมื่อมีแถวผิด", async () => {
     await lockedDrawWithBill();
-
-    await enterResult(f.actors.OWNER, {
+    await expect(enterResultsBatch(f.actors.ADMIN, {
       drawId: f.draw.id,
-      prizeTypeId: f.prizeTypes.threeTop.id,
-      value: "123",
-    });
-    const draft = await prisma.result.findFirstOrThrow({
-      where: { drawId: f.draw.id, status: "DRAFT" },
-    });
+      results: [
+        { prizeTypeId: f.prizeTypes.threeTop.id, value: "123" },
+        { prizeTypeId: f.prizeTypes.runTop.id, value: "99" },
+      ],
+    })).rejects.toThrow(/รางวัล 8/);
+    expect(await prisma.result.count({ where: { drawId: f.draw.id } })).toBe(0);
 
-    await expect(approveResult(f.actors.OWNER, draft.id)).rejects.toThrow(
-      /ผู้กรอกผลกับผู้อนุมัติผลต้องไม่ใช่คนเดียวกัน/,
-    );
-
-    // คนอื่นอนุมัติได้ปกติ
-    await approveResult(f.actors.CHECKER, draft.id);
-    const after = await prisma.result.findUniqueOrThrow({ where: { id: draft.id } });
-    expect(after.status).toBe("APPROVED");
-    expect(after.checkerId).toBe(f.users.checker.id);
+    const outcome = await enterResultsBatch(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      results: [
+        { prizeTypeId: f.prizeTypes.threeTop.id, value: "123" },
+        // วิ่งบนประกาศผล 3 หลักตามเลข 3 ตัวบน ไม่ใช่หลักเดียวตามเลขที่แทง
+        { prizeTypeId: f.prizeTypes.runTop.id, value: "812" },
+      ],
+    });
+    expect(outcome.count).toBe(2);
+    expect(await prisma.result.count({ where: { drawId: f.draw.id, status: "APPROVED" } })).toBe(2);
   });
 
-  test("ผู้กรอกผลตีกลับผลของตัวเองไม่ได้", async () => {
+  test("Admin บันทึกแล้วผลได้รับการยืนยันทันที", async () => {
     await lockedDrawWithBill();
-    await enterResult(f.actors.OWNER, {
+    const outcome = await enterResult(f.actors.ADMIN, {
       drawId: f.draw.id,
       prizeTypeId: f.prizeTypes.threeTop.id,
       value: "123",
     });
-    const draft = await prisma.result.findFirstOrThrow({
-      where: { drawId: f.draw.id, status: "DRAFT" },
-    });
+    expect(outcome.autoApproved).toBe(true);
+    const result = await prisma.result.findFirstOrThrow({ where: { drawId: f.draw.id } });
+    expect(result.status).toBe("APPROVED");
+    expect(result.makerId).toBe(f.users.admin.id);
+    expect(result.checkerId).toBe(f.users.admin.id);
+    expect(result.checkedAt).not.toBeNull();
+  });
 
-    await expect(rejectResult(f.actors.OWNER, draft.id, "ลองตีกลับเอง")).rejects.toThrow(
-      /ต้องไม่ใช่คนเดียวกัน/,
-    );
+  test("Owner บันทึกแล้วผลได้รับการยืนยันทันที", async () => {
+    await lockedDrawWithBill();
+    const outcome = await enterResult(f.actors.OWNER, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "123",
+    });
+    expect(outcome.autoApproved).toBe(true);
+    expect(await prisma.result.count({ where: { drawId: f.draw.id, status: "DRAFT" } })).toBe(0);
   });
 
   test("ผลที่อนุมัติแล้วแก้ทับไม่ได้", async () => {
@@ -91,11 +104,6 @@ describe("Maker-Checker ของผลรางวัล", () => {
       prizeTypeId: f.prizeTypes.threeTop.id,
       value: "123",
     });
-    const draft = await prisma.result.findFirstOrThrow({
-      where: { drawId: f.draw.id, status: "DRAFT" },
-    });
-    await approveResult(f.actors.CHECKER, draft.id);
-
     await expect(
       enterResult(f.actors.ADMIN, {
         drawId: f.draw.id,
@@ -105,63 +113,77 @@ describe("Maker-Checker ของผลรางวัล", () => {
     ).rejects.toThrow(/ได้รับการอนุมัติแล้ว/);
   });
 
-  test("ตีกลับแล้วกรอกใหม่ได้ และเก็บเป็น version ใหม่", async () => {
+  test("Admin อนุมัติ DRAFT เก่าที่ตนเป็นผู้กรอกได้", async () => {
     await lockedDrawWithBill();
-    await enterResult(f.actors.ADMIN, {
-      drawId: f.draw.id,
-      prizeTypeId: f.prizeTypes.threeTop.id,
-      value: "111",
+    const draft = await prisma.result.create({
+      data: {
+        organizationId: f.org.id,
+        drawId: f.draw.id,
+        prizeTypeId: f.prizeTypes.threeTop.id,
+        value: "123",
+        makerId: f.users.admin.id,
+        status: "DRAFT",
+      },
     });
-    const first = await prisma.result.findFirstOrThrow({
-      where: { drawId: f.draw.id, status: "DRAFT" },
-    });
-    await rejectResult(f.actors.CHECKER, first.id, "เลขผิด");
+    await approveResult(f.actors.ADMIN, draft.id);
+    expect((await prisma.result.findUniqueOrThrow({ where: { id: draft.id } })).status).toBe("APPROVED");
+  });
 
-    await enterResult(f.actors.ADMIN, {
+  test("DRAFT เก่าถูกตีกลับและบันทึกใหม่เป็น version ที่ยืนยันแล้ว", async () => {
+    await lockedDrawWithBill();
+    const first = await prisma.result.create({
+      data: {
+        organizationId: f.org.id,
+        drawId: f.draw.id,
+        prizeTypeId: f.prizeTypes.threeTop.id,
+        value: "111",
+        makerId: f.users.admin.id,
+        status: "DRAFT",
+      },
+    });
+    await rejectResult(f.actors.ADMIN, first.id, "เลขผิด");
+    const outcome = await enterResult(f.actors.ADMIN, {
       drawId: f.draw.id,
       prizeTypeId: f.prizeTypes.threeTop.id,
       value: "123",
     });
 
-    const all = await prisma.result.findMany({
-      where: { drawId: f.draw.id, prizeTypeId: f.prizeTypes.threeTop.id },
-      orderBy: { version: "asc" },
+    expect(outcome.autoApproved).toBe(true);
+    const corrected = await prisma.result.findFirstOrThrow({
+      where: { drawId: f.draw.id, prizeTypeId: f.prizeTypes.threeTop.id, version: 2 },
     });
+    expect(corrected.status).toBe("APPROVED");
+    expect(corrected.makerId).toBe(f.users.admin.id);
+    expect(corrected.checkerId).toBe(f.users.admin.id);
+    expect(corrected.checkedAt).not.toBeNull();
 
-    expect(all).toHaveLength(2);
-    expect(all[0]!.version).toBe(1);
-    expect(all[0]!.status).toBe("REJECTED");
-    expect(all[0]!.rejectReason).toBe("เลขผิด");
-    expect(all[1]!.version).toBe(2);
-    expect(all[1]!.value).toBe("123");
+    const approvalAudit = await prisma.auditEvent.findFirst({
+      where: { entityType: "Result", entityId: corrected.id, action: "APPROVE" },
+    });
+    expect(approvalAudit?.reason).toBe("บันทึกและยืนยันผลในขั้นตอนเดียว");
   });
 });
 
-describe("Maker-Checker ของการปิดบัญชี", () => {
-  test("ผู้กระทบยอดอนุมัติปิดบัญชีเองไม่ได้", async () => {
+describe("Owner ปิดบัญชีรอบ", () => {
+  test("Owner ตรวจสอบยอดและอนุมัติปิดบัญชีด้วยตัวเองได้", async () => {
     await lockedDrawWithBill();
     await enterResult(f.actors.ADMIN, {
       drawId: f.draw.id,
       prizeTypeId: f.prizeTypes.threeTop.id,
       value: "123",
     });
-    const draft = await prisma.result.findFirstOrThrow({
-      where: { drawId: f.draw.id, status: "DRAFT" },
-    });
-    await approveResult(f.actors.CHECKER, draft.id);
     await calculateSettlement(f.actors.ADMIN, f.draw.id);
 
-    // OWNER กระทบยอดเอง แล้วลองปิดบัญชีเอง
+    // Owner เป็นผู้รับผิดชอบสูงสุด จึงทำสองขั้นตอนต่อเนื่องได้
     for (const s of await prisma.settlement.findMany({ where: { drawId: f.draw.id } })) {
       await reconcileSettlement(f.actors.OWNER, s.id);
     }
 
-    await expect(approveSettlement(f.actors.OWNER, f.draw.id)).rejects.toThrow(
-      /ผู้กระทบยอดกับผู้อนุมัติปิดบัญชีต้องไม่ใช่คนเดียวกัน/,
-    );
+    await approveSettlement(f.actors.OWNER, f.draw.id);
 
     const draw = await prisma.draw.findUniqueOrThrow({ where: { id: f.draw.id } });
-    expect(draw.status).toBe("SETTLED");
+    expect(draw.status).toBe("CLOSED");
+    expect(await prisma.settlement.count({ where: { drawId: f.draw.id, status: "APPROVED", approvedById: f.users.owner.id } })).toBe(1);
   });
 });
 
@@ -269,5 +291,207 @@ describe("เลขบิลไม่ซ้ำ", () => {
     const numbers = confirmed.map((c) => c.billNumber);
 
     expect(new Set(numbers).size).toBe(numbers.length);
+  });
+});
+
+/**
+ * การแก้ผลที่ประกาศไปแล้ว
+ *
+ * ก่อนหน้านี้ไม่มีทางแก้เลย ผลที่อนุมัติแล้วถูกล็อกถาวร พิมพ์ผิดหลักเดียว
+ * ก็ต้องไปแก้ที่ฐานข้อมูลโดยตรงซึ่งไม่มี Audit
+ * ชุดนี้ล็อกด่านของทางแก้ใหม่ไว้ ไม่ให้กลายเป็นประตูหลัง
+ */
+describe("แก้ผลรางวัลที่ประกาศแล้ว", () => {
+  async function approvedResult() {
+    await lockedDrawWithBill();
+    await enterResult(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "123",
+    });
+  }
+
+  test("กรอกผลทับผลที่อนุมัติแล้วไม่ได้ ต้องใช้ทางแก้ผล", async () => {
+    await approvedResult();
+    await expect(
+      enterResult(f.actors.ADMIN, {
+        drawId: f.draw.id,
+        prizeTypeId: f.prizeTypes.threeTop.id,
+        value: "456",
+      }),
+    ).rejects.toThrow(/เสนอแก้ผล/);
+  });
+
+  test("Admin เสนอแก้ได้ แต่ผลเดิมยังมีผลบังคับจนกว่าจะอนุมัติ", async () => {
+    await approvedResult();
+    const { version } = await proposeResultCorrection(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "456",
+      reason: "เลขที่ประกาศคลาดเคลื่อนจากต้นทาง",
+    });
+
+    expect(version).toBe(2);
+    // ผลเดิมยังเป็นตัวที่อนุมัติอยู่ตัวเดียว
+    const approved = await prisma.result.findMany({
+      where: { drawId: f.draw.id, status: "APPROVED" },
+      select: { value: true },
+    });
+    expect(approved).toEqual([{ value: "123" }]);
+  });
+
+  test("Admin อนุมัติการแก้ผลไม่ได้ แม้จะอนุมัติผลครั้งแรกได้", async () => {
+    await approvedResult();
+    await proposeResultCorrection(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "456",
+      reason: "แก้เลข",
+    });
+    const draft = await prisma.result.findFirstOrThrow({
+      where: { drawId: f.draw.id, status: "DRAFT" },
+    });
+
+    // Admin มี result.approve แต่ไม่มี result.approveCorrection
+    await expect(approveResult(f.actors.ADMIN, draft.id)).rejects.toThrow(/สิทธิ์/);
+    expect(
+      await prisma.result.count({ where: { drawId: f.draw.id, status: "APPROVED" } }),
+    ).toBe(1);
+  });
+
+  test("Owner อนุมัติคำขอที่ตัวเองเสนอไม่ได้ ต้องเป็นคนละคน", async () => {
+    await approvedResult();
+    await proposeResultCorrection(f.actors.OWNER, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "456",
+      reason: "แก้เลข",
+    });
+    const draft = await prisma.result.findFirstOrThrow({
+      where: { drawId: f.draw.id, status: "DRAFT" },
+    });
+
+    // ด่านเดียวกับการยกเลิกบิลหลัง Cutoff: ผู้เสนอกับผู้อนุมัติต้องคนละคน
+    await expect(approveResult(f.actors.OWNER, draft.id)).rejects.toThrow(/คนเดียวกัน/);
+    expect(
+      await prisma.result.count({ where: { drawId: f.draw.id, status: "APPROVED" } }),
+    ).toBe(1);
+  });
+
+  test("Owner เสนอแก้ก็ยังต้องรออนุมัติ ไม่อนุมัติทันทีเหมือนการลงผลครั้งแรก", async () => {
+    await approvedResult();
+    const { resultId } = await proposeResultCorrection(f.actors.OWNER, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "456",
+      reason: "แก้เลข",
+    });
+    const created = await prisma.result.findUniqueOrThrow({ where: { id: resultId } });
+    expect(created.status).toBe("DRAFT");
+    expect(created.checkerId).toBeNull();
+  });
+
+  test("Owner อนุมัติแล้วผลใหม่มีผลบังคับแทนผลเดิม และเก็บผลเดิมไว้ดูย้อนหลัง", async () => {
+    await approvedResult();
+    await proposeResultCorrection(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "456",
+      reason: "แก้เลข",
+    });
+    const draft = await prisma.result.findFirstOrThrow({
+      where: { drawId: f.draw.id, status: "DRAFT" },
+    });
+
+    await approveResult(f.actors.OWNER, draft.id);
+
+    const versions = await prisma.result.findMany({
+      where: { drawId: f.draw.id, prizeTypeId: f.prizeTypes.threeTop.id },
+      orderBy: { version: "asc" },
+      select: { version: true, value: true, status: true },
+    });
+    // ผลเดิมไม่ถูกลบหรือเขียนทับ ยังอ่านย้อนหลังได้ว่าเคยประกาศ 123
+    expect(versions).toEqual([
+      { version: 1, value: "123", status: "APPROVED" },
+      { version: 2, value: "456", status: "APPROVED" },
+    ]);
+
+    const audit = await prisma.auditEvent.findFirst({
+      where: { entityType: "Result", action: "APPROVE" },
+      orderBy: { createdAt: "desc" },
+      select: { reason: true },
+    });
+    expect(audit?.reason).toContain("แก้ผล");
+  });
+
+  test("คำขอที่ถูกตีกลับแล้วเสนอใหม่ได้", async () => {
+    await approvedResult();
+    await proposeResultCorrection(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "456",
+      reason: "แก้เลข",
+    });
+    const draft = await prisma.result.findFirstOrThrow({
+      where: { drawId: f.draw.id, status: "DRAFT" },
+    });
+    await rejectResult(f.actors.OWNER, draft.id, "เลขที่เสนอก็ยังไม่ตรง");
+
+    // version ล่าสุดเป็น REJECTED แต่ยังเสนอใหม่ได้เพราะผลที่บังคับอยู่คือ version 1
+    const second = await proposeResultCorrection(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "789",
+      reason: "เลขที่ถูกต้องจากต้นทาง",
+    });
+    expect(second.version).toBe(3);
+  });
+
+  test("เสนอซ้อนขณะมีคำขอค้างไม่ได้ และเสนอค่าเดิมไม่ได้", async () => {
+    await approvedResult();
+    await expect(
+      proposeResultCorrection(f.actors.ADMIN, {
+        drawId: f.draw.id,
+        prizeTypeId: f.prizeTypes.threeTop.id,
+        value: "123",
+        reason: "ค่าเดิม",
+      }),
+    ).rejects.toThrow(/ตรงกับผลเดิม/);
+
+    await proposeResultCorrection(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "456",
+      reason: "แก้เลข",
+    });
+    await expect(
+      proposeResultCorrection(f.actors.ADMIN, {
+        drawId: f.draw.id,
+        prizeTypeId: f.prizeTypes.threeTop.id,
+        value: "789",
+        reason: "แก้ซ้อน",
+      }),
+    ).rejects.toThrow(/ค้างอยู่แล้ว/);
+  });
+
+  test("ต้องระบุเหตุผล และ Agent เสนอแก้ไม่ได้", async () => {
+    await approvedResult();
+    await expect(
+      proposeResultCorrection(f.actors.ADMIN, {
+        drawId: f.draw.id,
+        prizeTypeId: f.prizeTypes.threeTop.id,
+        value: "456",
+        reason: "   ",
+      }),
+    ).rejects.toThrow(/เหตุผล/);
+
+    await expect(
+      proposeResultCorrection(f.actors.AGENT1, {
+        drawId: f.draw.id,
+        prizeTypeId: f.prizeTypes.threeTop.id,
+        value: "456",
+        reason: "ขอแก้",
+      }),
+    ).rejects.toThrow();
   });
 });

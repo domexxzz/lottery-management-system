@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { changePasswordAction, type ChangePasswordState } from "./actions";
+import { DashboardIcon } from "../DashboardIcon";
 
 const INITIAL: ChangePasswordState = { error: null };
 
@@ -11,7 +12,7 @@ export default function ChangePasswordPage() {
   return (
     <main className="auth-page">
       <section className="card auth-card" aria-labelledby="cp-heading">
-        <div className="auth-brand"><span>ล</span><div><strong>ระบบจัดการหวย</strong><small>SECURITY</small></div></div>
+        <div className="auth-brand"><span><DashboardIcon name="brand" /></span><div><strong>ระบบจัดการหวย</strong><small>SECURITY</small></div></div>
         <h1 id="cp-heading">เปลี่ยนรหัสผ่าน</h1>
         <p className="muted">
           ต้องเปลี่ยนรหัสผ่านก่อนใช้งานครั้งแรก เมื่อเปลี่ยนแล้วระบบจะให้เข้าสู่ระบบใหม่

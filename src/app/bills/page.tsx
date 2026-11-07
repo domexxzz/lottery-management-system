@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DashboardIcon } from "../DashboardIcon";
 import { redirect } from "next/navigation";
 import type { BillStatus } from "@prisma/client";
 import { getActor, orgScope } from "@/lib/auth/context";
@@ -6,6 +7,7 @@ import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { searchBills } from "@/lib/reports/service";
 import { statusLabel } from "@/lib/bills/lifecycle";
+import { customerProfileKey } from "@/lib/customers/profile-key";
 import { BillFilters } from "./BillFilters";
 import "./bills.css";
 
@@ -20,7 +22,7 @@ function readStatus(raw: string | undefined): BillStatus | undefined {
 export default async function BillsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; draw?: string; agent?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; draw?: string; agent?: string; status?: string; winner?: string }>;
 }) {
   const actor = await getActor();
   if (!actor) redirect("/login");
@@ -28,6 +30,7 @@ export default async function BillsPage({
 
   const params = await searchParams;
   const canSeeAllAgents = can(actor.role, "report.viewAllAgents");
+  const canViewCustomerProfile = actor.role === "OWNER" || actor.role === "ADMIN" || actor.role === "AGENT";
 
   const [bills, draws, agents] = await Promise.all([
     searchBills(actor, {
@@ -35,6 +38,7 @@ export default async function BillsPage({
       drawId: params.draw === "" ? undefined : params.draw,
       agentId: params.agent === "" ? undefined : params.agent,
       status: readStatus(params.status),
+      winnerOnly: params.winner === "1",
     }),
     prisma.draw.findMany({
       where: orgScope(actor),
@@ -55,7 +59,7 @@ export default async function BillsPage({
     <main className="workspace-page bills-page">
       <section className="card workspace-card" aria-labelledby="bills-heading">
         <p><Link href="/">← หน้าภาพรวม</Link></p>
-        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Bill Management</p><h1 id="bills-heading">รายการบิล</h1><p>{actor.role === "AGENT" ? "ตรวจสอบและจัดการบิลของคุณ" : "จัดการบิลทั้งหมด ค้นหา กรอง และตรวจสอบสถานะ"}</p></div>{can(actor.role, "bill.create") && <Link href="/bills/new" className="page-primary-action">＋ สร้างบิลใหม่</Link>}</header>
+        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Bill Management</p><h1 id="bills-heading">รายการบิล</h1><p>{actor.role === "AGENT" ? "ตรวจสอบและจัดการบิลของคุณ" : "จัดการบิลทั้งหมด ค้นหา กรอง และตรวจสอบสถานะ"}</p></div>{can(actor.role, "bill.create") && <Link href="/bills/new" className="page-primary-action"><DashboardIcon name="plus" /> สร้างบิลใหม่</Link>}</header>
 
         <div className="bill-summary-strip"><div><span>บิลที่พบ</span><strong>{bills.length}</strong></div><div><span>ยืนยันแล้ว</span><strong>{bills.filter((bill) => bill.status === "CONFIRMED").length}</strong></div><div><span>รอประมวลผล</span><strong>{bills.filter((bill) => bill.status === "LOCKED").length}</strong></div><div><span>ยอดรับแทงรวม</span><strong>{bills.reduce((sum, bill) => sum + Number(bill.totalStake), 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })}</strong></div></div>
 
@@ -64,6 +68,7 @@ export default async function BillsPage({
           drawId={params.draw ?? ""}
           agentId={params.agent ?? ""}
           status={params.status ?? ""}
+          winnerOnly={params.winner === "1"}
           draws={draws.map((draw) => ({ id: draw.id, label: draw.name }))}
           agents={
             canSeeAllAgents
@@ -103,7 +108,7 @@ export default async function BillsPage({
                     <td>
                       <Link href={`/bills/${bill.id}`}>{bill.billNumber ?? "(ร่าง)"}</Link>
                     </td>
-                    <td>{bill.title}</td>
+                    <td>{canViewCustomerProfile ? <Link className="customer-profile-link" href={`/customers/${customerProfileKey(bill.title)}`}>{bill.title}<small>ดูโปรไฟล์ลูกค้า →</small></Link> : bill.title}</td>
                     <td>{bill.draw.name}</td>
                     <td>
                       {bill.agent.code} {bill.agent.name}

@@ -1,5 +1,8 @@
 "use client";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { AppDropdown } from "../AppDropdown";
+
 type DrawOption = { id: string; label: string };
 
 export function DrawPicker({
@@ -9,23 +12,20 @@ export function DrawPicker({
   selectedId: string;
   draws: DrawOption[];
 }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  function selectDraw(value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value && value !== "all") params.set("draw", value); else params.delete("draw");
+    router.replace(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false });
+  }
   return (
-    <form method="get" className="draw-picker">
+    <div className="draw-picker">
       <label htmlFor="draw">
         เลือกรอบ
-        <select
-          id="draw"
-          name="draw"
-          defaultValue={selectedId}
-          onChange={(event) => event.currentTarget.form?.requestSubmit()}
-        >
-          {draws.map((draw) => (
-            <option key={draw.id} value={draw.id}>
-              {draw.label}
-            </option>
-          ))}
-        </select>
+        <AppDropdown id="draw" value={selectedId || "all"} onValueChange={selectDraw} options={[{ value: "all", label: "ทุกรอบ" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหารอบ" />
       </label>
-    </form>
+    </div>
   );
 }

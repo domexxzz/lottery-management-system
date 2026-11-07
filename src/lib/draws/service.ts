@@ -17,20 +17,28 @@ function parseDate(raw: string, label: string): Date {
   return value;
 }
 
-export async function listDraws(actor: Actor) {
+export async function listDraws(
+  actor: Actor,
+  take: number | null = 50,
+  order: "createdAt" | "opensAt" = "createdAt",
+) {
   requirePermission(actor, "bill.viewOwn");
 
   return prisma.draw.findMany({
     where: orgScope(actor),
-    orderBy: { cutoffAt: "desc" },
-    take: 50,
+    orderBy: order === "opensAt"
+      ? [{ opensAt: "desc" }, { createdAt: "desc" }, { id: "desc" }]
+      : [{ createdAt: "desc" }, { id: "desc" }],
+    ...(take === null ? {} : { take }),
     select: {
       id: true,
       name: true,
       opensAt: true,
       cutoffAt: true,
+      createdAt: true,
       status: true,
       lockedAt: true,
+      settlements: { select: { status: true } },
       _count: { select: { bills: true } },
     },
   });

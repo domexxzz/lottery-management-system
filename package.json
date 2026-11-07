@@ -11,18 +11,28 @@
     "db:up": "docker compose up -d",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
+    "db:seed:history": "tsx scripts/seed-three-month-demo.ts",
+    "db:demo:winners": "tsx scripts/rebalance-demo-winners.ts",
     "db:studio": "prisma studio",
-    "verify": "npx tsc --noEmit && npm test && npm run test:integration && npx next build",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run test:integration && npm run build",
     "test": "vitest run --config vitest.config.mts",
     "test:watch": "vitest --config vitest.config.mts",
     "job:cutoff": "tsx scripts/run-cutoff.ts",
+    "notify:check": "tsx scripts/check-telegram.ts",
+    "job:notify": "tsx scripts/run-notify.ts",
+    "job:notify:watch": "tsx scripts/run-notify.ts --watch",
+    "job:daily-summary": "tsx scripts/run-daily-summary.ts",
+    "notify:link": "tsx scripts/link-telegram-user.ts",
+    "notify:probe": "tsx scripts/probe-updates.ts",
     "contract:emit": "prisma contract emit",
-    "test:integration": "vitest run --config vitest.integration.config.mts"
+    "test:integration": "tsx scripts/prepare-integration-db.ts && vitest run --config vitest.integration.config.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1163.0",
+    "@aws-sdk/s3-request-presigner": "^3.1163.0",
     "@node-rs/argon2": "^2.2.2",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
@@ -31,16 +41,24 @@
     "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "sharp": "^0.35.5",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@babel/core": "^8.1.0",
+    "@babel/eslint-parser": "^8.0.7",
+    "@babel/preset-react": "^8.0.1",
+    "@babel/preset-typescript": "^8.0.7",
+    "@next/eslint-plugin-next": "^16.4.4",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
     "prisma": "^7.10.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
+    "vite": "^8.3.6",
     "vitest": "^5.1.0"
   },
   "allowScripts": {

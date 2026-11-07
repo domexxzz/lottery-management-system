@@ -6,6 +6,7 @@ import { billScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { canTransition, cancelNeedsApproval, transitionError } from "./lifecycle";
 import { totalStake, validateBill, type DraftItem, type PrizeTypeRule } from "./validation";
+import { assertBillEvidenceReady } from "@/lib/evidence/service";
 
 const BILL_NUMBER_PAD = 8;
 
@@ -219,6 +220,10 @@ export async function confirmBill(
       throw new ConflictError("Agent รายนี้ถูกระงับอยู่");
     }
 
+    // ตรวจซ้ำฝั่ง Server ใน transaction เดียวกับการออกเลขบิล
+    // เพื่อไม่ให้ข้ามกฎหลักฐานด้วยการเรียก Action โดยตรง
+    await assertBillEvidenceReady(tx, bill.id);
+
     const rules = await loadPrizeRules(tx, bill.organizationId);
 
     // ยอดที่ Agent ใช้ไปแล้วในรอบนี้ นับเฉพาะบิลที่มีผลผูกพัน ไม่รวมร่างและที่ยกเลิก
@@ -252,14 +257,13 @@ export async function confirmBill(
       throw new ValidationError(issues.map((i) => i.message).join(" · "));
     }
 
-    // ออกเลขบิลแบบ atomic — UPDATE ... RETURNING กันเลขซ้ำเมื่อยืนยันพร้อมกันหลายคน
-    const [org] = await tx.$queryRaw<{ billSequence: number }[]>`
-      UPDATE organizations
-      SET "billSequence" = "billSequence" + 1
-      WHERE id = ${bill.organizationId}
-      RETURNING "billSequence"
-    `;
-    if (!org) throw new NotFoundError("ไม่พบองค์กร");
+    // Prisma แปลง atomic increment เป็น UPDATE ... RETURNING ให้เอง และเคารพ schema
+    // ของ driver adapter จึงใช้ได้ทั้ง public และ integration_test โดยไม่เสี่ยง query ข้าม schema
+    const org = await tx.organization.update({
+      where: { id: bill.organizationId },
+      data: { billSequence: { increment: 1 } },
+      select: { billSequence: true },
+    });
     const billNumber = String(org.billSequence).padStart(BILL_NUMBER_PAD, "0");
 
     // เขียน payout snapshot ของจริง ณ วินาทีที่ยืนยัน
@@ -452,6 +456,25 @@ export async function getBill(actor: Actor, billId: string) {
       createdBy: { select: { displayName: true } },
       cancelledBy: { select: { displayName: true } },
       cancelRequestedBy: { select: { displayName: true } },
+      attachments: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          uploadedBy: { select: { displayName: true } },
+          verifiedBy: { select: { displayName: true } },
+          replacedBy: { select: { id: true } },
+        },
+      },
+      payment: {
+        select: {
+          amount: true,
+          paidAt: true,
+          paymentMethod: true,
+          bankName: true,
+          transactionReference: true,
+          note: true,
+          verificationStatus: true,
+        },
+      },
     },
   });
 

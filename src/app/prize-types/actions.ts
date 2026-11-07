@@ -30,6 +30,7 @@ export async function updatePrizeTypeAction(
       {
         name: String(formData.get("name") ?? ""),
         digits: String(formData.get("digits") ?? ""),
+        resultDigits: String(formData.get("resultDigits") ?? ""),
         matchRule: readMatchRule(formData.get("matchRule")),
         payoutRate: String(formData.get("payoutRate") ?? ""),
         maxStakePerItem: String(formData.get("maxStakePerItem") ?? ""),

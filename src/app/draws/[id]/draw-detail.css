@@ -26,9 +26,43 @@
 
 /* เลขที่ออกคือสิ่งที่คนจ้องมากที่สุดในหน้านี้ */
 .number-cell {
-  font-family: "Courier New", monospace;
+  font-family: var(--font-sarabun), sans-serif;
+  font-variant-numeric: tabular-nums;
   font-size: 1.1em;
   font-weight: bold;
   letter-spacing: 0.08em;
 }
 .draw-detail-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:.65rem;margin-bottom:1rem}.draw-detail-summary>div{display:flex;flex-direction:column;padding:.7rem .8rem;border:1px solid #e0e8ec;border-radius:10px;background:#f9fbfc}.draw-detail-summary span{color:#75858f;font-size:.62rem}.draw-detail-summary strong{color:#15364d;font-size:.95rem}.draw-detail-summary small{color:#909da5;font-size:.58rem}.draw-detail-page h2{display:flex;align-items:center;gap:.45rem;padding-top:.8rem;border-top:1px solid #e7edef}.draw-detail-page h2::before{width:4px;height:18px;border-radius:99px;content:"";background:#168b99}.draw-detail-page .inline-form{padding:.35rem;border-radius:8px;background:#f8fafb}@media(max-width:650px){.draw-detail-summary{grid-template-columns:1fr}}
+.result-entry-guide{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.75rem;margin:.65rem 0 .85rem;padding:.8rem .9rem;border:1px solid #8bd2d2;border-left:5px solid #15979a;border-radius:11px;background:linear-gradient(135deg,#effafa,#f7fcfc);box-shadow:0 6px 16px rgb(21 151 154 / 8%)}.result-entry-guide-icon{display:grid;width:38px;height:38px;place-items:center;border-radius:10px;color:#fff;background:#15979a;font-size:1.05rem;font-weight:900}.result-entry-guide>div{display:flex;min-width:0;flex-direction:column}.result-entry-guide strong{color:#154257;font-size:.8rem}.result-entry-guide small{color:#69808c;font-size:.65rem}.result-entry-guide a{padding:.5rem .7rem;border-radius:8px;color:#fff;background:#168b98;font-size:.65rem;font-weight:800;text-decoration:none;white-space:nowrap}.draw-detail-page .result-entry-form{align-items:stretch;gap:.45rem;padding:.5rem!important;border:1px solid #b9dee0;border-radius:10px;background:#f1fafa}.draw-detail-page .result-entry-form input{min-width:190px;min-height:42px;padding:.55rem .65rem;border:2px solid #83c9ce;background:#fff;font-size:.75rem;font-weight:700}.draw-detail-page .result-entry-form input:focus{border-color:#138b98;outline:3px solid rgb(19 139 152 / 13%)}.draw-detail-page .result-save-button{min-height:42px;padding:.5rem .8rem;border-radius:8px;background:linear-gradient(135deg,#0f7e8d,#11a29d);box-shadow:0 6px 14px rgb(17 143 150 / 20%);font-size:.68rem;font-weight:850;white-space:nowrap}.draw-detail-page .result-save-button:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 18px rgb(17 143 150 / 26%)}@media(max-width:650px){.result-entry-guide{grid-template-columns:auto 1fr}.result-entry-guide a{grid-column:1/-1;text-align:center}.draw-detail-page .result-entry-form{flex-direction:column}.draw-detail-page .result-entry-form input,.draw-detail-page .result-save-button{width:100%}}
+
+/* กรอกผลทั้งรอบแล้วบันทึกครั้งเดียว — ลดความสูงแถวเพื่อเห็นรายการได้มากขึ้น */
+.draw-detail-page .result-entry-guide{gap:.65rem;margin:.5rem 0 .65rem;padding:.6rem .75rem;border-left-width:4px;border-radius:9px;box-shadow:none}.draw-detail-page .result-entry-guide-icon{width:32px;height:32px;border-radius:8px;font-size:.9rem}.draw-detail-page .result-entry-guide strong{font-size:.75rem}.draw-detail-page .result-entry-guide small{font-size:.61rem}.draw-detail-page .result-entry-guide a{padding:.4rem .6rem;font-size:.61rem}.result-entry-table th{padding:.42rem .6rem;font-size:.62rem}.result-entry-table td{height:44px;padding:.34rem .6rem;font-size:.68rem}.result-entry-table .number-cell{font-size:.74rem}.result-bulk-input{width:100%;min-width:145px;min-height:32px!important;margin:0!important;padding:.34rem .52rem!important;border:1px solid #83c9ce!important;border-radius:7px!important;background:#fff;font-size:.67rem!important;font-weight:700}.result-bulk-input:focus{border-color:#138b98!important;outline:2px solid rgb(19 139 152 / 13%)}.bulk-result-save-bar{display:flex;align-items:center;justify-content:flex-end;gap:.8rem;margin-top:.65rem;padding:.65rem .8rem;border:1px solid #b9dee0;border-radius:10px;background:#f1fafa}.bulk-result-save-bar>div{display:flex;margin-right:auto;flex-direction:column}.bulk-result-save-bar strong{color:#154257;font-size:.72rem}.bulk-result-save-bar small{color:#69808c;font-size:.6rem}.bulk-result-save-bar button{min-height:38px;padding:.48rem .85rem;border-radius:8px;background:linear-gradient(135deg,#0f7e8d,#11a29d);box-shadow:0 5px 12px rgb(17 143 150 / 18%);font-size:.66rem;font-weight:850;white-space:nowrap}.bulk-result-save-bar>span{font-size:.64rem}@media(max-width:650px){.result-entry-table{min-width:680px}.bulk-result-save-bar{align-items:stretch;flex-direction:column}.bulk-result-save-bar button{width:100%}}
+
+/* ดึงผลทางการมาเป็นแบบร่างให้ Admin ตรวจ ก่อนบันทึกจริง */
+.glo-importer{margin:.65rem 0;padding:.75rem;border:1px solid #b7dce2;border-radius:12px;background:linear-gradient(135deg,#f1fafb,#fff)}.glo-importer-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem}.glo-importer-heading>div{display:flex;min-width:0;margin-right:auto;flex-direction:column}.glo-importer-heading strong{color:#153f56;font-size:.78rem}.glo-importer-heading small{color:#6d818d;font-size:.62rem}.glo-importer-heading label{display:flex;flex:0 0 auto;flex-direction:column;gap:.16rem;color:#617985;font-size:.56rem}.glo-importer-heading input{width:150px;min-height:36px;margin:0;padding:.35rem .5rem;border:1px solid #bfd7dc;border-radius:8px;background:#fff;font-size:.64rem}.glo-importer-heading button{min-height:38px;padding:.5rem .85rem;border-radius:9px;background:#128b98;font-size:.66rem;font-weight:850;white-space:nowrap}.glo-import-error{margin:.6rem 0 0;padding:.55rem .65rem;border:1px solid #efbfc3;border-radius:8px;color:#a5343e;background:#fff5f6;font-size:.65rem}.glo-import-preview{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.45rem;margin-top:.7rem;padding-top:.7rem;border-top:1px solid #dbe8eb}.glo-import-preview>div{display:flex;min-width:0;padding:.5rem .55rem;border:1px solid #e0eaed;border-radius:8px;background:#fff;flex-direction:column}.glo-import-preview span{color:#71848e;font-size:.56rem}.glo-import-preview strong{overflow-wrap:anywhere;color:#173d54;font-size:.75rem;font-variant-numeric:tabular-nums}.glo-import-preview>p{display:flex;grid-column:1/-1;align-items:center;justify-content:space-between;gap:.6rem;margin:0;padding:.5rem .6rem;border-radius:8px;color:#23606a;background:#e5f6f4;font-size:.62rem}.glo-import-preview>p span{color:#4d7279}.result-bulk-input[data-glo-imported="true"]{border-color:#159b8d!important;background:#f0fffb!important;box-shadow:inset 3px 0 #159b8d}@media(max-width:850px){.glo-importer-heading{align-items:stretch;flex-wrap:wrap}.glo-importer-heading>div{width:100%}.glo-import-preview{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.glo-importer-heading{align-items:stretch;flex-direction:column}.glo-importer-heading input,.glo-importer-heading button{width:100%}.glo-import-preview{grid-template-columns:1fr}.glo-import-preview>p{align-items:flex-start;flex-direction:column}}
+
+/* ฟอร์มเสนอแก้ผลที่ประกาศแล้ว — ยุบไว้เพื่อไม่ให้ชนกับงานปกติ */
+.result-correction {
+  margin-top: 0.5rem;
+}
+
+.result-correction > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--muted, #64748b);
+}
+
+.result-correction > summary:hover {
+  color: inherit;
+}
+
+.result-correction .inline-form {
+  margin-top: 0.5rem;
+  gap: 0.4rem;
+}
+
+.result-correction p.muted {
+  width: 100%;
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+}

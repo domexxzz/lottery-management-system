@@ -1,29 +1,50 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { BillStatus, Prisma } from "@prisma/client";
 import { getActor, orgScope } from "@/lib/auth/context";
 import { prisma } from "@/lib/db";
+import { AnalyticsFilters } from "./AnalyticsFilters";
 import "./analytics.css";
 
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const INTEGER = new Intl.NumberFormat("th-TH");
 
 type CustomerRow = { label: string; bills: number; spend: number; items: number; numbers: Map<string, number> };
+const ANALYTICS_STATUSES: BillStatus[] = ["CONFIRMED", "LOCKED", "SETTLED"];
+function first(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] : value; }
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await getActor();
   if (!actor) redirect("/login");
   if (actor.mustChangePassword) redirect("/change-password");
-  if (actor.role !== "OWNER" && actor.role !== "ADMIN") redirect("/");
+  if (actor.role !== "OWNER") redirect("/");
 
-  const bills = await prisma.bill.findMany({
-    where: { ...orgScope(actor), status: { in: ["CONFIRMED", "LOCKED", "SETTLED"] } },
-    orderBy: { createdAt: "asc" },
-    select: {
-      id: true, title: true, totalStake: true, createdAt: true,
-      draw: { select: { name: true } },
-      items: { select: { number: true, stake: true, prizeType: { select: { name: true } } } },
-    },
-  });
+  const query = await searchParams;
+  const drawId = first(query.drawId);
+  const agentId = first(query.agentId);
+  const rawStatus = first(query.status);
+  const selectedStatus = ANALYTICS_STATUSES.includes(rawStatus as BillStatus) ? rawStatus as BillStatus : undefined;
+  const scope = orgScope(actor);
+  const billWhere: Prisma.BillWhereInput = {
+    ...scope,
+    status: selectedStatus ?? { in: ANALYTICS_STATUSES },
+    ...(drawId ? { drawId } : {}),
+    ...(agentId ? { agentId } : {}),
+  };
+
+  const [bills, draws, agents] = await Promise.all([
+    prisma.bill.findMany({
+      where: billWhere,
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true, title: true, totalStake: true, createdAt: true,
+        draw: { select: { name: true } },
+        items: { select: { number: true, stake: true, prizeType: { select: { name: true } } } },
+      },
+    }),
+    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true } }),
+    prisma.agent.findMany({ where: scope, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
+  ]);
 
   const customers = new Map<string, CustomerRow>();
   const numberDemand = new Map<string, { count: number; stake: number }>();
@@ -63,7 +84,7 @@ export default async function AnalyticsPage() {
     { label: "ลูกค้าใหม่", detail: "พบเพียง 1 ครั้ง", count: customerRows.filter((row) => row.bills === 1).length, color: "#7566b1" },
     { label: "ไม่ระบุรหัส", detail: "ยังเชื่อมลูกค้าไม่ได้", count: customerRows.filter((row) => row.label === "ไม่ระบุรหัส").length, color: "#9aa8b1" },
   ];
-  const topNumbers = [...numberDemand.entries()].sort((a, b) => b[1].count - a[1].count || b[1].stake - a[1].stake).slice(0, 10);
+  const topNumbers = [...numberDemand.entries()].sort((a, b) => b[1].count - a[1].count || b[1].stake - a[1].stake).slice(0, 5);
   const topPrizes = [...prizeDemand.entries()].sort((a, b) => b[1].stake - a[1].stake).slice(0, 6);
   const maxPrizeStake = Math.max(...topPrizes.map(([, value]) => value.stake), 1);
   const maxTimeSales = Math.max(...[...timeDemand.values()].map((value) => value.sales), 1);
@@ -74,6 +95,8 @@ export default async function AnalyticsPage() {
       <div><Link href="/" className="back-link">← กลับหน้าภาพรวม</Link><p className="eyebrow">Lottery Customer Intelligence</p><h1>วิเคราะห์พฤติกรรมลูกค้าเชิงลึก</h1><p>เข้าใจว่าลูกค้าซื้ออะไร ซื้อเมื่อไร ซื้อบ่อยแค่ไหน และกลุ่มใดสร้างยอดขายหลัก</p></div>
       <div className="data-badge"><span>●</span><div><strong>ข้อมูลจริงจากระบบ</strong><small>{INTEGER.format(bills.length)} บิลที่ยืนยันแล้ว</small></div></div>
     </header>
+
+    <AnalyticsFilters draws={draws.map((draw) => ({ id: draw.id, label: draw.name }))} agents={agents.map((agent) => ({ id: agent.id, label: `${agent.code} · ${agent.name}` }))} />
 
     <section className="analytics-kpis" aria-label="ตัวเลขสำคัญ">
       <article><span>ยอดขายรวม</span><strong>{MONEY.format(totalSales)} ฿</strong><small>บิลที่ยืนยัน ล็อก หรือคำนวณแล้ว</small></article>

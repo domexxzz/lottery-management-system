@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireActor } from "@/lib/auth/context";
-import { approveResult, enterResult, rejectResult } from "@/lib/results/service";
+import {
+  approveResult,
+  enterResult,
+  enterResultsBatch,
+  proposeResultCorrection,
+  rejectResult,
+} from "@/lib/results/service";
 import {
   approveSettlement,
   calculateSettlement,
@@ -23,19 +29,46 @@ export async function enterResultAction(
 ): Promise<ActionState> {
   const actor = await requireActor();
   const drawId = String(formData.get("drawId") ?? "");
+  let autoApproved = false;
 
   try {
-    await enterResult(actor, {
+    const outcome = await enterResult(actor, {
       drawId,
       prizeTypeId: String(formData.get("prizeTypeId") ?? ""),
       value: String(formData.get("value") ?? ""),
     });
+    autoApproved = outcome.autoApproved;
   } catch (error) {
     return fail(error);
   }
 
   revalidatePath(`/draws/${drawId}`);
-  return { error: null, message: "บันทึกผลแล้ว รอผู้ตรวจอนุมัติ" };
+  return {
+    error: null,
+    message: autoApproved ? "บันทึกและยืนยันผลแล้ว" : "บันทึกผลแล้ว",
+  };
+}
+
+export async function enterResultsBatchAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireActor();
+  const drawId = String(formData.get("drawId") ?? "");
+  const results = [...formData.entries()]
+    .filter(([key, value]) => key.startsWith("result:") && String(value).trim() !== "")
+    .map(([key, value]) => ({ prizeTypeId: key.slice("result:".length), value: String(value) }));
+
+  let count = 0;
+  try {
+    const outcome = await enterResultsBatch(actor, { drawId, results });
+    count = outcome.count;
+  } catch (error) {
+    return fail(error);
+  }
+
+  revalidatePath(`/draws/${drawId}`);
+  return { error: null, message: `บันทึกและยืนยันผลแล้ว ${count} รายการ` };
 }
 
 export async function approveResultAction(
@@ -76,6 +109,28 @@ export async function rejectResultAction(
   return { error: null, message: "ตีกลับผลแล้ว" };
 }
 
+export async function proposeResultCorrectionAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireActor();
+  const drawId = String(formData.get("drawId") ?? "");
+
+  try {
+    await proposeResultCorrection(actor, {
+      drawId,
+      prizeTypeId: String(formData.get("prizeTypeId") ?? ""),
+      value: String(formData.get("value") ?? ""),
+      reason: String(formData.get("reason") ?? ""),
+    });
+  } catch (error) {
+    return fail(error);
+  }
+
+  revalidatePath(`/draws/${drawId}`);
+  return { error: null, message: "ส่งคำขอแก้ผลแล้ว รอ Owner อนุมัติ" };
+}
+
 export async function calculateSettlementAction(
   _prev: ActionState,
   formData: FormData,
@@ -106,7 +161,8 @@ export async function reconcileAction(
   }
 
   revalidatePath(`/draws/${drawId}`);
-  return { error: null, message: "กระทบยอดแล้ว" };
+  revalidatePath("/draws");
+  return { error: null, message: "ตรวจสอบยอดแล้ว" };
 }
 
 export async function approveSettlementAction(

@@ -3,7 +3,7 @@
   color: #000;
   margin: 0 auto;
   padding: 12mm;
-  font-family: Tahoma, "Segoe UI", sans-serif;
+  font-family: var(--font-sarabun), sans-serif;
   font-size: 11pt;
   line-height: 1.5;
 }
@@ -87,7 +87,8 @@
 
 /* เลขที่แทงต้องอ่านง่ายที่สุดบนกระดาษ จึงใช้ฟอนต์ความกว้างคงที่และตัวใหญ่ขึ้น */
 .number-cell {
-  font-family: "Courier New", monospace;
+  font-family: var(--font-sarabun), sans-serif;
+  font-variant-numeric: tabular-nums;
   font-size: 1.15em;
   font-weight: bold;
   letter-spacing: 0.1em;
@@ -111,6 +112,24 @@
 .sheet-footer {
   margin-top: 6mm;
   font-size: 8pt;
+}
+
+@media screen {
+  .sheet {
+    max-width: calc(100% - 1.6rem);
+    margin-top: 1rem;
+    border: 1px solid var(--premium-border);
+    border-radius: var(--premium-radius);
+    box-shadow: var(--premium-shadow-sm);
+  }
+}
+
+@media screen and (max-width: 650px) {
+  .sheet { padding: .85rem; }
+  .sheet-meta { grid-template-columns: 1fr; }
+  .sheet-meta dd { min-width: 0; overflow-wrap: anywhere; }
+  .sheet-items { table-layout: fixed; }
+  .sheet-items :is(th, td) { overflow-wrap: anywhere; }
 }
 
 @media print {

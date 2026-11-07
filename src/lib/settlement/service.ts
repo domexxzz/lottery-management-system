@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { writeAudit, type TxClient } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
-import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import { commissionOf, itemPayout, netOf, sumMoney, toMoney, ZERO } from "@/lib/money";
 import { isWinning } from "@/lib/results/matching";
 
@@ -285,7 +285,7 @@ export async function reconcileSettlement(actor: Actor, settlementId: string): P
       select: { id: true, status: true },
     });
     if (!settlement) throw new NotFoundError("ไม่พบรายการสรุป");
-    if (settlement.status !== "DRAFT") throw new ConflictError("รายการนี้กระทบยอดไปแล้ว");
+    if (settlement.status !== "DRAFT") throw new ConflictError("รายการนี้ตรวจสอบยอดไปแล้ว");
 
     await tx.settlement.update({
       where: { id: settlement.id },
@@ -302,7 +302,7 @@ export async function reconcileSettlement(actor: Actor, settlementId: string): P
       entityId: settlement.id,
       before: { status: "DRAFT" },
       after: { status: "RECONCILED" },
-      reason: "กระทบยอดแล้ว",
+      reason: "ตรวจสอบยอดแล้ว",
     });
   });
 }
@@ -328,7 +328,7 @@ export async function approveSettlement(actor: Actor, drawId: string): Promise<v
 
     const settlements = await tx.settlement.findMany({
       where: { drawId: draw.id },
-      select: { id: true, status: true, reconciledById: true, net: true },
+      select: { id: true, status: true, net: true },
     });
 
     if (settlements.length === 0) throw new ConflictError("ไม่มีรายการสรุปให้อนุมัติ");
@@ -336,14 +336,8 @@ export async function approveSettlement(actor: Actor, drawId: string): Promise<v
     const notReconciled = settlements.filter((s) => s.status === "DRAFT");
     if (notReconciled.length > 0) {
       throw new ConflictError(
-        `ยังมี ${notReconciled.length} รายการที่ยังไม่ได้กระทบยอด ต้องกระทบยอดครบก่อนปิดบัญชี`,
+        `ยังมี ${notReconciled.length} รายการที่ยังไม่ได้ตรวจสอบยอด ต้องตรวจสอบยอดให้ครบก่อนปิดบัญชี`,
       );
-    }
-
-    // ผู้กระทบยอดกับผู้อนุมัติต้องไม่ใช่คนเดียวกัน ตามหลักเดียวกับ Maker-Checker
-    const selfReconciled = settlements.filter((s) => s.reconciledById === actor.userId);
-    if (selfReconciled.length > 0) {
-      throw new ForbiddenError("ผู้กระทบยอดกับผู้อนุมัติปิดบัญชีต้องไม่ใช่คนเดียวกัน");
     }
 
     const now = new Date();

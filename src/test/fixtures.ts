@@ -20,10 +20,39 @@ const PASSWORD_HASH = "$argon2id$v=19$m=19456,t=2,p=1$notarealhash$notarealhash"
  * _prisma_migrations ไม่ถูกแตะ เพราะเป็นประวัติ migration ไม่ใช่ข้อมูลทดสอบ
  */
 export async function resetDatabase(): Promise<void> {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("ไม่พบ DATABASE_URL สำหรับ integration test");
+  }
+
+  const schema = new URL(connectionString).searchParams.get("schema");
+  if (!schema?.startsWith("integration_test")) {
+    throw new Error(
+      "ปฏิเสธการล้างฐานข้อมูล: integration test ต้องทำงานใน schema integration_test เท่านั้น",
+    );
+  }
+
+  const schemaIdentifier = `"${schema.replaceAll('"', '""')}"`;
+  const tables = [
+    "audit_events",
+    "bill_attachments",
+    "bill_payments",
+    "settlements",
+    "results",
+    "bill_items",
+    "bills",
+    "draws",
+    "prize_types",
+    "agents",
+    "sessions",
+    "users",
+    "organizations",
+  ]
+    .map((table) => `${schemaIdentifier}."${table}"`)
+    .join(", ");
+
   await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE
-      audit_events, settlements, results, bill_items, bills,
-      draws, prize_types, agents, sessions, users, organizations
+    TRUNCATE TABLE ${tables}
     RESTART IDENTITY CASCADE
   `);
 }
@@ -47,10 +76,9 @@ export async function createFixtures() {
       },
     });
 
-  const [owner, admin, checker, agentUser1, agentUser2] = await Promise.all([
+  const [owner, admin, agentUser1, agentUser2] = await Promise.all([
     mkUser("owner", "เจ้าของ", "OWNER"),
     mkUser("admin", "ผู้ดูแล", "ADMIN"),
-    mkUser("checker", "ผู้ตรวจ", "CHECKER"),
     mkUser("agent1", "ตัวแทนหนึ่ง", "AGENT"),
     mkUser("agent2", "ตัวแทนสอง", "AGENT"),
   ]);
@@ -102,7 +130,9 @@ export async function createFixtures() {
         organizationId: org.id,
         code: 8,
         name: "วิ่งบน",
+        // แทงหลักเดียว แต่เทียบกับเลข 3 ตัวบน จึงต้องประกาศผล 3 หลัก
         digits: 1,
+        resultDigits: 3,
         matchRule: "CONTAINS_DIGIT",
         payoutRate: new Prisma.Decimal("3.2"),
       },
@@ -139,11 +169,10 @@ export async function createFixtures() {
     draw,
     prizeTypes: { threeTop, threeTod, runTop },
     agents: { agent1, agent2 },
-    users: { owner, admin, checker, agentUser1, agentUser2 },
+    users: { owner, admin, agentUser1, agentUser2 },
     actors: {
       OWNER: actor(owner),
       ADMIN: actor(admin),
-      CHECKER: actor(checker),
       AGENT1: actor(agentUser1, agent1.id),
       AGENT2: actor(agentUser2, agent2.id),
     },

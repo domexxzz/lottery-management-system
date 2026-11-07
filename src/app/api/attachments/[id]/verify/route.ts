@@ -1,0 +1,15 @@
+import { requireActor } from "@/lib/auth/context";
+import { reviewAttachment } from "@/lib/evidence/service";
+import { apiError, assertSameOrigin } from "@/lib/http";
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    assertSameOrigin(request);
+    const actor = await requireActor();
+    const { id } = await context.params;
+    await reviewAttachment(actor, id, "VERIFIED");
+    return Response.json({ data: { status: "VERIFIED" } }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return apiError(error);
+  }
+}

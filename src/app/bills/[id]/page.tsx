@@ -5,7 +5,12 @@ import { can } from "@/lib/auth/permissions";
 import { getBill } from "@/lib/bills/service";
 import { canTransition, statusLabel } from "@/lib/bills/lifecycle";
 import { NotFoundError } from "@/lib/errors";
+import { customerProfileKey } from "@/lib/customers/profile-key";
+import { DashboardIcon as Icon } from "@/app/DashboardIcon";
 import { CancelForm, ConfirmButton, RequestCancelForm } from "./BillActions";
+import { EvidenceManager } from "./EvidenceManager";
+import "./evidence.css";
+import { getStorageConfig } from "@/lib/storage/config";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +53,28 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
     can(actor.role, "bill.proposeChangeAfterCutoff") &&
     !can(actor.role, "bill.approveChangeAfterCutoff");
 
+  const evidenceConfig = getStorageConfig();
+  const activeEvidence = bill.attachments.filter((attachment) => attachment.replacedBy === null);
+  const hasOrderEvidence = activeEvidence.some(
+    (attachment) => attachment.type === "ORDER_EVIDENCE" && attachment.status !== "REJECTED",
+  );
+  const hasPaymentEvidence = activeEvidence.some(
+    (attachment) => attachment.type === "PAYMENT_EVIDENCE" && attachment.status !== "REJECTED",
+  ) && bill.payment !== null;
+  const evidenceReady =
+    (!evidenceConfig.requireOrderEvidence || hasOrderEvidence) &&
+    (!evidenceConfig.requirePaymentEvidence || hasPaymentEvidence) &&
+    !activeEvidence.some((attachment) => attachment.status === "REJECTED");
+  const evidenceMessage = activeEvidence.some((attachment) => attachment.status === "REJECTED")
+    ? "เปลี่ยนหลักฐานที่ถูกตีกลับและส่งตรวจใหม่ก่อนยืนยันบิล"
+    : evidenceConfig.requireOrderEvidence && !hasOrderEvidence
+      ? "แนบหลักฐานการสั่งซื้ออย่างน้อย 1 รูปให้สำเร็จก่อนยืนยันบิล"
+      : "แนบหลักฐานพร้อมข้อมูลการชำระเงินให้สำเร็จก่อนยืนยันบิล";
+
+  const paidAtInput = bill.payment
+    ? new Date(bill.payment.paidAt.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 16)
+    : "";
+
   return (
     <main className="workspace-page bill-detail-page">
       <section className="card workspace-card" aria-labelledby="bill-heading">
@@ -64,6 +91,11 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
           สร้างโดย {bill.createdBy.displayName} · ปิดรับ {BANGKOK.format(bill.draw.cutoffAt)}
           {bill.confirmedAt !== null && ` · ยืนยันเมื่อ ${BANGKOK.format(bill.confirmedAt)}`}
         </p>
+        <Link className="customer-profile-link" href={`/customers/${customerProfileKey(bill.title)}`}>
+          <span><Icon name="agent" /></span>
+          <div><strong>ดูโปรไฟล์ลูกค้า</strong><small>ประวัติการซื้อ เลขที่ซื้อบ่อย และรางวัลที่ได้รับ</small></div>
+          <b aria-hidden="true">→</b>
+        </Link>
 
         {bill.status === "CANCELLED" && (
           <p className="error">
@@ -112,6 +144,37 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
           </tfoot>
         </table></div>
 
+        <EvidenceManager
+          billId={bill.id}
+          billStatus={bill.status}
+          canUpload={can(actor.role, "evidence.upload")}
+          maxFiles={evidenceConfig.maxFilesPerBill}
+          maxFileSizeMb={Math.round(evidenceConfig.maxFileSizeBytes / 1024 / 1024)}
+          billTotalStake={bill.totalStake.toFixed(2)}
+          initialItems={bill.attachments.map((attachment) => ({
+            id: attachment.id,
+            type: attachment.type,
+            originalName: attachment.originalName,
+            fileSize: attachment.fileSize,
+            status: attachment.status,
+            rejectionReason: attachment.rejectionReason,
+            createdAt: attachment.createdAt.toISOString(),
+            uploadedBy: attachment.uploadedBy.displayName,
+            verifiedBy: attachment.verifiedBy?.displayName ?? null,
+            verifiedAt: attachment.verifiedAt?.toISOString() ?? null,
+            replacesId: attachment.replacesId,
+            replacedById: attachment.replacedBy?.id ?? null,
+          }))}
+          initialPayment={bill.payment ? {
+            amount: bill.payment.amount.toFixed(2),
+            paidAt: paidAtInput,
+            paymentMethod: bill.payment.paymentMethod,
+            bankName: bill.payment.bankName ?? "",
+            note: bill.payment.note ?? "",
+            verificationStatus: bill.payment.verificationStatus,
+          } : null}
+        />
+
         <p>
           <Link href={`/bills/${bill.id}/print`} target="_blank">
             พิมพ์แบบ A4
@@ -129,7 +192,7 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
           </p>
         )}
 
-        {canConfirm && <ConfirmButton billId={bill.id} />}
+        {canConfirm && <ConfirmButton billId={bill.id} evidenceReady={evidenceReady} evidenceMessage={evidenceMessage} />}
         {canRequestCancel && <RequestCancelForm billId={bill.id} />}
         {canCancel && (
           <CancelForm

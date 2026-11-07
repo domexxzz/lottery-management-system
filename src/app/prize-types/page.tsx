@@ -46,7 +46,8 @@ export default async function PrizeTypesPage() {
             <tr>
               <th scope="col">รหัส</th>
               <th scope="col" colSpan={7}>
-                ชื่อ · จำนวนหลัก · อัตราจ่าย · วงเงินต่อรายการ · วิธีตัดสิน · เปิดใช้ · เหตุผล
+                ชื่อ · หลักเลขที่แทง · หลักผลรางวัล · อัตราจ่าย · วงเงินต่อรายการ · วิธีตัดสิน ·
+                เปิดใช้ · เหตุผล
               </th>
             </tr>
           </thead>
@@ -60,6 +61,7 @@ export default async function PrizeTypesPage() {
                     code: p.code,
                     name: p.name,
                     digits: p.digits,
+                    resultDigits: p.resultDigits?.toString() ?? "",
                     matchRule: p.matchRule,
                     payoutRate: p.payoutRate.toFixed(4),
                     maxStakePerItem: p.maxStakePerItem?.toFixed(2) ?? "",
@@ -73,7 +75,11 @@ export default async function PrizeTypesPage() {
                     <strong>{p.code}</strong>
                   </td>
                   <td colSpan={7}>
-                    {p.name} · {p.digits} หลัก · จ่าย {p.payoutRate.toFixed(4)} ·{" "}
+                    {p.name} · แทง {p.digits} หลัก ·{" "}
+                    {p.resultDigits !== null && p.resultDigits !== p.digits
+                      ? `ผล ${p.resultDigits} หลัก · `
+                      : ""}
+                    จ่าย {p.payoutRate.toFixed(4)} ·{" "}
                     {p.maxStakePerItem === null
                       ? "ไม่จำกัดต่อรายการ"
                       : `สูงสุด ${p.maxStakePerItem.toFixed(2)}`}

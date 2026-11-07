@@ -53,7 +53,7 @@ npm run dev
 
 ### บัญชีทดสอบ
 
-seed สร้างบัญชีครบทั้ง 4 บทบาท: `owner`, `admin`, `checker`, `agent1`, `agent2`, `agent3`
+seed สร้างบัญชี 3 บทบาท: `owner`, `admin`, `agent`, `agent2`, `agent3`
 ทุกบัญชีใช้รหัสผ่านจาก `SEED_PASSWORD` ใน `.env` และถูกบังคับเปลี่ยนรหัสผ่านตอน login ครั้งแรก
 
 > Postgres ใน `docker-compose.yml` map ออกที่พอร์ต **5433** ไม่ใช่ 5432
@@ -86,8 +86,8 @@ seed สร้างบัญชีครบทั้ง 4 บทบาท: `own
 - ยกเลิกบิลหลังปิดรับแบบ Admin เสนอ Owner อนุมัติ
 - พิมพ์บิลแบบ A4 และแบบสลิป
 - แก้ Rulebook รางวัล 16 ประเภทในระบบ ไม่ต้อง deploy ใหม่
-- ลงผลรางวัลแบบ Maker-Checker และคำนวณเงินต่อ Agent
-- กระทบยอดและปิดบัญชีรอบ พร้อมไฟล์กระทบยอด CSV
+- Admin บันทึกและยืนยันผลรางวัลในขั้นตอนเดียว แล้วคำนวณเงินต่อ Agent
+- ตรวจสอบยอดและปิดบัญชีรอบ พร้อมรายงานตรวจสอบยอด CSV
 - Audit Log ทุกการเปลี่ยนแปลงพร้อม before/after เหตุผล และ request_id
 
 ## สิ่งที่ยังไม่มี
@@ -140,6 +140,31 @@ Agent เห็นเฉพาะบิลของตนเอง และเ�
 **ตามรอยข้ามชั้นได้** — ทุก request มี `request_id` ที่ปรากฏทั้งใน response header
 structured log และ `AuditEvent.requestId`
 
+### Private Bill Evidence
+
+หลักฐานการสั่งซื้อและการชำระเงินเก็บไฟล์จริงใน Private Object Storage และเก็บเฉพาะ
+metadata ใน PostgreSQL ระบบไม่เก็บ Base64, BLOB, Public URL หรือ Signed URL ลงฐานข้อมูล
+
+- Development ใช้ MinIO ที่ `http://localhost:9000` และ Console ที่ `http://localhost:9001`
+- Bucket `bill-private` ถูกสร้างเป็น Private โดย `minio-init` และข้อมูลอยู่ใน named volume
+- MinIO image ถูก build จาก official source tag ที่ปักหมุดใน `docker/minio/Dockerfile`
+  เพราะ public registry เดิมไม่มี image ให้ดึงแล้ว
+- Production เปลี่ยน `STORAGE_PROVIDER=s3`, เอา `STORAGE_ENDPOINT` ออกสำหรับ AWS S3
+  และส่ง credential ผ่าน Secret Manager หรือใช้ IAM Role ได้โดยไม่แก้ business logic
+- Preview/Download ต้องผ่าน Backend ตรวจ session, organization และ ownership ก่อนออก Signed URL อายุสั้น
+- รูปถูกตรวจ extension, MIME, magic bytes, decode จริง, จำกัดพิกเซล, ลบ EXIF/GPS และแปลงเป็น WEBP
+- Development ยังไม่มี Malware Scanner จึงไม่มีการแสดงสถานะว่าไฟล์ผ่านการสแกน
+
+เริ่มบริการทั้งหมดและสร้าง Private Bucket:
+
+```bash
+npm run db:up
+npx prisma migrate deploy
+```
+
+ตัวแปรทั้งหมดอยู่ใน `.env.example` โดยค่า `STORAGE_ACCESS_KEY` และ
+`STORAGE_SECRET_KEY` ในไฟล์ตัวอย่างเป็น development-only ห้ามใช้ซ้ำใน Production
+
 ### Transaction boundary ที่ห้ามแยก
 
 | การกระทำ | ต้องอยู่ในทรานแซกชันเดียวกัน |
@@ -165,18 +190,19 @@ npm test
 npm run test:integration
 ```
 
-**Integration test** — รันกับ PostgreSQL จริง ต้อง `npm run db:up` และ
-`npx prisma migrate deploy` ก่อน ครอบสิ่งที่ unit test เอื้อมไม่ถึง:
+**Integration test** — รันกับ PostgreSQL จริง ต้อง `npm run db:up` ก่อน
+คำสั่งจะ migrate และใช้ schema `integration_test` จาก `TEST_DATABASE_URL` โดยอัตโนมัติ
+มี safety guard ปฏิเสธการล้างข้อมูลหาก URL ไม่ใช่ schema ทดสอบ ครอบสิ่งที่ unit test เอื้อมไม่ถึง:
 
 - เส้นทางเงินทั้งเส้น ตั้งแต่สร้างบิลจนปิดบัญชี และคำนวณซ้ำได้ผลเดิม
 - แก้อัตราจ่ายแล้วบิลเดิมต้องไม่ขยับ
-- Maker-Checker ทั้งของผลรางวัลและของการปิดบัญชี
+- ผลรางวัลแบบ One-step review และ Owner สามารถตรวจสอบยอดพร้อมอนุมัติปิดบัญชีได้
 - Agent เปิด ค้นหา แก้ หรือยืนยันบิลของอีกคนไม่ได้
 - รายงานตรงกับ Settlement ทุกช่อง
 - ทุก mutation มี audit พร้อม request_id
 
-แต่ละไฟล์ล้างและสร้างข้อมูลของตัวเอง จึงรันซ้ำได้เรื่อย ๆ และรันแบบไม่ขนาน
-เพราะใช้ฐานข้อมูลเดียวกัน
+แต่ละไฟล์ล้างและสร้างข้อมูลของตัวเองใน schema ทดสอบ จึงรันซ้ำได้เรื่อย ๆ
+โดยไม่แตะข้อมูล development ใน schema `public`
 
 ยังไม่ถึงเป้า coverage 80% ตามมาตรฐานทีม — ติดตามที่
 [LOT-43](https://g-team-secvx9wq.atlassian.net/browse/LOT-43)

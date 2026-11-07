@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 /**
  * Integration test — รันกับ PostgreSQL จริง
  *
- * ต้องมี DATABASE_URL และฐานข้อมูลที่ migrate แล้ว
+ * ต้องมี TEST_DATABASE_URL; script จะ migrate schema แยกก่อนเริ่มทดสอบ
  * บนเครื่อง: npm run db:up && npx prisma migrate deploy
  *
  * รันทีละไฟล์แบบไม่ขนาน เพราะทุกไฟล์ล้างและสร้างข้อมูลในฐานเดียวกัน

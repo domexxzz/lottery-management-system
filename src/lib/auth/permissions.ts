@@ -16,6 +16,8 @@ export const PERMISSIONS = [
   "bill.approveChangeAfterCutoff",
   "result.enter",
   "result.approve",
+  "result.proposeCorrection",
+  "result.approveCorrection",
   "settlement.calculate",
   "settlement.reconcile",
   "settlement.approve",
@@ -24,6 +26,9 @@ export const PERMISSIONS = [
   "agent.manage",
   "draw.manage",
   "user.manage",
+  "evidence.view",
+  "evidence.upload",
+  "evidence.review",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -32,11 +37,11 @@ export type Permission = (typeof PERMISSIONS)[number];
  * สิทธิ์ของแต่ละบทบาท
  *
  * หมายเหตุการตีความจากตารางในเอกสาร:
- * - "ลงผลรางวัล: Admin = Maker, Checker = Checker" จึงแยกเป็น result.enter กับ result.approve
- *   และ Owner ได้ทั้งสองสิทธิ์ แต่ service layer ยังห้ามคนเดียวกันเป็นทั้ง Maker และ Checker
- *   ของผลใบเดียวกัน (ดู assertDifferentMakerChecker)
+ * - Admin เป็นผู้ปฏิบัติงานและตรวจสอบ ผลที่กรอกถูกยืนยันในขั้นตอนเดียว
  * - "แก้หรือยกเลิกหลัง Cutoff: Admin เสนอหรือดำเนินการ / Owner อนุมัติ" จึงแยกเป็น
  *   propose กับ approve
+ * - การแก้ผลรางวัลที่ประกาศไปแล้วใช้ด่านเดียวกัน: Admin เสนอ Owner อนุมัติ
+ *   และผู้อนุมัติต้องไม่ใช่ผู้เสนอ เพราะผลที่ประกาศแล้วคือตัวเลขที่กลายเป็นเงินไปแล้ว
  * - "แก้บิลก่อน Cutoff: Agent ตามนโยบาย" — ให้สิทธิ์ไว้ แล้วบังคับนโยบายเพิ่มในชั้น service
  *   (แก้ได้เฉพาะบิลของตนเองที่ยังเป็น DRAFT)
  */
@@ -51,6 +56,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "bill.approveChangeAfterCutoff",
     "result.enter",
     "result.approve",
+    "result.proposeCorrection",
+    "result.approveCorrection",
     "settlement.calculate",
     "settlement.reconcile",
     "settlement.approve",
@@ -59,6 +66,9 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "agent.manage",
     "draw.manage",
     "user.manage",
+    "evidence.view",
+    "evidence.upload",
+    "evidence.review",
   ],
   ADMIN: [
     "report.viewAllAgents",
@@ -68,23 +78,26 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "bill.editBeforeCutoff",
     "bill.proposeChangeAfterCutoff",
     "result.enter",
+    "result.approve",
+    "result.proposeCorrection",
     "settlement.calculate",
     "settlement.reconcile",
     "audit.viewAll",
     "audit.viewOwn",
-    "agent.manage",
     "draw.manage",
-    "user.manage",
+    "evidence.view",
+    "evidence.upload",
+    "evidence.review",
   ],
-  CHECKER: [
-    "report.viewAllAgents",
+  AGENT: [
     "bill.viewOwn",
-    "result.approve",
-    "settlement.reconcile",
-    "audit.viewAll",
+    "bill.create",
+    "bill.confirm",
+    "bill.editBeforeCutoff",
     "audit.viewOwn",
+    "evidence.view",
+    "evidence.upload",
   ],
-  AGENT: ["bill.viewOwn", "bill.create", "bill.confirm", "bill.editBeforeCutoff", "audit.viewOwn"],
 };
 
 export function can(role: Role, permission: Permission): boolean {

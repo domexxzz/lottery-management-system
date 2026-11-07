@@ -19,5 +19,48 @@ services:
       timeout: 5s
       retries: 10
 
+  minio:
+    build:
+      context: .
+      dockerfile: docker/minio/Dockerfile
+    image: lottery-minio:2025-10-15
+    container_name: lottery-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-minio_dev_only}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-minio_dev_secret_only}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - lottery-minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: amazon/aws-cli:2.31.29
+    container_name: lottery-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY:-minio_dev_only}
+      AWS_SECRET_ACCESS_KEY: ${STORAGE_SECRET_KEY:-minio_dev_secret_only}
+      AWS_DEFAULT_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-bill-private}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        aws --endpoint-url http://minio:9000 s3api head-bucket --bucket "$$STORAGE_BUCKET" >/dev/null 2>&1 ||
+        aws --endpoint-url http://minio:9000 s3api create-bucket --bucket "$$STORAGE_BUCKET";
+        aws --endpoint-url http://minio:9000 s3api delete-bucket-policy --bucket "$$STORAGE_BUCKET" >/dev/null 2>&1 || true;
+        aws --endpoint-url http://minio:9000 s3api get-bucket-acl --bucket "$$STORAGE_BUCKET" >/dev/null
+    restart: "no"
+
 volumes:
   lottery-pgdata:
+  lottery-minio-data:

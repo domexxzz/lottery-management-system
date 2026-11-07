@@ -12,9 +12,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (!actor) return NextResponse.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
 
   const { id } = await context.params;
+  const drawId = id === "all" ? undefined : id;
 
   try {
-    const [summary, rows] = await Promise.all([drawSummary(actor, id), byAgent(actor, id)]);
+    const [summary, rows] = await Promise.all([drawSummary(actor, drawId), byAgent(actor, drawId)]);
 
     const csv = csvFile(
       ["รอบ", "รหัส Agent", "ชื่อ Agent", "จำนวนบิล", "ยอดขาย", "จ่ายรางวัล", "คอมมิชชัน", "สุทธิ"],

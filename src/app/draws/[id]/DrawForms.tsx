@@ -6,6 +6,8 @@ import {
   approveSettlementAction,
   calculateSettlementAction,
   enterResultAction,
+  enterResultsBatchAction,
+  proposeResultCorrectionAction,
   reconcileAction,
   rejectResultAction,
   type ActionState,
@@ -26,38 +28,112 @@ function Feedback({ state }: { state: ActionState }) {
   );
 }
 
+export function SaveAllResultsForm({ drawId, formId, editableCount }: { drawId: string; formId: string; editableCount: number }) {
+  const [state, formAction, pending] = useActionState(enterResultsBatchAction, INITIAL);
+  return (
+    <form id={formId} action={formAction} className="bulk-result-save-bar">
+      <input type="hidden" name="drawId" value={drawId} />
+      <div><strong>กรอกผลให้ครบแล้วบันทึกพร้อมกัน</strong><small>ระบบจะตรวจทุกแถวก่อน หากมีแถวผิดจะยังไม่บันทึกรายการใด</small></div>
+      <button type="submit" disabled={pending || editableCount === 0}>
+        {pending ? "กำลังบันทึก..." : `✓ บันทึกผลทั้งหมด (${editableCount})`}
+      </button>
+      <Feedback state={state} />
+    </form>
+  );
+}
+
 export function EnterResultForm({
   drawId,
   prizeTypeId,
   code,
   currentValue,
   hint,
+  resultLength,
 }: {
   drawId: string;
   prizeTypeId: string;
   code: number;
   currentValue: string;
   hint: string;
+  /** ความยาวของผลที่ประกาศ ไม่ใช่ความยาวของเลขที่แทง (ดู expectedResultLength) */
+  resultLength: number;
 }) {
   const [state, formAction, pending] = useActionState(enterResultAction, INITIAL);
 
   return (
-    <form action={formAction} className="inline-form">
+    <form action={formAction} className="inline-form result-entry-form">
       <input type="hidden" name="drawId" value={drawId} />
       <input type="hidden" name="prizeTypeId" value={prizeTypeId} />
       <input
         name="value"
         inputMode="numeric"
+        pattern="[0-9]*"
+        maxLength={resultLength}
         defaultValue={currentValue}
-        placeholder={hint}
+        placeholder={`กรอกเลขที่ออก · ${hint}`}
         aria-label={`ผลรางวัลที่ ${code}`}
         required
       />
-      <button type="submit" disabled={pending}>
-        {pending ? "..." : "บันทึกผล"}
+      <button type="submit" disabled={pending} className="result-save-button">
+        {pending ? "กำลังบันทึก..." : "✓ บันทึกและยืนยันผล"}
       </button>
       <Feedback state={state} />
     </form>
+  );
+}
+
+/**
+ * เสนอแก้ผลที่ประกาศไปแล้ว
+ *
+ * แยกจากช่องกรอกผลปกติโดยตั้งใจ เพราะเป็นคนละการกระทำ:
+ * การกรอกผลจบในขั้นตอนเดียว ส่วนการแก้ต้องมีเหตุผลและรอคนที่สองอนุมัติ
+ */
+export function ProposeCorrectionForm({
+  drawId,
+  prizeTypeId,
+  code,
+  currentValue,
+  resultLength,
+}: {
+  drawId: string;
+  prizeTypeId: string;
+  code: number;
+  currentValue: string;
+  resultLength: number;
+}) {
+  const [state, formAction, pending] = useActionState(proposeResultCorrectionAction, INITIAL);
+
+  return (
+    <details className="result-correction">
+      <summary>แก้ผลที่ประกาศแล้ว</summary>
+      <form action={formAction} className="inline-form">
+        <input type="hidden" name="drawId" value={drawId} />
+        <input type="hidden" name="prizeTypeId" value={prizeTypeId} />
+        <p className="muted">
+          ผลปัจจุบันคือ {currentValue} · ผลเดิมยังมีผลบังคับจนกว่า Owner จะอนุมัติการแก้
+        </p>
+        <input
+          name="value"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={resultLength}
+          placeholder={`ผลที่ถูกต้อง · ${resultLength} หลัก`}
+          aria-label={`ผลที่ถูกต้องของรางวัลที่ ${code}`}
+          required
+        />
+        <input
+          name="reason"
+          maxLength={200}
+          placeholder="เหตุผลที่ต้องแก้"
+          aria-label={`เหตุผลที่แก้ผลรางวัลที่ ${code}`}
+          required
+        />
+        <button type="submit" disabled={pending}>
+          {pending ? "กำลังส่ง..." : "ส่งคำขอแก้ผล"}
+        </button>
+        <Feedback state={state} />
+      </form>
+    </details>
   );
 }
 
@@ -123,7 +199,7 @@ export function ReconcileForm({
       <input type="hidden" name="drawId" value={drawId} />
       <input type="hidden" name="settlementId" value={settlementId} />
       <button type="submit" disabled={pending}>
-        {pending ? "..." : "กระทบยอดแล้ว"}
+        {pending ? "..." : "ตรวจสอบยอดแล้ว"}
       </button>
       <Feedback state={state} />
     </form>

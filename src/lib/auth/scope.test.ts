@@ -33,7 +33,7 @@ describe("billScope — Agent เห็นเฉพาะบิลของต�
     expect(Object.keys(scope)).toContain("agentId");
   });
 
-  test.each(["OWNER", "ADMIN", "CHECKER"] as const)(
+  test.each(["OWNER", "ADMIN"] as const)(
     "%s เห็นทุกบิลในองค์กรแต่ไม่ข้ามองค์กร",
     (role) => {
       const scope = billScope(subject({ role }));
@@ -43,7 +43,7 @@ describe("billScope — Agent เห็นเฉพาะบิลของต�
   );
 
   test("ทุกบทบาทมี organizationId เสมอ", () => {
-    for (const role of ["OWNER", "ADMIN", "CHECKER", "AGENT"] as const) {
+    for (const role of ["OWNER", "ADMIN", "AGENT"] as const) {
       expect(billScope(subject({ role, agentId: "agent-A" })).organizationId).toBe(ORG);
     }
   });
@@ -56,7 +56,7 @@ describe("orgScope", () => {
 });
 
 describe("auditScope", () => {
-  test.each(["OWNER", "ADMIN", "CHECKER"] as const)("%s เห็น audit ทั้งองค์กร", (role) => {
+  test.each(["OWNER", "ADMIN"] as const)("%s เห็น audit ทั้งองค์กร", (role) => {
     expect(auditScope(subject({ role }))).toEqual({ organizationId: ORG });
   });
 
