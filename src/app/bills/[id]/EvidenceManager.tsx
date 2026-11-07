@@ -60,7 +60,6 @@ export function EvidenceManager({
   billId,
   billStatus,
   initialItems,
-  initialPayment,
   billTotalStake,
   canUpload,
   maxFiles,
@@ -77,7 +76,6 @@ export function EvidenceManager({
 }) {
   const router = useRouter();
   const orderInput = useRef<HTMLInputElement>(null);
-  const paymentInput = useRef<HTMLInputElement>(null);
   const replacementInput = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState(initialItems);
   const [selectedPreview, setSelectedPreview] = useState<EvidenceItem | null>(null);
@@ -86,13 +84,6 @@ export function EvidenceManager({
   const [error, setError] = useState<string | null>(null);
   const [failedUpload, setFailedUpload] = useState<{ file: File; type: AttachmentType; replacesId?: string } | null>(null);
   const [replacement, setReplacement] = useState<EvidenceItem | null>(null);
-  const [payment, setPayment] = useState(() => ({
-    amount: billTotalStake,
-    paidAt: initialPayment?.paidAt ?? "",
-    paymentMethod: initialPayment?.paymentMethod === "ไม่ระบุ" ? "" : initialPayment?.paymentMethod ?? "",
-    bankName: initialPayment?.bankName ?? "",
-    note: initialPayment?.note ?? "",
-  }));
 
   const activeItems = useMemo(() => items.filter((item) => item.replacedById === null), [items]);
   const orderItems = useMemo(() => activeItems.filter((item) => item.type === "ORDER_EVIDENCE"), [activeItems]);
@@ -112,17 +103,6 @@ export function EvidenceManager({
     form.set("type", type);
     form.set("idempotencyKey", crypto.randomUUID());
     if (replacesId) form.set("replacesId", replacesId);
-    if (type === "PAYMENT_EVIDENCE") {
-      if (!payment.amount) {
-        setError("กรุณากรอกจำนวนเงินก่อนแนบสลิป");
-        setUploading(false);
-        return;
-      }
-      Object.entries(payment).forEach(([key, value]) => {
-        if (!value) return;
-        form.set(key, key === "paidAt" ? new Date(value).toISOString() : value);
-      });
-    }
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/bills/${billId}/attachments`);
@@ -232,20 +212,18 @@ export function EvidenceManager({
           </div>
         </div>
 
-        <div className={`evidence-dropzone payment-zone ${canAddNew ? "" : "is-disabled"}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => canAddNew && drop(event, "PAYMENT_EVIDENCE")}>
-          <strong>หลักฐานการชำระเงิน</strong>
-          <p>บังคับเฉพาะจำนวนเงิน ส่วนข้อมูลอื่นกรอกเพิ่มเติมได้ตามสะดวก</p>
-          <div className="payment-fields">
-            <label>จำนวนเงิน (เริ่มต้นจากยอดเดิมพัน)<input inputMode="decimal" value={payment.amount} onChange={(event) => setPayment({ ...payment, amount: event.target.value })} /></label>
-            <label>ช่องทาง (ไม่บังคับ)<AppDropdown value={payment.paymentMethod} onValueChange={(value) => setPayment({ ...payment, paymentMethod: value })} options={[{ value: "", label: "ไม่ระบุ" }, { value: "โอนเงิน", label: "โอนเงิน" }, { value: "เงินสด", label: "เงินสด" }, { value: "พร้อมเพย์", label: "พร้อมเพย์" }, { value: "อื่น ๆ", label: "อื่น ๆ" }]} /></label>
-            <label className="payment-note">หมายเหตุ<input value={payment.note} onChange={(event) => setPayment({ ...payment, note: event.target.value })} /></label>
+        {/*
+          * เลิกรับสลิปการชำระเงินแล้ว จึงไม่มีช่องอัปโหลด
+          * แต่บิลเก่าที่เคยแนบไว้ต้องยังเห็นของเดิมได้ ไม่งั้นหลักฐานของบิล
+          * ที่ปิดไปแล้วจะหายไปจากหน้าจอทั้งที่ยังอยู่ในฐานข้อมูล
+          */}
+        {paymentItems.length > 0 && (
+          <div className="evidence-dropzone payment-zone is-disabled">
+            <strong>หลักฐานการชำระเงิน (เก็บไว้ดูย้อนหลัง)</strong>
+            <p>ระบบไม่รับสลิปเพิ่มแล้ว รายการด้านล่างคือของที่เคยแนบไว้</p>
+            <div className="evidence-inline-list">{evidenceCards(paymentItems)}</div>
           </div>
-          <input ref={paymentInput} className="evidence-file-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden tabIndex={-1} onChange={(event) => { const file = event.target.files?.[0]; if (file) upload(file, "PAYMENT_EVIDENCE"); event.target.value = ""; }} />
-          <button type="button" disabled={!canAddNew || uploading} onClick={() => paymentInput.current?.click()}>แนบหลักฐานการชำระเงิน</button>
-          <div className="evidence-inline-list">
-            {paymentItems.length > 0 ? evidenceCards(paymentItems) : <div className="evidence-slot-empty">ยังไม่ได้แนบหลักฐานการชำระเงิน</div>}
-          </div>
-        </div>
+        )}
       </div>
 
       {uploading && <div className="upload-progress" role="status"><span style={{ width: `${progress}%` }} /><strong>กำลังอัปโหลด {progress}%</strong></div>}

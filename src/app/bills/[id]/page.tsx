@@ -58,18 +58,12 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
   const hasOrderEvidence = activeEvidence.some(
     (attachment) => attachment.type === "ORDER_EVIDENCE" && attachment.status !== "REJECTED",
   );
-  const hasPaymentEvidence = activeEvidence.some(
-    (attachment) => attachment.type === "PAYMENT_EVIDENCE" && attachment.status !== "REJECTED",
-  ) && bill.payment !== null;
   const evidenceReady =
     (!evidenceConfig.requireOrderEvidence || hasOrderEvidence) &&
-    (!evidenceConfig.requirePaymentEvidence || hasPaymentEvidence) &&
     !activeEvidence.some((attachment) => attachment.status === "REJECTED");
   const evidenceMessage = activeEvidence.some((attachment) => attachment.status === "REJECTED")
     ? "เปลี่ยนหลักฐานที่ถูกตีกลับและส่งตรวจใหม่ก่อนยืนยันบิล"
-    : evidenceConfig.requireOrderEvidence && !hasOrderEvidence
-      ? "แนบหลักฐานการสั่งซื้ออย่างน้อย 1 รูปให้สำเร็จก่อนยืนยันบิล"
-      : "แนบหลักฐานพร้อมข้อมูลการชำระเงินให้สำเร็จก่อนยืนยันบิล";
+    : "แนบหลักฐานการสั่งซื้ออย่างน้อย 1 รูปให้สำเร็จก่อนยืนยันบิล";
 
   const paidAtInput = bill.payment
     ? new Date(bill.payment.paidAt.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 16)
@@ -85,7 +79,7 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
         <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Bill Detail</p><h1 id="bill-heading">{bill.title}</h1><p>ตรวจสอบรายการ ยอดเดิมพัน และประวัติการยืนยันบิล</p></div><span className={`status-pill ${bill.status === "CANCELLED" ? "danger" : bill.status === "SETTLED" ? "success" : bill.status === "DRAFT" ? "warning" : "info"}`}>{statusLabel(bill.status)}</span></header>
         <p className="muted">
           เลขบิล {bill.billNumber ?? "ยังไม่ออกเลข (ร่าง)"} · สถานะ {statusLabel(bill.status)} ·
-          รอบ {bill.draw.name} · Agent {bill.agent.code} {bill.agent.name}
+          งวด {bill.draw.name} · Agent {bill.agent.code} {bill.agent.name}
         </p>
         <p className="muted">
           สร้างโดย {bill.createdBy.displayName} · ปิดรับ {BANGKOK.format(bill.draw.cutoffAt)}

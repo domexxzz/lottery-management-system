@@ -19,7 +19,6 @@ const schema = z
     ATTACHMENT_MAX_FILES_PER_BILL: z.coerce.number().int().min(1).max(20).default(5),
     ATTACHMENT_MAX_IMAGE_PIXELS: z.coerce.number().int().min(1_000_000).max(80_000_000).default(40_000_000),
     BILL_ORDER_EVIDENCE_REQUIRED: booleanValue.default(true),
-    BILL_PAYMENT_EVIDENCE_REQUIRED: booleanValue.default(false),
   })
   .superRefine((value, ctx) => {
     if (value.STORAGE_PROVIDER === "minio" && !value.STORAGE_ENDPOINT) {
@@ -46,7 +45,6 @@ export type StorageConfig = {
   maxFilesPerBill: number;
   maxImagePixels: number;
   requireOrderEvidence: boolean;
-  requirePaymentEvidence: boolean;
 };
 
 let cached: StorageConfig | undefined;
@@ -71,7 +69,6 @@ export function getStorageConfig(): StorageConfig {
     maxFilesPerBill: parsed.data.ATTACHMENT_MAX_FILES_PER_BILL,
     maxImagePixels: parsed.data.ATTACHMENT_MAX_IMAGE_PIXELS,
     requireOrderEvidence: parsed.data.BILL_ORDER_EVIDENCE_REQUIRED,
-    requirePaymentEvidence: parsed.data.BILL_PAYMENT_EVIDENCE_REQUIRED,
   };
   return cached;
 }

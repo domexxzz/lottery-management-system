@@ -148,8 +148,17 @@ export async function uploadBillAttachment(
     throw new ValidationError(`แนบรูปได้รวมไม่เกิน ${config.maxFilesPerBill} รูปต่อบิล`);
   }
 
-  if (input.type === "PAYMENT_EVIDENCE" && !input.payment) {
-    throw new ValidationError("กรุณากรอกข้อมูลการชำระเงินให้ครบก่อนแนบสลิป");
+  /*
+   * รับเฉพาะหลักฐานการสั่งซื้อ
+   *
+   * ด่านนี้อยู่ฝั่งเซิร์ฟเวอร์ เพราะเอาปุ่มออกจากหน้าจออย่างเดียวไม่ได้ปิดทาง
+   * ใครยิง API ตรงก็ยังแนบสลิปได้อยู่ดี
+   *
+   * แถวเก่าที่เป็น PAYMENT_EVIDENCE ยังอยู่ในฐานข้อมูลและยังเปิดดูย้อนหลังได้
+   * ไม่ลบทิ้ง เพราะเป็นหลักฐานของบิลที่ปิดไปแล้ว
+   */
+  if (input.type === "PAYMENT_EVIDENCE") {
+    throw new ValidationError("ระบบรับเฉพาะหลักฐานการสั่งซื้อ ไม่รับสลิปการชำระเงินแล้ว");
   }
   const parsedPayment = input.payment ? paymentData(input.payment) : null;
   if (parsedPayment?.transactionReference) {
@@ -502,9 +511,6 @@ export async function assertBillEvidenceReady(tx: TxClient, billId: string): Pro
   });
   if (config.requireOrderEvidence && !active.some((item) => item.type === "ORDER_EVIDENCE" && item.status !== "REJECTED")) {
     throw new ValidationError("ต้องแนบหลักฐานการสั่งซื้ออย่างน้อย 1 รูปก่อนยืนยันบิล");
-  }
-  if (config.requirePaymentEvidence && !active.some((item) => item.type === "PAYMENT_EVIDENCE" && item.status !== "REJECTED" && item.paymentId !== null)) {
-    throw new ValidationError("ต้องแนบหลักฐานและข้อมูลการชำระเงินก่อนยืนยันบิล");
   }
   if (active.some((item) => item.status === "REJECTED")) {
     throw new ValidationError("มีหลักฐานที่ถูกตีกลับ กรุณาเปลี่ยนไฟล์และส่งตรวจใหม่");

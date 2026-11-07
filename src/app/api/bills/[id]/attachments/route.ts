@@ -1,13 +1,14 @@
 import type { AttachmentType } from "@prisma/client";
 import { requireActor } from "@/lib/auth/context";
 import { apiError, assertSameOrigin } from "@/lib/http";
-import { listBillAttachments, uploadBillAttachment, type PaymentInput } from "@/lib/evidence/service";
+import { listBillAttachments, uploadBillAttachment } from "@/lib/evidence/service";
 import { ValidationError } from "@/lib/errors";
 import { getStorageConfig } from "@/lib/storage/config";
 
 export const runtime = "nodejs";
 
-const TYPES = new Set<AttachmentType>(["ORDER_EVIDENCE", "PAYMENT_EVIDENCE", "OTHER"]);
+// รับเฉพาะหลักฐานการสั่งซื้อ · สลิปการชำระเงินเลิกรับแล้ว
+const TYPES = new Set<AttachmentType>(["ORDER_EVIDENCE", "OTHER"]);
 
 function optional(form: FormData, key: string): string | undefined {
   const value = String(form.get(key) ?? "").trim();
@@ -47,17 +48,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const type = String(form.get("type") ?? "") as AttachmentType;
     if (!TYPES.has(type)) throw new ValidationError("ประเภทหลักฐานไม่ถูกต้อง");
 
-    let payment: PaymentInput | undefined;
-    if (type === "PAYMENT_EVIDENCE") {
-      payment = {
-        amount: String(form.get("amount") ?? ""),
-        paidAt: String(form.get("paidAt") ?? ""),
-        paymentMethod: String(form.get("paymentMethod") ?? ""),
-        bankName: optional(form, "bankName"),
-        note: optional(form, "note"),
-      };
-    }
-
     const result = await uploadBillAttachment(actor, id, {
       type,
       fileName: file.name,
@@ -65,7 +55,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       bytes: Buffer.from(await file.arrayBuffer()),
       idempotencyKey: String(form.get("idempotencyKey") ?? ""),
       replacesId: optional(form, "replacesId"),
-      payment,
     });
     return Response.json({ data: result }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {

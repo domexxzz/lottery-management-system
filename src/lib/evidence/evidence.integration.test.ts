@@ -125,35 +125,43 @@ describe("private bill evidence with real MinIO", () => {
     expect(old.replacedBy?.id).toBe(replacement.id);
   });
 
-  test("Payment metadata แยกจากไฟล์และเปลี่ยนสถานะเมื่อตรวจผ่าน", async () => {
-    process.env.BILL_PAYMENT_EVIDENCE_REQUIRED = "true";
-    resetStorageConfigForTests();
+  /*
+   * เลิกรับสลิปการชำระเงินแล้ว รับเฉพาะหลักฐานการสั่งซื้อ
+   *
+   * ด่านอยู่ฝั่งเซิร์ฟเวอร์ ไม่ใช่แค่เอาปุ่มออกจากหน้าจอ
+   * เพราะหน้าจอไม่ได้เป็นทางเข้าเดียวของ API
+   */
+  test("ไม่รับสลิปการชำระเงินอีกต่อไป แม้ยิงเข้ามาตรง ๆ", async () => {
+    const billId = await draft();
+
+    await expect(
+      uploadBillAttachment(f.actors.AGENT1, billId, {
+        type: "PAYMENT_EVIDENCE",
+        fileName: "payment.png",
+        declaredMimeType: "image/png",
+        bytes: await image("#8844aa"),
+        idempotencyKey: crypto.randomUUID(),
+        payment: {
+          amount: "100.50",
+          paidAt: new Date(Date.now() - 60_000).toISOString(),
+          paymentMethod: "โอนเงิน",
+        },
+      }),
+    ).rejects.toThrow(/รับเฉพาะหลักฐานการสั่งซื้อ/);
+
+    // ปฏิเสธตั้งแต่ต้น ต้องไม่มีทั้งไฟล์และ metadata การชำระเงินตกค้าง
+    expect(await prisma.billAttachment.count({ where: { billId } })).toBe(0);
+    expect(await prisma.billPayment.count({ where: { billId } })).toBe(0);
+  });
+
+  test("แนบหลักฐานการสั่งซื้ออย่างเดียวก็ยืนยันบิลได้", async () => {
     const billId = await draft();
     await uploadBillAttachment(f.actors.AGENT1, billId, {
       type: "ORDER_EVIDENCE", fileName: "order.png", declaredMimeType: "image/png", bytes: await image("#3366aa"), idempotencyKey: crypto.randomUUID(),
     });
-    await expect(confirmBill(f.actors.AGENT1, billId)).rejects.toThrow(/หลักฐานและข้อมูลการชำระเงิน/);
-    const paymentEvidence = await uploadBillAttachment(f.actors.AGENT1, billId, {
-      type: "PAYMENT_EVIDENCE",
-      fileName: "payment.png",
-      declaredMimeType: "image/png",
-      bytes: await image("#8844aa"),
-      idempotencyKey: crypto.randomUUID(),
-      payment: {
-        amount: "100.50",
-        paidAt: new Date(Date.now() - 60_000).toISOString(),
-        paymentMethod: "โอนเงิน",
-        bankName: "ธนาคารทดสอบ",
-        transactionReference: `REF-${crypto.randomUUID()}`,
-      },
-    });
-    const paymentBefore = await prisma.billPayment.findUniqueOrThrow({ where: { billId } });
-    expect(paymentBefore.amount.toFixed(2)).toBe("100.50");
-    expect(paymentBefore.verificationStatus).toBe("PENDING");
-    await confirmBill(f.actors.AGENT1, billId);
-    await reviewAttachment(f.actors.ADMIN, paymentEvidence.id, "VERIFIED");
-    expect((await prisma.billPayment.findUniqueOrThrow({ where: { billId } })).verificationStatus).toBe("VERIFIED");
-    expect(await prisma.auditEvent.count({ where: { entityType: "BillPayment", entityId: paymentBefore.id, action: "PAYMENT_VERIFIED" } })).toBe(1);
+
+    // ไม่มีสลิปแล้วต้องไม่ถูกขวาง ไม่งั้นบิลจะยืนยันไม่ได้เลยทั้งระบบ
+    await expect(confirmBill(f.actors.AGENT1, billId)).resolves.toBeDefined();
   });
 
   test("idempotency ไม่สร้าง metadata ซ้ำ และลบหลังยืนยันไม่ได้", async () => {
