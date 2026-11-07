@@ -88,10 +88,20 @@ services:
     plan: starter
     # branch ที่ Render จะตามให้ · เปลี่ยนเป็น main เมื่อ merge แล้ว
     branch: main
+    # export NODE_ENV=production ไม่ใช่ของฟุ่มเฟือย — ถ้าไม่มี build จะล้ม
+    #
+    # Next เลือก React ตัว development เมื่อ NODE_ENV ไม่ใช่ production
+    # แล้ว prerender จะพังด้วย TypeError: Cannot read properties of undefined
+    # โดยไม่บอกสักคำว่าเกี่ยวกับ NODE_ENV สังเกตได้จาก warning เรื่อง key prop
+    # ที่พ่นรัว ๆ บน element ภายในของ Next ซึ่ง React ตัด production ทิ้งไปแล้ว
+    #
+    # ไม่พึ่ง env group เพราะถ้ากลุ่มไม่ได้ถูกผูกกับบริการ build จะล้มทันที
+    #
     # standalone ไม่คัด public กับ .next/static ไปให้เอง ต้องวางเองหลัง build
     # ไม่งั้นหน้าเว็บขึ้นแต่ CSS รูป และ JS ตอบ 404 ทั้งหมด
     buildCommand: >-
-      npm ci --include=dev && npx prisma generate && npm run build
+      export NODE_ENV=production
+      && npm ci --include=dev && npx prisma generate && npm run build
       && cp -r public .next/standalone/
       && cp -r .next/static .next/standalone/.next/
     # migrate ต้องจบก่อนสตาร์ตแอปตัวใหม่ ไม่งั้นโค้ดใหม่วิ่งชนตารางเก่า
@@ -104,6 +114,10 @@ services:
     healthCheckPath: /api/health
     envVars:
       - fromGroup: lottery-shared
+      # ซ้ำกับในกลุ่มโดยตั้งใจ — ค่านี้คุม Secure cookie จึงต้องไม่หาย
+      # แม้กลุ่มจะหลุดการผูกกับบริการ
+      - key: NODE_ENV
+        value: production
       - key: DATABASE_URL
         fromDatabase:
           name: lottery-postgres
@@ -138,6 +152,10 @@ services:
     startCommand: npm run job:notify:watch
     envVars:
       - fromGroup: lottery-shared
+      # ซ้ำกับในกลุ่มโดยตั้งใจ — ค่านี้คุม Secure cookie จึงต้องไม่หาย
+      # แม้กลุ่มจะหลุดการผูกกับบริการ
+      - key: NODE_ENV
+        value: production
       - key: DATABASE_URL
         fromDatabase:
           name: lottery-postgres

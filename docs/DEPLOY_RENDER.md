@@ -175,6 +175,38 @@ image นั้นจึงรัน `prisma migrate deploy` ไม่ได้ 
 
 ---
 
+## NODE_ENV ต้องเป็น production ตอน build ไม่งั้นพัง
+
+`buildCommand` ขึ้นต้นด้วย `export NODE_ENV=production` และทุกบริการยังตั้ง
+`NODE_ENV` ไว้ที่ตัวมันเองซ้ำกับในกลุ่มอีกชั้น ทั้งสองอย่างไม่ใช่ของฟุ่มเฟือย
+
+เมื่อ `NODE_ENV` ไม่ใช่ production ตอน build Next จะหยิบ React ตัว development
+มาใช้ แล้ว prerender จะล้มด้วย
+
+```
+TypeError: Cannot read properties of undefined (reading 'length')
+Error occurred prerendering page "/..."
+```
+
+ข้อความนั้นไม่บอกสักคำว่าเกี่ยวกับ `NODE_ENV` และหน้าที่ล้มก็เปลี่ยนไปเรื่อย ๆ
+(`/_global-error`, `/`, `/_not-found`) จนดูเหมือนปัญหาหน่วยความจำ
+
+**จุดสังเกตที่แยกสองอย่างนี้ออกจากกันได้** คือ warning เรื่อง `key` prop
+ที่พ่นรัว ๆ บน element ภายในของ Next เอง (`<div>`, `<head>`, `<meta>`,
+`<__next_viewport_boundary__>`) React **ตัด warning พวกนี้ทิ้งทั้งหมดใน
+production build** ถ้าเห็นมันใน log แปลว่ากำลังรัน React ตัว development อยู่
+ไม่ใช่เรื่อง RAM
+
+พิสูจน์ด้วยการ build ในคอนเทนเนอร์: ตั้ง `NODE_ENV=development` แล้ว warning
+โผล่ 18 ครั้งพร้อม build ล้มทันที ส่วนเมื่อบังคับ `NODE_ENV=production`
+หน้าคำสั่ง warning เหลือ 0 และ build ผ่าน 5/5
+
+ที่ตั้ง `NODE_ENV` ซ้ำที่ระดับบริการด้วย เพราะค่านี้คุมว่า session cookie
+เป็น Secure หรือไม่ ถ้า env group หลุดการผูกกับบริการเมื่อไร cookie จะเดินทาง
+บน HTTP ธรรมดาทันทีโดยไม่มีอะไรเตือน
+
+---
+
 ## ทำไม build ด้วย webpack ไม่ใช่ Turbopack
 
 `package.json` สั่ง `next build --webpack` เพราะ Turbopack กินหน่วยความจำเกิน
