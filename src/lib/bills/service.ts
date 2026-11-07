@@ -16,11 +16,21 @@ export type ItemInput = {
   stake: string;
 };
 
-/** Agent สร้างบิลให้ตัวเองเท่านั้น บทบาทอื่นต้องระบุว่าสร้างแทน Agent รายใด */
-function resolveAgentId(actor: Actor, requestedAgentId: string | undefined): string {
+/**
+ * Agent สร้างบิลให้ตัวเองเท่านั้น ส่วน Owner/Admin เลือกบัญชีผู้รับบิลได้
+ * และระบบจะสร้าง Agent ภายในให้อัตโนมัติเมื่อบัญชี Owner/Admin รับบิลครั้งแรก
+ */
+async function resolveAgentId(
+  actor: Actor,
+  requestedAgentId: string | undefined,
+  representativeUserId: string | undefined,
+): Promise<string> {
   if (actor.role === "AGENT") {
     if (actor.agentId === null) {
       throw new ForbiddenError("บัญชีนี้ยังไม่ได้ผูกกับ Agent");
+    }
+    if (representativeUserId !== undefined && representativeUserId !== actor.userId) {
+      throw new ForbiddenError("สร้างบิลแทนผู้ใช้งานรายอื่นไม่ได้");
     }
     if (requestedAgentId !== undefined && requestedAgentId !== actor.agentId) {
       throw new ForbiddenError("สร้างบิลแทน Agent รายอื่นไม่ได้");
@@ -28,41 +38,88 @@ function resolveAgentId(actor: Actor, requestedAgentId: string | undefined): str
     return actor.agentId;
   }
 
-  if (requestedAgentId === undefined) {
-    throw new ValidationError("ต้องระบุ Agent ที่เป็นเจ้าของบิล");
+  if (!representativeUserId) {
+    throw new ValidationError("ต้องระบุผู้รับบิล");
   }
-  return requestedAgentId;
+
+  const user = await prisma.user.findFirst({
+    where: { id: representativeUserId, organizationId: actor.organizationId },
+    select: {
+      id: true,
+      displayName: true,
+      role: true,
+      status: true,
+      agent: { select: { id: true, status: true } },
+    },
+  });
+  if (!user) throw new NotFoundError("ไม่พบผู้รับบิลที่เลือก");
+  if (user.status !== "ACTIVE") throw new ConflictError("บัญชีผู้รับบิลถูกระงับอยู่");
+  if (actor.role === "ADMIN" && user.role === "OWNER") {
+    throw new ForbiddenError("Admin ไม่สามารถสร้างบิลในนาม Owner ได้");
+  }
+  if (user.agent?.status === "SUSPENDED") throw new ConflictError("Agent ของผู้รับบิลถูกระงับอยู่");
+  if (user.agent) return user.agent.id;
+
+  const agent = await prisma.$transaction(async (tx) => {
+    const created = await tx.agent.upsert({
+      where: { userId: user.id },
+      update: { name: user.displayName, status: "ACTIVE" },
+      create: {
+        organizationId: actor.organizationId,
+        userId: user.id,
+        code: `SELF-${user.id}`,
+        name: user.displayName,
+        commissionRate: new Prisma.Decimal(0),
+      },
+      select: { id: true, code: true, name: true, status: true, userId: true },
+    });
+
+    await writeAudit(tx, {
+      organizationId: actor.organizationId,
+      actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
+      action: "CREATE",
+      entityType: "Agent",
+      entityId: created.id,
+      after: { ...created, source: "AUTO_BILL_REPRESENTATIVE" },
+      reason: "สร้าง Agent อัตโนมัติเมื่อผู้ใช้งานรับบิลครั้งแรก",
+    });
+
+    return created;
+  });
+
+  return agent.id;
 }
 
 export async function createDraftBill(
   actor: Actor,
-  input: { drawId: string; title: string; agentId?: string },
+  input: { drawId: string; title: string; agentId?: string; representativeUserId?: string },
 ): Promise<{ billId: string }> {
   requirePermission(actor, "bill.create");
-  const agentId = resolveAgentId(actor, input.agentId);
 
   const title = input.title.trim();
   if (title.length === 0) {
     throw new ValidationError("ต้องกรอกชื่อบิลหรือรหัสอ้างอิงลูกค้า");
   }
 
-  // ตรวจว่ารอบและ Agent อยู่ในองค์กรเดียวกับผู้ใช้ ไม่ใช่แค่มีอยู่จริง
-  const [draw, agent] = await Promise.all([
-    prisma.draw.findFirst({
-      where: { id: input.drawId, organizationId: actor.organizationId },
-      select: { id: true, status: true, cutoffAt: true },
-    }),
-    prisma.agent.findFirst({
-      where: { id: agentId, organizationId: actor.organizationId },
-      select: { id: true, status: true },
-    }),
-  ]);
+  // ตรวจงวดก่อนสร้าง Agent ภายใน เพื่อไม่ให้คำขอที่เลือกงวดผิดทิ้งข้อมูลส่วนเกินไว้
+  const draw = await prisma.draw.findFirst({
+    where: { id: input.drawId, organizationId: actor.organizationId },
+    select: { id: true, status: true, cutoffAt: true },
+  });
 
   if (!draw) throw new NotFoundError("ไม่พบรอบที่เลือก");
-  if (!agent) throw new NotFoundError("ไม่พบ Agent");
-  if (agent.status !== "ACTIVE") throw new ConflictError("Agent รายนี้ถูกระงับอยู่");
   if (draw.status !== "OPEN") throw new ConflictError("รอบนี้ปิดรับรายการแล้ว");
   if (Date.now() >= draw.cutoffAt.getTime()) throw new ConflictError("เลยเวลาปิดรับของรอบนี้แล้ว");
+
+  const agentId = await resolveAgentId(actor, input.agentId, input.representativeUserId);
+  const agent = await prisma.agent.findFirst({
+    where: { id: agentId, organizationId: actor.organizationId },
+    select: { id: true, status: true },
+  });
+  if (!agent) throw new NotFoundError("ไม่พบ Agent");
+  if (agent.status !== "ACTIVE") throw new ConflictError("Agent รายนี้ถูกระงับอยู่");
 
   const bill = await prisma.$transaction(async (tx) => {
     const created = await tx.bill.create({

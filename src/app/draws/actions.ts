@@ -9,6 +9,7 @@ import { AppError } from "@/lib/errors";
 export type ActionState = { error: string | null; message: string | null };
 
 const CreateSchema = z.object({
+  drawDate: z.string().min(1, "กรุณาเลือกงวด"),
   opensAt: z.string().min(1, "กรุณาระบุเวลาเปิดรับ"),
   cutoffAt: z.string().min(1, "กรุณาระบุเวลาปิดรับ"),
 });
@@ -20,6 +21,7 @@ export async function createDrawAction(
   const actor = await requireActor();
 
   const parsed = CreateSchema.safeParse({
+    drawDate: formData.get("drawDate"),
     opensAt: formData.get("opensAt"),
     cutoffAt: formData.get("cutoffAt"),
   });

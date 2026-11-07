@@ -272,6 +272,53 @@ describe("การแยกข้อมูลระหว่าง Agent", () =
   });
 });
 
+describe("Owner และ Admin สร้างบิลในนามผู้ใช้งาน", () => {
+  test("Owner สร้างบิลในนามตัวเองและระบบสร้าง Agent ชื่อ Owner ให้อัตโนมัติ", async () => {
+    const { billId } = await createDraftBill(f.actors.OWNER, {
+      drawId: f.draw.id,
+      title: "ลูกค้าของ Owner",
+      representativeUserId: f.users.owner.id,
+    });
+
+    const bill = await prisma.bill.findUniqueOrThrow({
+      where: { id: billId },
+      select: {
+        createdById: true,
+        agent: { select: { name: true, commissionRate: true, userId: true } },
+      },
+    });
+    expect(bill.createdById).toBe(f.users.owner.id);
+    expect(bill.agent.userId).toBe(f.users.owner.id);
+    expect(bill.agent.name).toBe(f.users.owner.displayName);
+    expect(bill.agent.commissionRate.toFixed(2)).toBe("0.00");
+  });
+
+  test("Admin สร้างบิลในนามตัวเองหรือ Agent ได้ แต่สร้างในนาม Owner ไม่ได้", async () => {
+    const self = await createDraftBill(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      title: "ลูกค้าของ Admin",
+      representativeUserId: f.users.admin.id,
+    });
+    const ownBill = await prisma.bill.findUniqueOrThrow({
+      where: { id: self.billId },
+      select: { agent: { select: { name: true, userId: true } } },
+    });
+    expect(ownBill.agent).toMatchObject({ name: f.users.admin.displayName, userId: f.users.admin.id });
+
+    await expect(createDraftBill(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      title: "สร้างให้ Owner ไม่ได้",
+      representativeUserId: f.users.owner.id,
+    })).rejects.toThrow(/ไม่สามารถสร้างบิลในนาม Owner/);
+
+    await expect(createDraftBill(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      title: "สร้างให้ Agent ได้",
+      representativeUserId: f.users.agentUser1.id,
+    })).resolves.toBeDefined();
+  });
+});
+
 describe("เลขบิลไม่ซ้ำ", () => {
   test("ยืนยันหลายบิลพร้อมกันได้เลขบิลคนละเลข", async () => {
     const drafts = await Promise.all(

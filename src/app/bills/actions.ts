@@ -24,6 +24,7 @@ const ItemSchema = z.object({
 const CreateSchema = z.object({
   drawId: z.string().min(1, "กรุณาเลือกงวด"),
   agentId: z.string().min(1, "กรุณาเลือก Agent").optional(),
+  representativeUserId: z.string().min(1, "กรุณาเลือกผู้รับบิล").optional(),
   title: z.string().trim().min(1, "กรุณากรอกชื่อบิล").max(120),
   items: z.array(ItemSchema).min(1, "บิลต้องมีอย่างน้อยหนึ่งรายการ"),
 });
@@ -53,6 +54,7 @@ export async function createBillAction(
   const parsed = CreateSchema.safeParse({
     drawId: formData.get("drawId"),
     agentId: formData.get("agentId") || undefined,
+    representativeUserId: formData.get("representativeUserId") || undefined,
     title: formData.get("title"),
     items: readItems(formData),
   });
@@ -66,6 +68,7 @@ export async function createBillAction(
     const created = await createDraftBill(actor, {
       drawId: parsed.data.drawId,
       agentId: parsed.data.agentId,
+      representativeUserId: parsed.data.representativeUserId,
       title: parsed.data.title,
     });
     billId = created.billId;

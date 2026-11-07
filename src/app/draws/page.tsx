@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getActor } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { listDraws } from "@/lib/draws/service";
+import { officialDrawName, upcomingOfficialDrawDates } from "@/lib/draws/schedule";
 import { CreateDrawForm } from "./DrawForms";
 import { DRAW_STATUS_LABEL, DrawTable, getDrawDisplayStatus } from "./DrawTable";
 import "./draws.css";
@@ -19,6 +20,9 @@ export default async function DrawsPage() {
   const canManage = can(actor.role, "draw.manage");
   const canEnterResults = can(actor.role, "result.enter");
   const canReviewResults = can(actor.role, "result.approve") && !canEnterResults;
+  const existingDrawNames = new Set(draws.map((draw) => draw.name));
+  const upcomingDrawDates = upcomingOfficialDrawDates(new Date())
+    .filter((date) => !existingDrawNames.has(officialDrawName(date) ?? ""));
 
   return (
     <main className="workspace-page">
@@ -28,9 +32,9 @@ export default async function DrawsPage() {
 
         {canManage && <section className="create-draw-panel create-draw-panel-primary" aria-labelledby="create-draw-heading">
           <div className="draw-section-heading">
-            <div><p className="page-eyebrow">Create New Draw</p><h2 id="create-draw-heading">สร้างงวดใหม่</h2><p>กำหนดวันเปิดรับและวันปิดรับ ระบบจะล็อกชื่องวดเป็นวันที่ 1 หรือ 16 ที่ใกล้ถึงโดยอัตโนมัติ</p></div>
+            <div><p className="page-eyebrow">Create New Draw</p><h2 id="create-draw-heading">สร้างงวดใหม่</h2><p>เลือกเฉพาะงวดวันที่ 1 หรือ 16 ระบบกำหนดเวลาเปิด–ปิดรับให้อัตโนมัติ</p></div>
           </div>
-          <CreateDrawForm />
+          <CreateDrawForm drawDates={upcomingDrawDates} />
           <p className="draw-form-note">เมื่อถึงเวลาปิดรับ งานอัตโนมัติจะล็อกบิลที่ยืนยันแล้วและยกเลิกบิลร่างที่ค้างอยู่</p>
         </section>}
 

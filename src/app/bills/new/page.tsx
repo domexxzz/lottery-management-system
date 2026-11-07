@@ -19,7 +19,7 @@ export default async function NewBillPage() {
   if (!actor) redirect("/login");
   if (!can(actor.role, "bill.create")) redirect("/bills");
 
-  const [draws, prizeTypes, agents, historicalBills] = await Promise.all([
+  const [draws, prizeTypes, representatives, historicalBills] = await Promise.all([
     prisma.draw.findMany({
       where: { ...orgScope(actor), status: "OPEN" },
       orderBy: { cutoffAt: "asc" },
@@ -32,30 +32,41 @@ export default async function NewBillPage() {
     }),
     actor.role === "AGENT"
       ? Promise.resolve(null)
-      : prisma.agent.findMany({
-          where: { ...orgScope(actor), status: "ACTIVE" },
-          orderBy: [{ code: "asc" }, { name: "asc" }],
-          select: { id: true, code: true, name: true },
+      : prisma.user.findMany({
+          where: {
+            ...orgScope(actor),
+            status: "ACTIVE",
+            role: { in: actor.role === "OWNER" ? ["OWNER", "ADMIN", "AGENT"] : ["ADMIN", "AGENT"] },
+          },
+          orderBy: [{ role: "asc" }, { displayName: "asc" }],
+          select: {
+            id: true,
+            displayName: true,
+            role: true,
+            agent: { select: { id: true, code: true, name: true, status: true } },
+          },
         }),
     prisma.bill.findMany({
       where: actor.role === "AGENT" ? billScope(actor) : orgScope(actor),
       orderBy: { createdAt: "desc" },
       take: 5000,
-      select: { agentId: true, title: true },
+      select: { agentId: true, title: true, agent: { select: { userId: true } } },
     }),
   ]);
 
-  const customerNamesByAgent: Record<string, string[]> = {};
-  const seenByAgent = new Map<string, Set<string>>();
+  const customerNamesByRepresentative: Record<string, string[]> = {};
+  const seenByRepresentative = new Map<string, Set<string>>();
   for (const bill of historicalBills) {
+    const representativeKey = actor.role === "AGENT" ? bill.agentId : bill.agent.userId;
+    if (!representativeKey) continue;
     const title = bill.title.trim();
     if (!title) continue;
-    const seen = seenByAgent.get(bill.agentId) ?? new Set<string>();
+    const seen = seenByRepresentative.get(representativeKey) ?? new Set<string>();
     const normalized = title.toLocaleLowerCase("th-TH");
     if (seen.has(normalized) || seen.size >= 100) continue;
     seen.add(normalized);
-    seenByAgent.set(bill.agentId, seen);
-    (customerNamesByAgent[bill.agentId] ??= []).push(title);
+    seenByRepresentative.set(representativeKey, seen);
+    (customerNamesByRepresentative[representativeKey] ??= []).push(title);
   }
 
   return (
@@ -74,9 +85,9 @@ export default async function NewBillPage() {
               cutoffAt: BANGKOK.format(d.cutoffAt),
             }))}
             prizeTypes={prizeTypes}
-            agents={agents}
-            currentAgentId={actor.agentId}
-            customerNamesByAgent={customerNamesByAgent}
+            representatives={representatives}
+            currentRepresentativeId={actor.role === "AGENT" ? actor.agentId : actor.userId}
+            customerNamesByRepresentative={customerNamesByRepresentative}
           />
         )}
       </section>

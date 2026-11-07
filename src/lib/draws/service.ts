@@ -2,20 +2,13 @@ import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
-import { officialDrawName } from "./schedule";
+import { officialDrawCutoffAt, officialDrawName, parseBangkokDateTimeLocal } from "./schedule";
 
 export type DrawInput = {
+  drawDate: string;
   opensAt: string;
   cutoffAt: string;
 };
-
-function parseDate(raw: string, label: string): Date {
-  const value = new Date(raw);
-  if (Number.isNaN(value.getTime())) {
-    throw new ValidationError(`${label}ไม่ใช่วันเวลาที่ถูกต้อง`);
-  }
-  return value;
-}
 
 export async function listDraws(
   actor: Actor,
@@ -47,13 +40,17 @@ export async function listDraws(
 export async function createDraw(actor: Actor, input: DrawInput): Promise<{ drawId: string }> {
   requirePermission(actor, "draw.manage");
 
-  const opensAt = parseDate(input.opensAt, "เวลาเปิดรับ");
-  const cutoffAt = parseDate(input.cutoffAt, "เวลาปิดรับ");
-  const name = officialDrawName(input.cutoffAt);
-  if (!name) throw new ValidationError("วันที่ปิดรับไม่ถูกต้อง");
+  const officialCutoff = officialDrawCutoffAt(input.drawDate);
+  const name = officialCutoff ? officialDrawName(input.drawDate) : null;
+  if (!officialCutoff || !name) throw new ValidationError("เลือกงวดได้เฉพาะวันที่ 1 หรือ 16 เท่านั้น");
+
+  const opensAt = parseBangkokDateTimeLocal(input.opensAt);
+  const cutoffAt = parseBangkokDateTimeLocal(input.cutoffAt);
+  if (!opensAt) throw new ValidationError("เวลาเปิดรับไม่ถูกต้อง");
+  if (!cutoffAt) throw new ValidationError("เวลาปิดรับไม่ถูกต้อง");
 
   if (cutoffAt.getTime() <= opensAt.getTime()) {
-    throw new ValidationError("เวลาปิดรับต้องหลังเวลาเปิดรับ");
+    throw new ValidationError("เวลาปิดรับต้องอยู่หลังเวลาเปิดรับ");
   }
 
   const duplicate = await prisma.draw.findFirst({

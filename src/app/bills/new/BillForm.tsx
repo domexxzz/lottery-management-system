@@ -9,7 +9,12 @@ const INITIAL: ActionState = { error: null };
 
 export type DrawOption = { id: string; name: string; cutoffAt: string };
 export type PrizeOption = { id: string; code: number; name: string; digits: number };
-export type AgentOption = { id: string; code: string; name: string };
+export type RepresentativeOption = {
+  id: string;
+  displayName: string;
+  role: "OWNER" | "ADMIN" | "AGENT";
+  agent: { id: string; code: string; name: string; status: string } | null;
+};
 
 type Row = { id: number; prizeTypeId: string; number: string; stake: string };
 
@@ -82,15 +87,15 @@ function CustomerNameCombobox({ names, disabledHint }: { names: string[]; disabl
 export function BillForm({
   draws,
   prizeTypes,
-  agents,
-  currentAgentId,
-  customerNamesByAgent,
+  representatives,
+  currentRepresentativeId,
+  customerNamesByRepresentative,
 }: {
   draws: DrawOption[];
   prizeTypes: PrizeOption[];
-  agents: AgentOption[] | null;
-  currentAgentId: string | null;
-  customerNamesByAgent: Record<string, string[]>;
+  representatives: RepresentativeOption[] | null;
+  currentRepresentativeId: string | null;
+  customerNamesByRepresentative: Record<string, string[]>;
 }) {
   const [state, formAction, pending] = useActionState(createBillAction, INITIAL);
 
@@ -104,9 +109,9 @@ export function BillForm({
       stake: "",
     },
   ]);
-  const [selectedAgentId, setSelectedAgentId] = useState("");
-  const customerAgentId = agents === null ? currentAgentId : selectedAgentId;
-  const customerNames = customerAgentId ? customerNamesByAgent[customerAgentId] ?? [] : [];
+  const [selectedRepresentativeId, setSelectedRepresentativeId] = useState(currentRepresentativeId ?? "");
+  const customerRepresentativeId = representatives === null ? currentRepresentativeId : selectedRepresentativeId;
+  const customerNames = customerRepresentativeId ? customerNamesByRepresentative[customerRepresentativeId] ?? [] : [];
 
   const digitsOf = (prizeTypeId: string) =>
     prizeTypes.find((p) => p.id === prizeTypeId)?.digits ?? 0;
@@ -145,14 +150,29 @@ export function BillForm({
   return (
     <form action={formAction} className="bill-create-form">
       <div className="bill-form-fields">
-      {agents !== null && (
+      {representatives !== null && (
         <div className="agent-picker">
-          <label htmlFor="agentSearch">Agent ที่เป็นเจ้าของบิล</label>
-          <AppDropdown id="agentSearch" name="agentId" value={selectedAgentId} onValueChange={setSelectedAgentId} placeholder="เลือก Agent" searchPlaceholder="ค้นหาด้วยรหัสหรือชื่อ Agent" emptyMessage="ไม่พบ Agent ที่ค้นหา" searchable required options={agents.map((agent) => ({ value: agent.id, label: `${agent.code} — ${agent.name}` }))} />
+          <label htmlFor="representativeSearch">ผู้รับบิล / Agent</label>
+          <AppDropdown
+            id="representativeSearch"
+            name="representativeUserId"
+            value={selectedRepresentativeId}
+            onValueChange={setSelectedRepresentativeId}
+            placeholder="เลือกผู้รับบิล"
+            searchPlaceholder="ค้นหาชื่อผู้ใช้งาน"
+            emptyMessage="ไม่พบผู้ใช้งานที่เลือกได้"
+            searchable
+            required
+            options={representatives.map((representative) => ({
+              value: representative.id,
+              label: representative.displayName,
+              description: `${representative.role === "OWNER" ? "Owner" : representative.role === "ADMIN" ? "Admin" : "Agent"}${representative.agent ? ` · ${representative.agent.code}` : " · ระบบจะสร้าง Agent ให้อัตโนมัติ"}`,
+            }))}
+          />
         </div>
       )}
 
-      <CustomerNameCombobox names={customerNames} disabledHint={agents !== null && !selectedAgentId ? "เลือก Agent ก่อน เพื่อค้นหาลูกค้าเดิมของ Agent คนนั้น" : undefined} />
+      <CustomerNameCombobox names={customerNames} disabledHint={representatives !== null && !selectedRepresentativeId ? "เลือกผู้รับบิลก่อน เพื่อค้นหาลูกค้าเดิมของคนนั้น" : undefined} />
 
       <label htmlFor="drawId">
         งวด
@@ -260,7 +280,7 @@ export function BillForm({
           pending ||
           hasFieldIssue ||
           filledRows === 0 ||
-          (agents !== null && selectedAgentId === "")
+          (representatives !== null && selectedRepresentativeId === "")
         }
       >
         {pending ? "กำลังบันทึก..." : "บันทึกเป็นร่าง"}

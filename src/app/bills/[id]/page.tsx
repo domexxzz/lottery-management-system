@@ -79,10 +79,16 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
         </p>
 
         <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Bill Detail</p><h1 id="bill-heading">{bill.title}</h1><p>ตรวจสอบรายการ ยอดเดิมพัน และประวัติการยืนยันบิล</p></div><span className={`status-pill ${bill.status === "CANCELLED" ? "danger" : bill.status === "SETTLED" ? "success" : bill.status === "DRAFT" ? "warning" : "info"}`}>{statusLabel(bill.status)}</span></header>
-        <p className="muted">
-          เลขบิล {bill.billNumber ?? "ยังไม่ออกเลข (ร่าง)"} · สถานะ {statusLabel(bill.status)} ·
-          งวด {bill.draw.name} · Agent {bill.agent.code} {bill.agent.name}
-        </p>
+        <div className="bill-primary-meta">
+          <p className="muted">
+            เลขบิล {bill.billNumber ?? "ยังไม่ออกเลข (ร่าง)"} · สถานะ {statusLabel(bill.status)} ·
+            งวด {bill.draw.name} · Agent {bill.agent.code} {bill.agent.name}
+          </p>
+          <Link className="bill-customer-profile-button" href={`/customers/${customerProfileKey(bill.title)}`}>
+            <Icon name="agent" />
+            <span>โปรไฟล์ลูกค้า</span>
+          </Link>
+        </div>
         <p className="muted">
           สร้างโดย {bill.createdBy.displayName} · ปิดรับ {BANGKOK.format(bill.draw.cutoffAt)}
           {bill.confirmedAt !== null && ` · ยืนยันเมื่อ ${BANGKOK.format(bill.confirmedAt)}`}
@@ -138,12 +144,6 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
           </tfoot>
         </table></div>
         </section>
-
-        <Link className="customer-profile-link" href={`/customers/${customerProfileKey(bill.title)}`}>
-          <span><Icon name="agent" /></span>
-          <div><strong>ดูโปรไฟล์ลูกค้า</strong><small>ประวัติการซื้อ เลขที่ซื้อบ่อย และรางวัลที่ได้รับ</small></div>
-          <b aria-hidden="true">→</b>
-        </Link>
 
         <EvidenceManager
           billId={bill.id}

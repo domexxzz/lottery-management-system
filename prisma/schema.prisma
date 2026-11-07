@@ -184,7 +184,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  /// ผูกกับ Agent ได้หนึ่งรายตามนโยบาย (เฉพาะ role AGENT)
+  /// ผูกกับ Agent ได้หนึ่งรายตามนโยบาย บัญชี Owner/Admin จะถูกผูกอัตโนมัติเมื่อรับบิลครั้งแรก
   agent    Agent?    @relation("AgentUser")
   sessions Session[]
 
