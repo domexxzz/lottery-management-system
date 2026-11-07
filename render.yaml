@@ -65,15 +65,15 @@ envVarGroups:
         value: "40000000"
       - key: BILL_ORDER_EVIDENCE_REQUIRED
         value: "true"
-      - key: BILL_PAYMENT_EVIDENCE_REQUIRED
-        value: "false"
 
       - key: TYPHOON_BASE_URL
         value: https://api.opentyphoon.ai/v1
+      # ต้องตรงกับที่ทดสอบมาจริง ไม่งั้น production รันคนละโมเดลกับที่ตรวจไว้
       - key: TYPHOON_MODEL
-        value: typhoon-v2.1-12b-instruct
+        value: typhoon-v2.5-30b-a3b-instruct
+      # โมเดลตัวนี้ใหญ่กว่า 30 วินาทีไม่พอ
       - key: TYPHOON_TIMEOUT_MS
-        value: "30000"
+        value: "45000"
 
       - key: GLO_API_TIMEOUT_MS
         value: "15000"
