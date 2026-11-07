@@ -175,6 +175,22 @@ image นั้นจึงรัน `prisma migrate deploy` ไม่ได้ 
 
 ---
 
+## ทำไมไม่ใช้ `next start`
+
+`next.config.ts` ตั้ง `output: "standalone"` ไว้ และ Next 16 เตือนตรง ๆ เมื่อเรียก `next start` ว่า
+
+> "next start" does not work with "output: standalone" configuration.
+> Use "node .next/standalone/server.js" instead.
+
+blueprint จึงสตาร์ตด้วย `node .next/standalone/server.js` ซึ่งผูกกับ `0.0.0.0`
+และอ่าน `PORT` ที่ Render ตั้งให้อยู่แล้ว
+
+ข้อควรระวังของ standalone คือมัน **ไม่คัด `public` กับ `.next/static` ไปให้เอง**
+ถ้าลืมคัด หน้าเว็บจะขึ้นแต่ CSS รูป และ JS ตอบ 404 ทั้งหมด กลายเป็นหน้าเปล่า ๆ
+ที่ดูเหมือน deploy สำเร็จ `buildCommand` จึงต่อท้ายด้วยสองคำสั่ง cp เสมอ
+
+---
+
 ## ทำไม worker ไม่ใช่ cron
 
 ปุ่ม "ยืนยัน" กับ "ตีกลับ" ใน Telegram ต้องมีคนคอยรับ callback จาก `getUpdates` อยู่ตลอด

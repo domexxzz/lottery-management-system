@@ -88,11 +88,18 @@ services:
     plan: starter
     # branch ที่ Render จะตามให้ · เปลี่ยนเป็น main เมื่อ merge แล้ว
     branch: main
-    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
+    # standalone ไม่คัด public กับ .next/static ไปให้เอง ต้องวางเองหลัง build
+    # ไม่งั้นหน้าเว็บขึ้นแต่ CSS รูป และ JS ตอบ 404 ทั้งหมด
+    buildCommand: >-
+      npm ci --include=dev && npx prisma generate && npm run build
+      && cp -r public .next/standalone/
+      && cp -r .next/static .next/standalone/.next/
     # migrate ต้องจบก่อนสตาร์ตแอปตัวใหม่ ไม่งั้นโค้ดใหม่วิ่งชนตารางเก่า
     # Render จะไม่สลับ traffic ไปเวอร์ชันใหม่ถ้าคำสั่งนี้ fail
     preDeployCommand: npx prisma migrate deploy
-    startCommand: npm start
+    # ไม่ใช้ next start เพราะ Next 16 เตือนตรง ๆ ว่าใช้กับ output: standalone ไม่ได้
+    # server.js ของ standalone ผูกกับ 0.0.0.0 และอ่าน PORT ที่ Render ตั้งให้อยู่แล้ว
+    startCommand: node .next/standalone/server.js
     # เช็กว่าต่อฐานข้อมูลได้จริง ไม่ใช่แค่ process ยังอยู่
     healthCheckPath: /api/health
     envVars:
