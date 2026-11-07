@@ -104,7 +104,7 @@ Dashboard → `lottery-web` → **Shell**
 SEED_PASSWORD='<รหัสชั่วคราวที่ยาวและเดายาก>' SEED_MUST_CHANGE_PASSWORD=true npx prisma db seed
 ```
 
-เสร็จแล้วได้บัญชี `owner`, `admin`, `checker`, `agent1`–`agent3` ทุกบัญชีถูกบังคับ
+เสร็จแล้วได้บัญชี `owner`, `admin`, `agent`, `agent2`, `agent3` ทุกบัญชีถูกบังคับ
 เปลี่ยนรหัสตอน login ครั้งแรก
 
 **อย่าตั้ง `SEED_PASSWORD` เป็น env var ถาวรของบริการ** ใส่หน้าคำสั่งแบบข้างบนให้มันหายไปกับ

@@ -19,7 +19,7 @@ npx prisma db seed
 npm run dev
 ```
 
-เปิด http://localhost:3000 · บัญชีที่ seed สร้างคือ `owner`, `admin`, `checker`, `agent1`–`agent3`
+เปิด http://localhost:3000 · บัญชีที่ seed สร้างคือ `owner`, `admin`, `agent`, `agent2`, `agent3`
 ทุกบัญชีใช้รหัสจาก `SEED_PASSWORD` และถูกบังคับเปลี่ยนรหัสผ่านตอน login ครั้งแรก
 
 > Postgres ใน `docker-compose.yml` map ออกที่พอร์ต **5433** ไม่ใช่ 5432
