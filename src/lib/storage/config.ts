@@ -35,6 +35,29 @@ const schema = z
      *
      * ล้มตั้งแต่ตอนอ่านค่าพร้อมบอกชื่อตัวแปรที่ขาด หาสาเหตุง่ายกว่ากันมาก
      */
+    /*
+     * บน production ห้าม endpoint ชี้กลับมาที่เครื่องตัวเอง
+     *
+     * ค่า dev ของโปรเจกต์นี้คือ http://127.0.0.1:9000 ซึ่งเป็น MinIO ในเครื่อง
+     * ถ้าคัดค่านั้นขึ้นเซิร์ฟเวอร์ไปด้วย การตั้งค่าจะผ่านด่านทุกข้อ หน้าเว็บ
+     * ขึ้นปกติ แล้วไปล้มตอนผู้ใช้กดแนบไฟล์จริงด้วย connect ECONNREFUSED
+     * ซึ่งผู้ใช้เห็นแค่ 500 เปล่า ๆ
+     *
+     * จับตั้งแต่ตอนอ่านค่าแล้วบอกตรง ๆ ว่าน่าจะคัดค่า dev มา
+     */
+    const host = (() => {
+      try { return value.STORAGE_ENDPOINT ? new URL(value.STORAGE_ENDPOINT).hostname : ""; }
+      catch { return ""; }
+    })();
+    const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+    if (process.env.NODE_ENV === "production" && isLoopback) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["STORAGE_ENDPOINT"],
+        message: `STORAGE_ENDPOINT ชี้ไปที่ ${host} ซึ่งเป็นเครื่องตัวเอง บน production ต้องเป็นที่อยู่ของ S3 จริง (คัดค่าจาก .env ของเครื่อง dev มาหรือเปล่า)`,
+      });
+    }
+
     const missingKeys = [
       !value.STORAGE_ACCESS_KEY ? "STORAGE_ACCESS_KEY" : null,
       !value.STORAGE_SECRET_KEY ? "STORAGE_SECRET_KEY" : null,
