@@ -121,26 +121,38 @@ export function MessengerScreen({ myName, myRole, openWithUserId }: { myName: st
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadRooms = useCallback(async () => {
-    const response = await fetch("/api/messages/conversations", { cache: "no-store" });
-    if (!response.ok) return;
-    const payload = (await response.json()) as { data: Room[] };
-    setRooms(payload.data);
+    try {
+      const response = await fetch("/api/messages/conversations", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as { data: Room[] };
+      setRooms(payload.data);
+    } catch {
+      // เน็ตสะดุดหรือเซิร์ฟเวอร์กำลังรีสตาร์ท รอบถัดไปของ poll จะดึงใหม่เอง
+    }
   }, []);
 
   const loadContacts = useCallback(async (query: string) => {
     const url = query.trim() ? `/api/messages/contacts?q=${encodeURIComponent(query.trim())}` : "/api/messages/contacts";
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) return;
-    const payload = (await response.json()) as { data: Contact[] };
-    setContacts(payload.data);
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as { data: Contact[] };
+      setContacts(payload.data);
+    } catch {
+      // เหมือน loadRooms ปล่อยให้รายการเดิมค้างไว้ดีกว่าทำหน้าจอพัง
+    }
   }, []);
 
   const loadThread = useCallback(async (conversationId: string) => {
-    const response = await fetch(`/api/messages/conversations/${conversationId}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const payload = (await response.json()) as { data: { other: Room["other"]; messages: Message[] } };
-    setThread(payload.data);
-    await fetch(`/api/messages/conversations/${conversationId}/read`, { method: "POST" });
+    try {
+      const response = await fetch(`/api/messages/conversations/${conversationId}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as { data: { other: Room["other"]; messages: Message[] } };
+      setThread(payload.data);
+      await fetch(`/api/messages/conversations/${conversationId}/read`, { method: "POST" });
+    } catch {
+      // ข้อความที่แสดงอยู่ยังอ่านได้ รอบถัดไปค่อยซิงก์ใหม่
+    }
   }, []);
 
   useEffect(() => {
