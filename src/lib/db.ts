@@ -1,7 +1,20 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
-const PRISMA_SCHEMA_VERSION = 2;
+// เพิ่มเลขนี้ทุกครั้งที่ schema เปลี่ยน เพื่อให้ next dev ทิ้ง Prisma Client
+// ที่ cache ไว้จาก generated client รุ่นก่อนหน้า
+/*
+ * หมายเหตุสำหรับคนที่แก้ schema
+ *
+ * ค่านี้สร้าง PrismaClient ตัวใหม่เมื่อเปลี่ยน แต่ช่วยได้เฉพาะกรณีที่ client
+ * ที่ generate ไว้บนดิสก์ถูกต้องแล้ว ถ้า dev server รันค้างอยู่ตั้งแต่ก่อน
+ * prisma generate มันจะถือโมดูลเก่าในหน่วยความจำ แล้วพ่น
+ * PrismaClientValidationError ว่าไม่รู้จักฟิลด์ใหม่ ซึ่งอ่านแล้วเหมือนโค้ดผิด
+ *
+ * กรณีนั้นต้องรีสตาร์ต dev server สถานเดียว package.json จึงมี predev
+ * ที่สั่ง prisma generate ให้ทุกครั้งก่อนเริ่ม เพื่อไม่ให้เกิดซ้ำ
+ */
+const PRISMA_SCHEMA_VERSION = 3;
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
   prismaSchemaVersion?: number;

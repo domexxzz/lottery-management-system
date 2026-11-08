@@ -34,6 +34,13 @@ export async function resetDatabase(): Promise<void> {
 
   const schemaIdentifier = `"${schema.replaceAll('"', '""')}"`;
   const tables = [
+    // ตารางใหม่ต้องเพิ่มที่นี่ด้วย ถึงแม้ CASCADE จะลามไปถึงเมื่อมี FK
+    // เพราะตารางที่ไม่มี FK กลับมาหาชุดนี้จะไม่ถูกล้าง แล้วข้อมูลจะข้ามไฟล์เทส
+    "direct_message_attachments",
+    "direct_messages",
+    "conversations",
+    "owner_chat_messages",
+    "owner_chat_conversations",
     "audit_events",
     "bill_attachments",
     "bill_payments",
