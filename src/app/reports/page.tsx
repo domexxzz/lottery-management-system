@@ -62,13 +62,14 @@ export default async function ReportsPage({
 
   const selectedDrawId = draws.some((draw) => draw.id === drawParam) ? drawParam : undefined;
   const selectedId = selectedDrawId ?? "all";
-  const [summary, agents, prizes, drawRows] = await Promise.all([
+  const [summary, agents, prizes, drawRows, allTrendRows] = await Promise.all([
     drawSummary(actor, selectedDrawId),
     byAgent(actor, selectedDrawId),
     byPrizeType(actor, selectedDrawId),
     byDraw(actor, selectedDrawId),
+    selectedDrawId ? byDraw(actor) : Promise.resolve(null),
   ]);
-  const trendRows = selectedDrawId ? await byDraw(actor) : drawRows;
+  const trendRows = allTrendRows ?? drawRows;
 
   const winnerCount = prizes.reduce((total, prize) => total + prize.winnerCount, 0);
   const topAgents = [...agents].sort((a, b) => b.gross.comparedTo(a.gross)).slice(0, 5);

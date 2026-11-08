@@ -24,7 +24,7 @@ const ITEMS: MenuItem[] = [
   { href: "/draws", label: "งวด", icon: "draw", roles: ALL_ROLES },
   { href: "/reports", label: "รายงาน", icon: "report", roles: ALL_ROLES },
   { href: "/evidence", label: "ตรวจหลักฐาน", icon: "evidence", roles: AUDIT_ROLES },
-  { href: "/audit", label: "ประวัติการตรวจ", icon: "audit", roles: AUDIT_ROLES },
+  { href: "/audit", label: "ประวัติการตรวจผลรางวัล", icon: "audit", roles: AUDIT_ROLES },
   { href: "/analytics", label: "วิเคราะห์เชิงลึก", icon: "analytics", roles: OWNER_ROLES },
   { href: "/chat", label: "ผู้ช่วยล็อตเตอรี่", icon: "chat", roles: OWNER_ROLES },
   // เปิดให้ทุกบทบาท กฎว่าใครคุยกับใครได้บังคับที่ชั้น service

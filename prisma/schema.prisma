@@ -345,6 +345,7 @@ model Draw {
   @@index([organizationId, name])
   @@index([organizationId, status])
   @@index([organizationId, isMock])
+  @@index([organizationId, cutoffAt])
   @@index([status, cutoffAt])
   @@map("draws")
 }
@@ -397,8 +398,12 @@ model Bill {
   payment     BillPayment?
 
   @@unique([organizationId, billNumber])
+  @@index([organizationId, createdAt])
   @@index([organizationId, drawId, status])
   @@index([organizationId, agentId, drawId])
+  @@index([organizationId, agentId, createdAt])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, agentId, status, createdAt])
   @@map("bills")
 }
 
@@ -584,6 +589,7 @@ model Settlement {
 
   @@unique([drawId, agentId])
   @@index([organizationId, drawId])
+  @@index([organizationId, agentId, drawId])
   @@map("settlements")
 }
 

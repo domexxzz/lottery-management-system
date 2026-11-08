@@ -31,7 +31,7 @@ export async function buildReadOnlyBusinessContext(actor: Actor, rawQuery: strin
   const wantsResults = wantsAll || includesAny(query, ["ผลรางวัล", "เลขออก", "ออกรางวัล", "ผลหวย", "ลงผล"]);
   const wantsSettlement = wantsAll || includesAny(query, ["settlement", "ตรวจสอบยอด", "ปิดบัญชี", "คอมมิช", "ยอดสุทธิ"]);
   const wantsEvidence = wantsAll || includesAny(query, ["หลักฐาน", "สลิป", "ไฟล์แนบ", "payment", "ชำระ", "โอน"]);
-  const wantsAudit = wantsAll || includesAny(query, ["audit", "ประวัติการตรวจ", "ใครกรอก", "ใครแก้", "กิจกรรม"]);
+  const wantsAudit = wantsAll || includesAny(query, ["audit", "ประวัติการตรวจ", "ประวัติการตรวจผลรางวัล", "ใครกรอก", "ใครแก้", "กิจกรรม"]);
 
   const [
     userGroups,

@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { BillStatus } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import { databaseSchema, prisma } from "@/lib/db";
 import { billScope, orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { NotFoundError } from "@/lib/errors";
@@ -18,6 +18,35 @@ import { sumMoney, ZERO } from "@/lib/money";
  */
 
 const COUNTED_STATUSES: BillStatus[] = ["CONFIRMED", "LOCKED", "SETTLED"];
+
+type ReportTable = "agents" | "bills" | "bill_items" | "prize_types" | "settlements";
+
+function reportTable(name: ReportTable) {
+  const schema = databaseSchema().replaceAll('"', '""');
+  return Prisma.raw(`"${schema}"."${name}"`);
+}
+
+/** เงื่อนไขส่วนกลางของ SQL รายงาน ต้องคงขอบเขตองค์กรและ Agent เหมือน billScope เสมอ */
+function reportBillSql(actor: Actor, drawId?: string) {
+  return Prisma.sql`
+    b."organizationId" = ${actor.organizationId}
+    AND b."status" IN ('CONFIRMED', 'LOCKED', 'SETTLED')
+    ${drawId ? Prisma.sql`AND b."drawId" = ${drawId}` : Prisma.empty}
+    ${actor.role === "AGENT" ? Prisma.sql`AND b."agentId" = ${actor.agentId ?? "__no_agent__"}` : Prisma.empty}
+  `;
+}
+
+function reportSettlementSql(actor: Actor, drawId?: string) {
+  return Prisma.sql`
+    s."organizationId" = ${actor.organizationId}
+    ${drawId ? Prisma.sql`AND s."drawId" = ${drawId}` : Prisma.empty}
+    ${actor.role === "AGENT" ? Prisma.sql`AND s."agentId" = ${actor.agentId ?? "__no_agent__"}` : Prisma.empty}
+  `;
+}
+
+function decimal(value: Prisma.Decimal | string | number | null): Prisma.Decimal {
+  return value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value ?? 0);
+}
 
 /** Agent เห็นเฉพาะข้อมูลของตนเอง บทบาทอื่นต้องมีสิทธิ์ดูยอดรวมทุก Agent */
 function reportScope(actor: Actor) {
@@ -112,68 +141,68 @@ export type AgentRow = {
 export async function byAgent(actor: Actor, drawId?: string): Promise<AgentRow[]> {
   requirePermission(actor, "bill.viewOwn");
 
-  const bills = await prisma.bill.findMany({
-    where: { ...reportScope(actor), ...(drawId ? { drawId } : {}), status: { in: COUNTED_STATUSES } },
-    select: {
-      agentId: true,
-      totalStake: true,
-      totalPayout: true,
-      agent: { select: { code: true, name: true } },
-      items: { select: { isWinner: true } },
-    },
-  });
+  type Row = {
+    agentId: string;
+    agentCode: string;
+    agentName: string;
+    billCount: number;
+    itemCount: number;
+    winnerCount: number;
+    gross: Prisma.Decimal | string;
+    payout: Prisma.Decimal | string;
+    commission: Prisma.Decimal | string;
+    net: Prisma.Decimal | string;
+  };
 
-  const settlements = await prisma.settlement.findMany({
-    where: {
-      ...orgScope(actor),
-      ...(drawId ? { drawId } : {}),
-      ...(actor.role === "AGENT" && { agentId: actor.agentId ?? "__no_agent__" }),
-    },
-    select: { agentId: true, commission: true, net: true },
-  });
-  const settlementByAgent = new Map<string, { commissions: Prisma.Decimal[]; nets: Prisma.Decimal[] }>();
-  for (const settlement of settlements) {
-    const bucket = settlementByAgent.get(settlement.agentId) ?? { commissions: [], nets: [] };
-    bucket.commissions.push(settlement.commission);
-    bucket.nets.push(settlement.net);
-    settlementByAgent.set(settlement.agentId, bucket);
-  }
+  const rows = await prisma.$queryRaw<Row[]>(Prisma.sql`
+    WITH bill_agg AS (
+      SELECT b."agentId",
+             COUNT(*)::int AS "billCount",
+             COALESCE(SUM(b."totalStake"), 0) AS gross,
+             COALESCE(SUM(b."totalPayout"), 0) AS payout
+      FROM ${reportTable("bills")} b
+      WHERE ${reportBillSql(actor, drawId)}
+      GROUP BY b."agentId"
+    ), item_agg AS (
+      SELECT b."agentId",
+             COUNT(i.id)::int AS "itemCount",
+             COUNT(i.id) FILTER (WHERE i."isWinner")::int AS "winnerCount"
+      FROM ${reportTable("bills")} b
+      JOIN ${reportTable("bill_items")} i ON i."billId" = b.id
+      WHERE ${reportBillSql(actor, drawId)}
+      GROUP BY b."agentId"
+    ), settlement_agg AS (
+      SELECT s."agentId",
+             COALESCE(SUM(s.commission), 0) AS commission,
+             COALESCE(SUM(s.net), 0) AS net
+      FROM ${reportTable("settlements")} s
+      WHERE ${reportSettlementSql(actor, drawId)}
+      GROUP BY s."agentId"
+    )
+    SELECT ba."agentId",
+           a.code AS "agentCode",
+           a.name AS "agentName",
+           ba."billCount",
+           COALESCE(ia."itemCount", 0)::int AS "itemCount",
+           COALESCE(ia."winnerCount", 0)::int AS "winnerCount",
+           ba.gross,
+           ba.payout,
+           COALESCE(sa.commission, 0) AS commission,
+           COALESCE(sa.net, 0) AS net
+    FROM bill_agg ba
+    JOIN ${reportTable("agents")} a ON a.id = ba."agentId"
+    LEFT JOIN item_agg ia ON ia."agentId" = ba."agentId"
+    LEFT JOIN settlement_agg sa ON sa."agentId" = ba."agentId"
+    ORDER BY a.code
+  `);
 
-  const buckets = new Map<
-    string,
-    { code: string; name: string; bills: number; items: number; winners: number; stakes: Prisma.Decimal[]; payouts: Prisma.Decimal[] }
-  >();
-
-  for (const bill of bills) {
-    let bucket = buckets.get(bill.agentId);
-    if (!bucket) {
-      bucket = { code: bill.agent.code, name: bill.agent.name, bills: 0, items: 0, winners: 0, stakes: [], payouts: [] };
-      buckets.set(bill.agentId, bucket);
-    }
-    bucket.bills += 1;
-    bucket.items += bill.items.length;
-    bucket.winners += bill.items.filter((item) => item.isWinner).length;
-    bucket.stakes.push(bill.totalStake);
-    bucket.payouts.push(bill.totalPayout);
-  }
-
-  return [...buckets.entries()]
-    .map(([agentId, b]) => {
-      const settlement = settlementByAgent.get(agentId);
-      return {
-        agentId,
-        agentCode: b.code,
-        agentName: b.name,
-        billCount: b.bills,
-        itemCount: b.items,
-        winnerCount: b.winners,
-        gross: sumMoney(b.stakes),
-        payout: sumMoney(b.payouts),
-        commission: sumMoney(settlement?.commissions ?? []),
-        net: sumMoney(settlement?.nets ?? []),
-      };
-    })
-    .sort((a, b) => a.agentCode.localeCompare(b.agentCode));
+  return rows.map((row) => ({
+    ...row,
+    gross: decimal(row.gross),
+    payout: decimal(row.payout),
+    commission: decimal(row.commission),
+    net: decimal(row.net),
+  }));
 }
 
 export type DrawReportRow = {
@@ -205,53 +234,66 @@ export async function byDraw(actor: Actor, drawId?: string): Promise<DrawReportR
   const drawIds = draws.map((draw) => draw.id);
   if (drawIds.length === 0) return [];
 
-  const [bills, settlements] = await Promise.all([
-    prisma.bill.findMany({
-      where: { ...reportScope(actor), drawId: { in: drawIds }, status: { in: COUNTED_STATUSES } },
-      select: { drawId: true, totalStake: true, totalPayout: true, items: { select: { isWinner: true } } },
-    }),
-    prisma.settlement.findMany({
-      where: {
-        ...orgScope(actor),
-        drawId: { in: drawIds },
-        ...(actor.role === "AGENT" && { agentId: actor.agentId ?? "__no_agent__" }),
-      },
-      select: { drawId: true, commission: true, net: true },
-    }),
-  ]);
-
-  const billBuckets = new Map<string, { count: number; items: number; winners: number; gross: Prisma.Decimal[]; payout: Prisma.Decimal[] }>();
-  for (const bill of bills) {
-    const bucket = billBuckets.get(bill.drawId) ?? { count: 0, items: 0, winners: 0, gross: [], payout: [] };
-    bucket.count += 1;
-    bucket.items += bill.items.length;
-    bucket.winners += bill.items.filter((item) => item.isWinner).length;
-    bucket.gross.push(bill.totalStake);
-    bucket.payout.push(bill.totalPayout);
-    billBuckets.set(bill.drawId, bucket);
-  }
-  const settlementBuckets = new Map<string, { commission: Prisma.Decimal[]; net: Prisma.Decimal[] }>();
-  for (const settlement of settlements) {
-    const bucket = settlementBuckets.get(settlement.drawId) ?? { commission: [], net: [] };
-    bucket.commission.push(settlement.commission);
-    bucket.net.push(settlement.net);
-    settlementBuckets.set(settlement.drawId, bucket);
-  }
+  type AggregateRow = {
+    drawId: string;
+    billCount: number;
+    itemCount: number;
+    winnerCount: number;
+    gross: Prisma.Decimal | string;
+    payout: Prisma.Decimal | string;
+    commission: Prisma.Decimal | string;
+    net: Prisma.Decimal | string;
+  };
+  const aggregates = await prisma.$queryRaw<AggregateRow[]>(Prisma.sql`
+    WITH bill_agg AS (
+      SELECT b."drawId",
+             COUNT(*)::int AS "billCount",
+             COALESCE(SUM(b."totalStake"), 0) AS gross,
+             COALESCE(SUM(b."totalPayout"), 0) AS payout
+      FROM ${reportTable("bills")} b
+      WHERE ${reportBillSql(actor)} AND b."drawId" IN (${Prisma.join(drawIds)})
+      GROUP BY b."drawId"
+    ), item_agg AS (
+      SELECT b."drawId",
+             COUNT(i.id)::int AS "itemCount",
+             COUNT(i.id) FILTER (WHERE i."isWinner")::int AS "winnerCount"
+      FROM ${reportTable("bills")} b
+      JOIN ${reportTable("bill_items")} i ON i."billId" = b.id
+      WHERE ${reportBillSql(actor)} AND b."drawId" IN (${Prisma.join(drawIds)})
+      GROUP BY b."drawId"
+    ), settlement_agg AS (
+      SELECT s."drawId",
+             COALESCE(SUM(s.commission), 0) AS commission,
+             COALESCE(SUM(s.net), 0) AS net
+      FROM ${reportTable("settlements")} s
+      WHERE ${reportSettlementSql(actor)} AND s."drawId" IN (${Prisma.join(drawIds)})
+      GROUP BY s."drawId"
+    )
+    SELECT ba."drawId", ba."billCount",
+           COALESCE(ia."itemCount", 0)::int AS "itemCount",
+           COALESCE(ia."winnerCount", 0)::int AS "winnerCount",
+           ba.gross, ba.payout,
+           COALESCE(sa.commission, 0) AS commission,
+           COALESCE(sa.net, 0) AS net
+    FROM bill_agg ba
+    LEFT JOIN item_agg ia ON ia."drawId" = ba."drawId"
+    LEFT JOIN settlement_agg sa ON sa."drawId" = ba."drawId"
+  `);
+  const aggregateByDraw = new Map(aggregates.map((row) => [row.drawId, row]));
 
   return draws.reverse().map((draw) => {
-    const bill = billBuckets.get(draw.id);
-    const settlement = settlementBuckets.get(draw.id);
+    const aggregate = aggregateByDraw.get(draw.id);
     return {
       drawId: draw.id,
       drawName: draw.name,
       cutoffAt: draw.cutoffAt,
-      billCount: bill?.count ?? 0,
-      itemCount: bill?.items ?? 0,
-      winnerCount: bill?.winners ?? 0,
-      gross: sumMoney(bill?.gross ?? []),
-      payout: sumMoney(bill?.payout ?? []),
-      commission: sumMoney(settlement?.commission ?? []),
-      net: sumMoney(settlement?.net ?? []),
+      billCount: aggregate?.billCount ?? 0,
+      itemCount: aggregate?.itemCount ?? 0,
+      winnerCount: aggregate?.winnerCount ?? 0,
+      gross: decimal(aggregate?.gross ?? null),
+      payout: decimal(aggregate?.payout ?? null),
+      commission: decimal(aggregate?.commission ?? null),
+      net: decimal(aggregate?.net ?? null),
     };
   });
 }
@@ -269,48 +311,34 @@ export type PrizeTypeRow = {
 export async function byPrizeType(actor: Actor, drawId?: string): Promise<PrizeTypeRow[]> {
   requirePermission(actor, "bill.viewOwn");
 
-  const items = await prisma.billItem.findMany({
-    where: {
-      bill: { ...reportScope(actor), ...(drawId ? { drawId } : {}), status: { in: COUNTED_STATUSES } },
-    },
-    select: {
-      stake: true,
-      payout: true,
-      isWinner: true,
-      prizeType: { select: { code: true, name: true } },
-    },
-  });
+  type Row = {
+    code: number;
+    name: string;
+    itemCount: number;
+    winnerCount: number;
+    gross: Prisma.Decimal | string;
+    payout: Prisma.Decimal | string;
+  };
+  const rows = await prisma.$queryRaw<Row[]>(Prisma.sql`
+    SELECT pt.code,
+           pt.name,
+           COUNT(i.id)::int AS "itemCount",
+           COUNT(i.id) FILTER (WHERE i."isWinner")::int AS "winnerCount",
+           COALESCE(SUM(i.stake), 0) AS gross,
+           COALESCE(SUM(i.payout), 0) AS payout
+    FROM ${reportTable("bill_items")} i
+    JOIN ${reportTable("bills")} b ON b.id = i."billId"
+    JOIN ${reportTable("prize_types")} pt ON pt.id = i."prizeTypeId"
+    WHERE ${reportBillSql(actor, drawId)}
+    GROUP BY pt.id, pt.code, pt.name
+    ORDER BY pt.code
+  `);
 
-  const buckets = new Map<
-    number,
-    { name: string; items: number; winners: number; stakes: Prisma.Decimal[]; payouts: Prisma.Decimal[] }
-  >();
-
-  for (const item of items) {
-    const code = item.prizeType.code;
-    let bucket = buckets.get(code);
-    if (!bucket) {
-      bucket = { name: item.prizeType.name, items: 0, winners: 0, stakes: [], payouts: [] };
-      buckets.set(code, bucket);
-    }
-    bucket.items += 1;
-    bucket.stakes.push(item.stake);
-    if (item.isWinner) {
-      bucket.winners += 1;
-      bucket.payouts.push(item.payout);
-    }
-  }
-
-  return [...buckets.entries()]
-    .map(([code, b]) => ({
-      code,
-      name: b.name,
-      itemCount: b.items,
-      winnerCount: b.winners,
-      gross: sumMoney(b.stakes),
-      payout: sumMoney(b.payouts),
-    }))
-    .sort((a, b) => a.code - b.code);
+  return rows.map((row) => ({
+    ...row,
+    gross: decimal(row.gross),
+    payout: decimal(row.payout),
+  }));
 }
 
 export type BillSearchFilter = {

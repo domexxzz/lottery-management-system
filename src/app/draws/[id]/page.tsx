@@ -109,7 +109,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
             <thead>
               <tr>
                 <th scope="col">รางวัล</th>
-                <th scope="col">ผลที่กรอก</th>
+                <th scope="col">ผลเลขรางวัล</th>
                 <th scope="col">สถานะ</th>
                 <th scope="col">ผู้บันทึก</th>
                 <th scope="col">การจัดการ</th>
