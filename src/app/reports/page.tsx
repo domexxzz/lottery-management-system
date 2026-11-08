@@ -7,6 +7,7 @@ import { byAgent, byDraw, byPrizeType, drawSummary } from "@/lib/reports/service
 import { DrawPicker } from "./DrawPicker";
 import { AgentReports } from "./AgentReports";
 import { ReportFinancialCharts } from "./ReportFinancialCharts";
+import { ReportChart } from "./ReportChart";
 import "./reports.css";
 
 export const dynamic = "force-dynamic";
@@ -163,6 +164,66 @@ export default async function ReportsPage({
           <header><div><span className="report-attention-icon" aria-hidden="true">⌁</span><span><span className="report-kicker">ACTION REQUIRED</span><h2 id="report-attention-heading">สิ่งที่ต้องตรวจทันที</h2></span></div><small>จัดลำดับจากข้อมูลจริงของ {scopeLabel}</small></header>
           <div>{attentionItems.map((item, index) => <a href={item.href} className={`report-attention-item report-attention-item--${item.tone}`} key={item.title}><span>{index + 1}</span><div><b>{item.title}</b><small>{item.detail}</small></div><i aria-hidden="true">→</i></a>)}</div>
         </section>
+
+        <ReportChart
+          initialDimension="draws"
+          datasets={[
+            {
+              key: "draws",
+              label: "เปรียบเทียบรายงวด",
+              description: "แนวโน้มรายรับ รายจ่าย กำไร และปริมาณงานตามเวลา",
+              rows: trendRows.map((draw) => ({
+                id: draw.drawId,
+                code: reportDate.format(draw.cutoffAt),
+                name: draw.drawName,
+                href: `/draws/${draw.drawId}`,
+                gross: draw.gross.toNumber(),
+                payout: draw.payout.toNumber(),
+                commission: draw.commission.toNumber(),
+                net: draw.net.toNumber(),
+                bills: draw.billCount,
+                items: draw.itemCount,
+                winners: draw.winnerCount,
+              })),
+            },
+            {
+              key: "agents",
+              label: "เปรียบเทียบ Agent",
+              description: "เทียบประสิทธิภาพและผลตอบแทนของตัวแทน",
+              rows: agents.map((agent) => ({
+                id: agent.agentId,
+                code: agent.agentCode,
+                name: agent.agentName,
+                href: `/agents/${agent.agentId}`,
+                gross: agent.gross.toNumber(),
+                payout: agent.payout.toNumber(),
+                commission: agent.commission.toNumber(),
+                net: agent.net.toNumber(),
+                bills: agent.billCount,
+                items: agent.itemCount,
+                winners: agent.winnerCount,
+              })),
+            },
+            {
+              key: "prizes",
+              label: "เปรียบเทียบประเภทรางวัล",
+              description: "ดู Demand, Winner และภาระจ่ายของรางวัลแต่ละประเภท",
+              metrics: ["gross", "payout", "items", "winners"],
+              rows: prizes.map((prize) => ({
+                id: String(prize.code),
+                code: String(prize.code),
+                name: prize.name,
+                gross: prize.gross.toNumber(),
+                payout: prize.payout.toNumber(),
+                commission: 0,
+                net: prize.gross.minus(prize.payout).toNumber(),
+                bills: 0,
+                items: prize.itemCount,
+                winners: prize.winnerCount,
+              })),
+            },
+          ]}
+        />
 
         <ReportFinancialCharts id="financial-trends" rows={drawRows.map((draw) => ({
           id: draw.drawId,

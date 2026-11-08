@@ -4,7 +4,7 @@ import { databaseSchema, prisma } from "@/lib/db";
 import { billScope, orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { NotFoundError } from "@/lib/errors";
-import { sumMoney, ZERO } from "@/lib/money";
+import { ZERO } from "@/lib/money";
 
 /**
  * รายงานและ Dashboard (P4)
@@ -82,33 +82,46 @@ export async function drawSummary(actor: Actor, drawId?: string): Promise<DrawSu
     status: { in: COUNTED_STATUSES },
   };
 
-  const [billAgg, itemAgg, billDraws, settlements] = await Promise.all([
+  const settlementWhere: Prisma.SettlementWhereInput = {
+    ...orgScope(actor),
+    ...(draw ? { drawId: draw.id } : {}),
+    ...(actor.role === "AGENT" && { agentId: actor.agentId ?? "__no_agent__" }),
+  };
+
+  type PendingRow = { pending: boolean };
+  const [billAgg, itemAgg, settlementAgg, settlementCount, pendingRows] = await Promise.all([
     prisma.bill.aggregate({
       where,
       _count: { _all: true },
       _sum: { totalStake: true, totalPayout: true },
     }),
     prisma.billItem.aggregate({ where: { bill: where }, _count: { _all: true } }),
-    prisma.bill.findMany({ where, distinct: ["drawId"], select: { drawId: true } }),
-    prisma.settlement.findMany({
-      where: {
-        ...orgScope(actor),
-        ...(draw ? { drawId: draw.id } : {}),
-        ...(actor.role === "AGENT" && { agentId: actor.agentId ?? "__no_agent__" }),
-      },
-      select: { drawId: true, commission: true, net: true },
+    prisma.settlement.aggregate({
+      where: settlementWhere,
+      _sum: { commission: true, net: true },
     }),
+    draw ? prisma.settlement.count({ where: settlementWhere }) : Promise.resolve(0),
+    draw ? Promise.resolve([] as PendingRow[]) : prisma.$queryRaw<PendingRow[]>(Prisma.sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM ${reportTable("bills")} b
+        WHERE ${reportBillSql(actor)}
+          AND NOT EXISTS (
+            SELECT 1
+            FROM ${reportTable("settlements")} s
+            WHERE s."organizationId" = ${actor.organizationId}
+              AND s."drawId" = b."drawId"
+              ${actor.role === "AGENT" ? Prisma.sql`AND s."agentId" = ${actor.agentId ?? "__no_agent__"}` : Prisma.empty}
+          )
+      ) AS pending
+    `),
   ]);
 
   const gross = billAgg._sum.totalStake ?? ZERO;
   const payout = billAgg._sum.totalPayout ?? ZERO;
-  const commission = sumMoney(settlements.map((s) => s.commission));
-  const net = sumMoney(settlements.map((s) => s.net));
-
-  const settledDrawIds = new Set(settlements.map((settlement) => settlement.drawId));
-  const pendingSettlement = draw
-    ? settlements.length === 0
-    : billDraws.some((bill) => !settledDrawIds.has(bill.drawId));
+  const commission = settlementAgg._sum.commission ?? ZERO;
+  const net = settlementAgg._sum.net ?? ZERO;
+  const pendingSettlement = draw ? settlementCount === 0 : (pendingRows[0]?.pending ?? false);
 
   return {
     drawId: draw?.id ?? "all",
