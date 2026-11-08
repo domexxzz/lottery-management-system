@@ -6,12 +6,14 @@ import { getAnalyticsData } from "@/lib/analytics/service";
 import { customerProfileKey } from "@/lib/customers/profile-key";
 import { prisma } from "@/lib/db";
 import { AnalyticsFilters } from "./AnalyticsFilters";
-import { ReportChart } from "../reports/ReportChart";
+import type { ReportChartDataset } from "../reports/ReportChart";
+import { CustomerBehaviorExplorer } from "./CustomerBehaviorExplorer";
 import "../reports/reports.css";
 import "./analytics.css";
 
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const INTEGER = new Intl.NumberFormat("th-TH");
+const TREND_DATE = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Bangkok" });
 
 const ANALYTICS_STATUSES: BillStatus[] = ["CONFIRMED", "LOCKED", "SETTLED"];
 function first(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] : value; }
@@ -67,6 +69,82 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const maxPrizeStake = Math.max(...allPrizes.map(([, value]) => value.stake), 1);
   const maxTimeSales = Math.max(...[...timeDemand.values()].map((value) => value.sales), 1);
   const topDraws = [...analytics.draws].sort((a, b) => b.sales - a.sales).slice(0, 5);
+  const behaviorDatasets: ReportChartDataset[] = [
+    {
+      key: "customers",
+      label: "ลูกค้าและความถี่การซื้อ",
+      description: "ดูว่าลูกค้าคนใดซื้อบ่อย ใช้จ่ายสูง และเลือกเลขมาก",
+      metrics: ["gross", "bills", "items"],
+      rows: customerRows.slice(0, 50).map((customer, index) => ({
+        id: `${customer.label}-${index}`,
+        code: customer.label,
+        name: customer.label,
+        href: `/customers/${customerProfileKey(customer.label)}`,
+        gross: customer.spend,
+        payout: 0,
+        commission: 0,
+        net: customer.spend,
+        bills: customer.bills,
+        items: customer.items,
+        winners: 0,
+      })),
+    },
+    {
+      key: "prizes",
+      label: "ความสนใจประเภทรางวัล",
+      description: "ดูว่าลูกค้าสนใจรางวัลประเภทใดจากยอดซื้อและจำนวนเลขที่เลือก",
+      metrics: ["gross", "items"],
+      rows: allPrizes.map(([name, value], index) => ({
+        id: `${name}-${index}`,
+        code: `${index + 1}`,
+        name,
+        gross: value.stake,
+        payout: 0,
+        commission: 0,
+        net: value.stake,
+        bills: 0,
+        items: value.count,
+        winners: 0,
+      })),
+    },
+    {
+      key: "time",
+      label: "ช่วงเวลาที่ลูกค้าซื้อ",
+      description: "เปรียบเทียบมูลค่าและความถี่การซื้อระหว่างเช้า บ่าย และเย็น",
+      metrics: ["gross", "bills"],
+      rows: [...timeDemand.entries()].map(([label, value]) => ({
+        id: label,
+        code: label,
+        name: `ช่วง${label}`,
+        gross: value.sales,
+        payout: 0,
+        commission: 0,
+        net: value.sales,
+        bills: value.bills,
+        items: 0,
+        winners: 0,
+      })),
+    },
+    {
+      key: "timeline",
+      label: "แนวโน้มตามวันและเวลา",
+      description: "แกน X เป็นวันออกรางวัล แกน Y ซ้ายเป็นยอดซื้อ (บาท) และแกน Y ขวาเป็นความถี่ซื้อ (ครั้ง)",
+      metrics: ["gross", "bills"],
+      rows: analytics.draws.map((row) => ({
+        id: row.id,
+        code: TREND_DATE.format(new Date(row.cutoffAt)),
+        name: row.name,
+        date: row.cutoffAt,
+        gross: row.sales,
+        payout: 0,
+        commission: 0,
+        net: row.sales,
+        bills: row.bills,
+        items: 0,
+        winners: 0,
+      })),
+    },
+  ];
 
   return <main className="analytics-page">
     <header className="analytics-hero">
@@ -83,84 +161,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       <article><span>ยอดซื้อเฉลี่ย</span><strong>{MONEY.format(averageOrder)} ฿</strong><small>ต่อหนึ่งบิล</small></article>
     </section>
 
-    <ReportChart
-      initialDimension="customers"
-      variant="customer-behavior"
-      datasets={[
-        {
-          key: "customers",
-          label: "ลูกค้าและความถี่การซื้อ",
-          description: "ดูว่าลูกค้าคนใดซื้อบ่อย ใช้จ่ายสูง และเลือกเลขมาก",
-          metrics: ["gross", "bills", "items"],
-          rows: customerRows.slice(0, 50).map((customer, index) => ({
-            id: `${customer.label}-${index}`,
-            code: customer.label,
-            name: customer.label,
-            href: `/customers/${customerProfileKey(customer.label)}`,
-            gross: customer.spend,
-            payout: 0,
-            commission: 0,
-            net: customer.spend,
-            bills: customer.bills,
-            items: customer.items,
-            winners: 0,
-          })),
-        },
-        {
-          key: "prizes",
-          label: "ความสนใจประเภทรางวัล",
-          description: "ดูว่าลูกค้าสนใจรางวัลประเภทใดจากยอดซื้อและจำนวนเลขที่เลือก",
-          metrics: ["gross", "items"],
-          rows: allPrizes.map(([name, value], index) => ({
-            id: `${name}-${index}`,
-            code: `${index + 1}`,
-            name,
-            gross: value.stake,
-            payout: 0,
-            commission: 0,
-            net: value.stake,
-            bills: 0,
-            items: value.count,
-            winners: 0,
-          })),
-        },
-        {
-          key: "time",
-          label: "ช่วงเวลาที่ลูกค้าซื้อ",
-          description: "เปรียบเทียบมูลค่าและความถี่การซื้อระหว่างเช้า บ่าย และเย็น",
-          metrics: ["gross", "bills"],
-          rows: [...timeDemand.entries()].map(([label, value]) => ({
-            id: label,
-            code: label,
-            name: `ช่วง${label}`,
-            gross: value.sales,
-            payout: 0,
-            commission: 0,
-            net: value.sales,
-            bills: value.bills,
-            items: 0,
-            winners: 0,
-          })),
-        },
-        {
-          key: "draws",
-          label: "แนวโน้มพฤติกรรมรายงวด",
-          description: "ดูการเปลี่ยนแปลงของยอดซื้อและความถี่การซื้อในแต่ละงวด",
-          metrics: ["gross", "bills"],
-          rows: analytics.draws.map((row) => ({
-            id: row.id,
-            code: row.name,
-            name: row.name,
-            gross: row.sales,
-            payout: 0,
-            commission: 0,
-            net: row.sales,
-            bills: row.bills,
-            items: 0,
-            winners: 0,
-          })),
-        },
-      ]}
+    <CustomerBehaviorExplorer
+      datasets={behaviorDatasets}
+      selectedDrawId={drawId}
+      summary={{ customerCount: analytics.customerCount, repeatCustomers, billCount: analytics.billCount, totalSales }}
     />
 
     <section className="analytics-grid analytics-grid-main">

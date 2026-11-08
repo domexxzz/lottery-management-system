@@ -231,6 +231,64 @@ export type DrawReportRow = {
   net: Prisma.Decimal;
 };
 
+/** ข้อมูลระดับงวด × Agent สำหรับสร้างกราฟที่กรองแกน X/Y แยกกัน */
+export async function chartMatrix(actor: Actor) {
+  requirePermission(actor, "bill.viewOwn");
+  const draws = await prisma.draw.findMany({
+    where: { ...orgScope(actor), bills: { some: { ...reportScope(actor), status: { in: COUNTED_STATUSES } } } },
+    orderBy: { cutoffAt: "desc" },
+    select: { id: true, name: true, cutoffAt: true, status: true },
+  });
+  if (!draws.length) return [];
+  type MatrixRow = {
+    drawId: string; agentId: string; agentCode: string; agentName: string; agentStatus: string;
+    bills: number; items: number; winners: number;
+    gross: Prisma.Decimal | string; payout: Prisma.Decimal | string;
+    commission: Prisma.Decimal | string; net: Prisma.Decimal | string;
+  };
+  const rows = await prisma.$queryRaw<MatrixRow[]>(Prisma.sql`
+    WITH bill_agg AS (
+      SELECT b."drawId", b."agentId", COUNT(*)::int AS bills,
+             COALESCE(SUM(b."totalStake"), 0) AS gross,
+             COALESCE(SUM(b."totalPayout"), 0) AS payout
+      FROM ${reportTable("bills")} b
+      WHERE ${reportBillSql(actor)} AND b."drawId" IN (${Prisma.join(draws.map((draw) => draw.id))})
+      GROUP BY b."drawId", b."agentId"
+    ), item_agg AS (
+      SELECT b."drawId", b."agentId", COUNT(i.id)::int AS items,
+             COUNT(i.id) FILTER (WHERE i."isWinner")::int AS winners
+      FROM ${reportTable("bills")} b
+      JOIN ${reportTable("bill_items")} i ON i."billId" = b.id
+      WHERE ${reportBillSql(actor)} AND b."drawId" IN (${Prisma.join(draws.map((draw) => draw.id))})
+      GROUP BY b."drawId", b."agentId"
+    )
+    SELECT ba."drawId", ba."agentId", a.code AS "agentCode", a.name AS "agentName", a.status AS "agentStatus",
+           ba.bills, COALESCE(ia.items, 0)::int AS items,
+           COALESCE(ia.winners, 0)::int AS winners, ba.gross, ba.payout,
+           COALESCE(s.commission, 0) AS commission,
+           COALESCE(s.net, 0) AS net
+    FROM bill_agg ba
+    JOIN ${reportTable("agents")} a ON a.id = ba."agentId"
+    LEFT JOIN item_agg ia ON ia."drawId" = ba."drawId" AND ia."agentId" = ba."agentId"
+    LEFT JOIN ${reportTable("settlements")} s ON s."drawId" = ba."drawId"
+      AND s."agentId" = ba."agentId" AND s."organizationId" = ${actor.organizationId}
+    ORDER BY ba."drawId", a.code
+  `);
+  const drawById = new Map(draws.map((draw) => [draw.id, draw]));
+  const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" });
+  return rows.map((row) => ({
+    drawId: row.drawId,
+    drawName: drawById.get(row.drawId)?.name ?? row.drawId,
+    drawStatus: drawById.get(row.drawId)?.status ?? "UNKNOWN",
+    cutoffAt: drawById.get(row.drawId)?.cutoffAt.toISOString() ?? "",
+    cutoffDate: drawById.get(row.drawId) ? localDate.format(drawById.get(row.drawId)!.cutoffAt) : "",
+    agentId: row.agentId, agentCode: row.agentCode, agentName: row.agentName, agentStatus: row.agentStatus,
+    gross: decimal(row.gross).toNumber(), payout: decimal(row.payout).toNumber(),
+    commission: decimal(row.commission).toNumber(), net: decimal(row.net).toNumber(),
+    bills: row.bills, items: row.items, winners: row.winners,
+  }));
+}
+
 /** แนวโน้มรายงวดสำหรับกราฟเจาะลึก เรียงเก่าไปใหม่เพื่อแสดงเส้นเวลา */
 export async function byDraw(actor: Actor, drawId?: string): Promise<DrawReportRow[]> {
   requirePermission(actor, "bill.viewOwn");

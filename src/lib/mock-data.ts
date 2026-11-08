@@ -8,6 +8,11 @@ export const MOCK_BILL_COUNT = 2_000;
 const DRAW_COUNT = 24;
 const DAY = 24 * 60 * 60 * 1_000;
 const THAI_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."] as const;
+const DRAW_DEMAND_WEIGHTS = [
+  .62, .88, 1.16, .74, 1.42, 1.03, .69, 1.28, 1.67, .92, 1.34, .81,
+  1.52, 1.08, .71, 1.39, .97, 1.78, .84, 1.21, 1.58, .76, 1.31, 1.91,
+] as const;
+const STAKE_LEVELS = [20, 30, 50, 80, 100, 150, 200, 300, 500, 750, 1_000] as const;
 
 type ToggleActor = {
   userId: string;
@@ -64,6 +69,37 @@ function losingNumber(result: string, digits: number, matchRule: MatchRule, seed
 
 function money(value: number): string {
   return value.toFixed(2);
+}
+
+function distributeWeightedTotal(total: number, weights: readonly number[]): number[] {
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  const raw = weights.map((weight) => total * weight / weightTotal);
+  const counts = raw.map(Math.floor);
+  let remaining = total - counts.reduce((sum, count) => sum + count, 0);
+  const order = raw.map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((left, right) => right.fraction - left.fraction || left.index - right.index);
+  for (const row of order) {
+    if (remaining <= 0) break;
+    counts[row.index] = (counts[row.index] ?? 0) + 1;
+    remaining -= 1;
+  }
+  return counts;
+}
+
+function mockCustomerIndex(globalBillIndex: number, drawIndex: number): number {
+  const segment = (globalBillIndex * 37 + drawIndex * 19) % 100;
+  if (segment < 48) return 1 + ((globalBillIndex * 11 + drawIndex * 7) % 55);
+  if (segment < 80) return 56 + ((globalBillIndex * 13 + drawIndex * 5) % 115);
+  return 171 + ((globalBillIndex * 17 + drawIndex * 11) % 190);
+}
+
+function mockStake(globalBillIndex: number, drawIndex: number, itemIndex: number, customerIndex: number, agentIndex: number): number {
+  const base = STAKE_LEVELS[(globalBillIndex * 3 + drawIndex * 5 + itemIndex * 7) % STAKE_LEVELS.length]!;
+  const customerFactor = customerIndex <= 55 ? 1.55 : customerIndex <= 170 ? 1.05 : .7;
+  const agentFactor = .82 + (agentIndex % 6) * .09;
+  const pulse = .82 + ((globalBillIndex + itemIndex * 3 + drawIndex) % 8) * .06;
+  const drawFactor = DRAW_DEMAND_WEIGHTS[drawIndex] ?? 1;
+  return Math.max(10, Math.round(base * customerFactor * agentFactor * pulse * drawFactor / 10) * 10);
 }
 
 /** คืนงวดวันที่ 1 และ 16 จำนวน 24 งวดย้อนหลังไม่เกินหนึ่งปี */
@@ -234,15 +270,18 @@ export async function setMockDataEnabled(actor: ToggleActor, enabled: boolean): 
     const billRows: Prisma.BillCreateManyInput[] = [];
     const itemRows: Prisma.BillItemCreateManyInput[] = [];
     const settlementTotals = new Map<string, { drawId: string; agentId: string; gross: number; payout: number; commissionRate: number }>();
+    const billsPerDraw = distributeWeightedTotal(MOCK_BILL_COUNT, DRAW_DEMAND_WEIGHTS);
     let globalBillIndex = 0;
 
     for (const [drawIndex, draw] of draws.entries()) {
-      const billsThisDraw = Math.floor(MOCK_BILL_COUNT / DRAW_COUNT) + (drawIndex < MOCK_BILL_COUNT % DRAW_COUNT ? 1 : 0);
+      const billsThisDraw = billsPerDraw[drawIndex] ?? 0;
       for (let localBillIndex = 0; localBillIndex < billsThisDraw; localBillIndex += 1) {
-        const agent = agents[(globalBillIndex + drawIndex) % agents.length]!;
+        const agentIndex = (globalBillIndex + drawIndex * 3) % agents.length;
+        const agent = agents[agentIndex]!;
+        const customerIndex = mockCustomerIndex(globalBillIndex, drawIndex);
         const billId = randomUUID();
         const createdAt = new Date(draw.opensAt.getTime() + ((localBillIndex * 37 + drawIndex * 11) % 13_500) * 60 * 1_000);
-        const itemCount = 2 + ((globalBillIndex + drawIndex) % 3);
+        const itemCount = 1 + ((globalBillIndex * 7 + drawIndex * 3) % 5);
         let totalStake = 0;
         let totalPayout = 0;
 
@@ -253,7 +292,7 @@ export async function setMockDataEnabled(actor: ToggleActor, enabled: boolean): 
           const number = forceWinner
             ? winningNumber(resultValue, prizeType.digits, prizeType.matchRule)
             : losingNumber(resultValue, prizeType.digits, prizeType.matchRule, globalBillIndex * 101 + itemIndex * 17);
-          const stake = [20, 50, 100, 200, 500][(globalBillIndex + itemIndex + drawIndex) % 5]!;
+          const stake = mockStake(globalBillIndex, drawIndex, itemIndex, customerIndex, agentIndex);
           const winner = isWinning({ number, resultValue, matchRule: prizeType.matchRule });
           const payout = winner ? stake * Number(prizeType.payoutRate) : 0;
           totalStake += stake;
@@ -278,7 +317,7 @@ export async function setMockDataEnabled(actor: ToggleActor, enabled: boolean): 
           agentId: agent.id,
           drawId: draw.id,
           billNumber: String(firstSequence + globalBillIndex).padStart(8, "0"),
-          title: `ลูกค้าจำลอง ${String((globalBillIndex % 360) + 1).padStart(3, "0")}`,
+          title: `ลูกค้าจำลอง ${String(customerIndex).padStart(3, "0")}`,
           status: "SETTLED",
           totalStake: money(totalStake),
           totalPayout: money(totalPayout),

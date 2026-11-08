@@ -131,7 +131,7 @@ export async function listConversations(actor: Actor) {
       messages: {
         orderBy: { createdAt: "desc" },
         take: 1,
-        select: { body: true, senderId: true, createdAt: true, attachments: { select: { id: true }, take: 1 } },
+        select: { body: true, senderId: true, createdAt: true, cancelledAt: true, attachments: { select: { id: true }, take: 1 } },
       },
     },
     take: 100,
@@ -147,6 +147,7 @@ export async function listConversations(actor: Actor) {
       where: {
         conversationId: row.id,
         senderId: { not: actor.userId },
+        cancelledAt: null,
         ...(myLastRead ? { createdAt: { gt: myLastRead } } : {}),
       },
     });
@@ -155,7 +156,9 @@ export async function listConversations(actor: Actor) {
       id: row.id,
       lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
       unread,
-      preview: last ? (last.body?.trim() || (last.attachments.length > 0 ? "ส่งไฟล์แนบ" : "")) : "",
+      preview: last
+        ? (last.cancelledAt ? "ยกเลิกข้อความแล้ว" : last.body?.trim() || (last.attachments.length > 0 ? "ส่งไฟล์แนบ" : ""))
+        : "",
       lastFromMe: last ? last.senderId === actor.userId : false,
       other: {
         id: other.id,
@@ -214,6 +217,7 @@ export async function listMessages(actor: Actor, conversationId: string, limit =
       body: true,
       senderId: true,
       createdAt: true,
+      cancelledAt: true,
       attachments: { select: { id: true, originalName: true, mimeType: true, fileSize: true } },
     },
   });
@@ -232,6 +236,7 @@ export async function listMessages(actor: Actor, conversationId: string, limit =
       body: row.body,
       mine: row.senderId === actor.userId,
       createdAt: row.createdAt.toISOString(),
+      cancelledAt: row.cancelledAt?.toISOString() ?? null,
       // อ่านแล้วหมายถึงอีกฝ่ายเปิดห้องหลังข้อความนี้ถูกส่ง
       readByOther:
         row.senderId === actor.userId
@@ -341,6 +346,50 @@ export async function sendMessage(
     await Promise.all(uploaded.map((file) => storage.delete(file.storageKey).catch(() => undefined)));
     throw error;
   }
+}
+
+/**
+ * ยกเลิกข้อความสำหรับผู้ใช้ทั้งสองฝั่ง
+ *
+ * เก็บแถวข้อความไว้เป็น tombstone เพื่อไม่ให้ลำดับเวลาในห้องกระโดด แต่ล้าง
+ * เนื้อหาและความสัมพันธ์ไฟล์แนบออก ผู้ส่งเท่านั้นที่ทำได้ แม้จะยิง API ตรง
+ * ส่วน object ใน storage ลบหลัง transaction เพราะหาก storage สะดุด ข้อมูล
+ * ที่ผู้ใช้เปิดได้ต้องถูกถอดออกจากฐานข้อมูลก่อนเสมอ
+ */
+export async function cancelMessage(
+  actor: Actor,
+  conversationId: string,
+  messageId: string,
+  storage: PrivateObjectStorage = getStorageProvider(),
+): Promise<{ messageId: string; cancelledAt: string }> {
+  await conversationForActor(actor, conversationId);
+  const message = await prisma.directMessage.findFirst({
+    where: { id: messageId, conversationId, organizationId: actor.organizationId },
+    select: {
+      senderId: true,
+      cancelledAt: true,
+      attachments: { select: { storageKey: true } },
+    },
+  });
+  if (!message) throw new NotFoundError("ไม่พบข้อความ");
+  if (message.senderId !== actor.userId) throw new ForbiddenError("ยกเลิกได้เฉพาะข้อความที่คุณส่ง");
+  if (message.cancelledAt) {
+    return { messageId, cancelledAt: message.cancelledAt.toISOString() };
+  }
+
+  const cancelledAt = new Date();
+  await prisma.$transaction([
+    prisma.directMessage.update({
+      where: { id: messageId },
+      data: { body: null, cancelledAt },
+    }),
+    prisma.directMessageAttachment.deleteMany({
+      where: { messageId, organizationId: actor.organizationId },
+    }),
+  ]);
+
+  await Promise.allSettled(message.attachments.map((file) => storage.delete(file.storageKey)));
+  return { messageId, cancelledAt: cancelledAt.toISOString() };
 }
 
 /** ลิงก์อายุสั้นสำหรับเปิดไฟล์แนบ ตรวจสิทธิ์ผ่านห้องที่ไฟล์นั้นอยู่ */

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
 import type { PrivateObjectStorage } from "@/lib/storage/types";
 import {
+  cancelMessage,
   listContacts,
   listConversations,
   listMessages,
@@ -175,6 +176,45 @@ describe("ส่งข้อความและไฟล์แนบ", () => {
     ).rejects.toThrow();
     expect(storage.store.size).toBe(0);
     expect(await prisma.directMessage.count()).toBe(0);
+  });
+
+  test("ผู้ส่งยกเลิกข้อความแล้วทั้งสองฝั่งเห็น tombstone และไม่มีเนื้อหา", async () => {
+    const { conversationId } = await openConversation(f.actors.OWNER, f.users.agentUser1.id);
+    const sent = await sendMessage(f.actors.OWNER, conversationId, { body: "ข้อความที่ต้องยกเลิก" });
+
+    await cancelMessage(f.actors.OWNER, conversationId, sent.messageId);
+
+    const mine = (await listMessages(f.actors.OWNER, conversationId)).messages[0]!;
+    const theirs = (await listMessages(f.actors.AGENT1, conversationId)).messages[0]!;
+    expect(mine.body).toBeNull();
+    expect(mine.cancelledAt).not.toBeNull();
+    expect(theirs.body).toBeNull();
+    expect(theirs.cancelledAt).not.toBeNull();
+    expect((await listConversations(f.actors.AGENT1))[0]!.preview).toBe("ยกเลิกข้อความแล้ว");
+  });
+
+  test("ยกเลิกได้เฉพาะข้อความของตนเอง", async () => {
+    const { conversationId } = await openConversation(f.actors.OWNER, f.users.agentUser1.id);
+    const sent = await sendMessage(f.actors.OWNER, conversationId, { body: "ห้ามอีกฝ่ายยกเลิก" });
+
+    await expect(cancelMessage(f.actors.AGENT1, conversationId, sent.messageId)).rejects.toThrow(/เฉพาะข้อความที่คุณส่ง/);
+  });
+
+  test("ยกเลิกข้อความที่มีรูปแล้วลบทั้งไฟล์แนบและ object ใน storage", async () => {
+    const storage = fakeStorage();
+    const { conversationId } = await openConversation(f.actors.OWNER, f.users.agentUser1.id);
+    const sent = await sendMessage(
+      f.actors.OWNER,
+      conversationId,
+      { files: [{ fileName: "cancel.png", declaredMimeType: "image/png", bytes: await image("#33aa77") }] },
+      storage.provider,
+    );
+
+    await cancelMessage(f.actors.OWNER, conversationId, sent.messageId, storage.provider);
+
+    expect(storage.store.size).toBe(0);
+    expect((await listMessages(f.actors.OWNER, conversationId)).messages[0]!.attachments).toHaveLength(0);
+    expect(await prisma.directMessageAttachment.count({ where: { messageId: sent.messageId } })).toBe(0);
   });
 });
 

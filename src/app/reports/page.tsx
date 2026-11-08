@@ -7,7 +7,7 @@ import { byAgent, byDraw, byPrizeType, drawSummary } from "@/lib/reports/service
 import { DrawPicker } from "./DrawPicker";
 import { AgentReports } from "./AgentReports";
 import { ReportFinancialCharts } from "./ReportFinancialCharts";
-import { ReportChart } from "./ReportChart";
+import { ReportsAnalyticsDashboard } from "./ReportsAnalyticsDashboard";
 import "./reports.css";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +23,7 @@ const DRAW_STATUS: Record<string, string> = {
 
 const money = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const reportDate = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Bangkok" });
+const reportInputDate = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Bangkok" });
 const reportDateTime = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
 
 function percentChange(current?: number, previous?: number) {
@@ -58,7 +59,7 @@ export default async function ReportsPage({
   });
 
   if (draws.length === 0) {
-    return <main><section className="card"><p><Link href="/">← หน้าแรก</Link></p><h1>รายงาน</h1><p className="muted">ยังไม่มีงวด</p></section></main>;
+    return <main className="workspace-page reports-page reports-page--blue"><section className="card workspace-card report-workspace report-workspace--blue report-no-data"><span aria-hidden="true">▥</span><h1>ยังไม่มีข้อมูลสำหรับรายงาน</h1><p>เมื่อมีงวดและรายการบิลแล้ว ภาพรวมและกราฟจะปรากฏที่นี่</p><Link href="/draws">ดูรายการงวด →</Link></section></main>;
   }
 
   const selectedDrawId = draws.some((draw) => draw.id === drawParam) ? drawParam : undefined;
@@ -130,16 +131,25 @@ export default async function ReportsPage({
       <section className="card workspace-card report-workspace report-workspace--blue" aria-labelledby="reports-heading">
         <Link className="report-back" href="/">⌂ ภาพรวม</Link>
         <header className="report-hero report-hero--blue">
-          <div><p className="page-eyebrow">LOTTERY ANALYTICS CENTER</p><h1 id="reports-heading">รายงานและสถิติ<span>การดำเนินงาน</span></h1><p>ติดตามยอดรับแทง เงินรางวัล และผลประกอบการจากข้อมูลจริงในมุมมองเดียว</p></div>
-          <div className="report-hero-actions"><span className={`report-draw-status status-${selectedStatus.toLowerCase()}`}><i /> {DRAW_STATUS[selectedStatus] ?? selectedStatus}</span><a className="page-primary-action" href={`/api/reports/${selectedId}/agents`}>ดาวน์โหลด CSV ↓</a></div>
+          <div><p className="page-eyebrow">LOTTERY ANALYTICS</p><h1 id="reports-heading">รายงานและวิเคราะห์ข้อมูล</h1><p>ภาพรวมยอดขายและสถิติการดำเนินงานของระบบ</p></div>
+          <div className="report-hero-actions"><DrawPicker selectedId={selectedId} draws={draws.map((draw) => ({ id: draw.id, label: `${draw.name} — ${DRAW_STATUS[draw.status] ?? draw.status}` }))} /><span className={`report-draw-status status-${selectedStatus.toLowerCase()}`}><i /> {DRAW_STATUS[selectedStatus] ?? selectedStatus}</span></div>
         </header>
-
-        <div className="report-filter-bar report-filter-bar--glass">
-          <div><span className="report-kicker">ช่วงข้อมูลที่แสดง</span><strong>เลือกงวดเพื่อดูรายละเอียดเฉพาะช่วง</strong></div>
-          <DrawPicker selectedId={selectedId} draws={draws.map((draw) => ({ id: draw.id, label: `${draw.name} — ${DRAW_STATUS[draw.status] ?? draw.status}` }))} />
-          <span className="report-auto-filter"><i /> ข้อมูลจริงจากระบบ</span>
-        </div>
         {summary.pendingSettlement && <p className="notice report-notice"><b>ข้อมูลยังไม่สมบูรณ์</b> งวดนี้ยังไม่ได้คำนวณผล ยอดจ่ายและยอดสุทธิอาจเปลี่ยนแปลง</p>}
+
+        <section className="report-kpi-grid report-kpi-grid--primary" aria-label="สรุปตัวเลขการเงิน">
+          <a className="report-kpi-card report-kpi-card--gross" href="#financial-trends"><span className="report-kpi-icon" aria-hidden="true">▣</span><span><small>ยอดรับแทงรวม</small><strong>{money.format(summary.gross.toNumber())}&nbsp;บาท</strong><em>{scopeLabel}</em><span className={`report-kpi-change ${grossChange !== null && grossChange < 0 ? "negative" : "positive"}`}>{changeLabel(grossChange)}</span></span></a>
+          <a className="report-kpi-card report-kpi-card--payout" href="#financial-trends"><span className="report-kpi-icon" aria-hidden="true">♛</span><span><small>จ่ายรางวัลรวม</small><strong>{money.format(summary.payout.toNumber())}&nbsp;บาท</strong><em>{payoutRatio.toFixed(1)}% ของยอดรับแทง</em><span className={`report-kpi-change ${payoutChange !== null && payoutChange > 0 ? "negative" : "positive"}`}>{changeLabel(payoutChange)}</span></span></a>
+          <a className="report-kpi-card report-kpi-card--net" href="#financial-trends"><span className="report-kpi-icon" aria-hidden="true">▥</span><span><small>ยอดสุทธิ</small><strong className={summary.net.isNegative() ? "negative" : undefined}>{money.format(summary.net.toNumber())}&nbsp;บาท</strong><em>หลังหักรางวัลและคอมมิชชัน</em><span className={`report-kpi-change ${netChange !== null && netChange < 0 ? "negative" : "positive"}`}>{changeLabel(netChange)}</span></span></a>
+        </section>
+
+        <ReportsAnalyticsDashboard
+          selectedDrawId={selectedDrawId}
+          exportHref={`/api/reports/${selectedId}/agents`}
+          summary={{ gross: summary.gross.toNumber(), billCount: summary.billCount, itemCount: summary.itemCount }}
+          draws={trendRows.map((draw) => ({ id: draw.drawId, code: reportDate.format(draw.cutoffAt), date: reportInputDate.format(draw.cutoffAt), name: draw.drawName, href: `/draws/${draw.drawId}`, gross: draw.gross.toNumber(), payout: draw.payout.toNumber(), commission: draw.commission.toNumber(), net: draw.net.toNumber(), bills: draw.billCount, items: draw.itemCount, winners: draw.winnerCount }))}
+          agents={agents.map((agent) => ({ id: agent.agentId, code: agent.agentCode, name: agent.agentName, href: `/agents/${agent.agentId}`, gross: agent.gross.toNumber(), payout: agent.payout.toNumber(), commission: agent.commission.toNumber(), net: agent.net.toNumber(), bills: agent.billCount, items: agent.itemCount, winners: agent.winnerCount }))}
+          prizes={prizes.map((prize) => ({ id: String(prize.code), code: String(prize.code), name: prize.name, gross: prize.gross.toNumber(), payout: prize.payout.toNumber(), commission: 0, net: prize.gross.minus(prize.payout).toNumber(), bills: 0, items: prize.itemCount, winners: prize.winnerCount }))}
+        />
 
         <section className={`report-health-panel report-health-panel--${healthTone}`} aria-labelledby="business-health-heading">
           <div className="report-health-main">
@@ -154,76 +164,10 @@ export default async function ReportsPage({
           <a href="#report-attention">ดูสิ่งที่ต้องตรวจทันที ↓</a>
         </section>
 
-        <section className="report-kpi-grid report-kpi-grid--primary" aria-label="สรุปตัวเลขการเงิน">
-          <a className="report-kpi-card report-kpi-card--gross" href="#financial-trends"><span className="report-kpi-icon" aria-hidden="true">▣</span><span><small>ยอดรับแทงรวม</small><strong>{money.format(summary.gross.toNumber())}&nbsp;บาท</strong><em>{scopeLabel}</em><span className={`report-kpi-change ${grossChange !== null && grossChange < 0 ? "negative" : "positive"}`}>{changeLabel(grossChange)}</span></span></a>
-          <a className="report-kpi-card report-kpi-card--payout" href="#financial-trends"><span className="report-kpi-icon" aria-hidden="true">♛</span><span><small>จ่ายรางวัลรวม</small><strong>{money.format(summary.payout.toNumber())}&nbsp;บาท</strong><em>{payoutRatio.toFixed(1)}% ของยอดรับแทง</em><span className={`report-kpi-change ${payoutChange !== null && payoutChange > 0 ? "negative" : "positive"}`}>{changeLabel(payoutChange)}</span></span></a>
-          <a className="report-kpi-card report-kpi-card--net" href="#financial-trends"><span className="report-kpi-icon" aria-hidden="true">▥</span><span><small>ยอดสุทธิ</small><strong className={summary.net.isNegative() ? "negative" : undefined}>{money.format(summary.net.toNumber())}&nbsp;บาท</strong><em>หลังหักรางวัลและคอมมิชชัน</em><span className={`report-kpi-change ${netChange !== null && netChange < 0 ? "negative" : "positive"}`}>{changeLabel(netChange)}</span></span></a>
-        </section>
-
         <section id="report-attention" className="report-attention-panel" aria-labelledby="report-attention-heading">
           <header><div><span className="report-attention-icon" aria-hidden="true">⌁</span><span><span className="report-kicker">ACTION REQUIRED</span><h2 id="report-attention-heading">สิ่งที่ต้องตรวจทันที</h2></span></div><small>จัดลำดับจากข้อมูลจริงของ {scopeLabel}</small></header>
           <div>{attentionItems.map((item, index) => <a href={item.href} className={`report-attention-item report-attention-item--${item.tone}`} key={item.title}><span>{index + 1}</span><div><b>{item.title}</b><small>{item.detail}</small></div><i aria-hidden="true">→</i></a>)}</div>
         </section>
-
-        <ReportChart
-          initialDimension="draws"
-          datasets={[
-            {
-              key: "draws",
-              label: "เปรียบเทียบรายงวด",
-              description: "แนวโน้มรายรับ รายจ่าย กำไร และปริมาณงานตามเวลา",
-              rows: trendRows.map((draw) => ({
-                id: draw.drawId,
-                code: reportDate.format(draw.cutoffAt),
-                name: draw.drawName,
-                href: `/draws/${draw.drawId}`,
-                gross: draw.gross.toNumber(),
-                payout: draw.payout.toNumber(),
-                commission: draw.commission.toNumber(),
-                net: draw.net.toNumber(),
-                bills: draw.billCount,
-                items: draw.itemCount,
-                winners: draw.winnerCount,
-              })),
-            },
-            {
-              key: "agents",
-              label: "เปรียบเทียบ Agent",
-              description: "เทียบประสิทธิภาพและผลตอบแทนของตัวแทน",
-              rows: agents.map((agent) => ({
-                id: agent.agentId,
-                code: agent.agentCode,
-                name: agent.agentName,
-                href: `/agents/${agent.agentId}`,
-                gross: agent.gross.toNumber(),
-                payout: agent.payout.toNumber(),
-                commission: agent.commission.toNumber(),
-                net: agent.net.toNumber(),
-                bills: agent.billCount,
-                items: agent.itemCount,
-                winners: agent.winnerCount,
-              })),
-            },
-            {
-              key: "prizes",
-              label: "เปรียบเทียบประเภทรางวัล",
-              description: "ดู Demand, Winner และภาระจ่ายของรางวัลแต่ละประเภท",
-              metrics: ["gross", "payout", "items", "winners"],
-              rows: prizes.map((prize) => ({
-                id: String(prize.code),
-                code: String(prize.code),
-                name: prize.name,
-                gross: prize.gross.toNumber(),
-                payout: prize.payout.toNumber(),
-                commission: 0,
-                net: prize.gross.minus(prize.payout).toNumber(),
-                bills: 0,
-                items: prize.itemCount,
-                winners: prize.winnerCount,
-              })),
-            },
-          ]}
-        />
 
         <ReportFinancialCharts id="financial-trends" rows={drawRows.map((draw) => ({
           id: draw.drawId,

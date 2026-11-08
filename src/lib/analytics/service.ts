@@ -47,7 +47,7 @@ type CustomerRow = {
 type PrizeRow = { name: string; count: number; stake: MoneyValue };
 type PrizeNumberRow = { prizeName: string; number: string; count: number; stake: MoneyValue };
 type TimeRow = { label: string; bills: number; sales: MoneyValue };
-type DrawRow = { id: string; name: string; bills: number; sales: MoneyValue };
+type DrawRow = { id: string; name: string; cutoffAt: Date; bills: number; sales: MoneyValue };
 
 /**
  * คืนเฉพาะผลสรุปที่หน้าวิเคราะห์ต้องใช้จริง
@@ -152,7 +152,7 @@ export async function getAnalyticsData(filter: AnalyticsFilter) {
       GROUP BY label
     `),
     prisma.$queryRaw<DrawRow[]>(Prisma.sql`
-      SELECT d.id, d.name,
+      SELECT d.id, d.name, d."cutoffAt",
              COUNT(*)::int AS bills,
              COALESCE(SUM(b."totalStake"), 0) AS sales
       FROM ${table("bills")} b
@@ -188,6 +188,6 @@ export async function getAnalyticsData(filter: AnalyticsFilter) {
     prizes: prizeRows.map((row) => ({ name: row.name, count: row.count, stake: number(row.stake) })),
     prizeNumbers: prizeNumberRows.map((row) => ({ prizeName: row.prizeName, number: row.number, count: row.count, stake: number(row.stake) })),
     times: timeRows.map((row) => ({ label: row.label, bills: row.bills, sales: number(row.sales) })),
-    draws: drawRows.map((row) => ({ id: row.id, name: row.name, bills: row.bills, sales: number(row.sales) })),
+    draws: drawRows.map((row) => ({ id: row.id, name: row.name, cutoffAt: row.cutoffAt.toISOString(), bills: row.bills, sales: number(row.sales) })),
   };
 }

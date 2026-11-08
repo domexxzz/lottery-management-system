@@ -25,3 +25,36 @@
 @media (max-width: 760px) { .analytics-page { padding: 1rem; }.analytics-hero { align-items: stretch; flex-direction: column; }.analytics-filters{grid-template-columns:1fr 1fr}.analytics-grid-main, .analytics-grid-detail { grid-template-columns: 1fr; }.number-grid { grid-template-columns: repeat(3,1fr); } }
 @media (max-width: 560px) { .number-grid { grid-template-columns: 1fr; }.number-group > header { grid-template-columns: 22px 1fr; }.number-group > header small { grid-column: 2; } }
 @media (max-width: 480px) { .analytics-filters,.analytics-kpis { grid-template-columns: 1fr; } }
+
+/* Guided charts for customer-behavior data only */
+.analytics-page .behavior-explorer { margin-bottom: .85rem; border-color: #cfe2ed; }
+.behavior-only-badge { display: inline-flex; align-items: center; min-height: 34px; padding: .4rem .65rem; border: 1px solid #bde1db; border-radius: 999px; color: #08796f; background: #eaf9f5; font-size: .7rem; font-weight: 800; white-space: nowrap; }
+.behavior-explorer .report-dashboard-chart-panel { min-height: 410px; }
+.behavior-explorer .report-dashboard-selection { margin-top: .45rem; }
+.behavior-explorer .report-dashboard-selection b { color: #123c58; }
+.behavior-explorer .report-dashboard-selection span { color: #526f82; }
+.analytics-page .behavior-chart-builder { margin: .85rem 0 0; padding: .9rem; border-color: #cfe2ed; background: linear-gradient(160deg,#fbfdff,#f4fbfb); }
+.behavior-data-scope { max-width: 620px; }
+.behavior-data-scope > label,.behavior-display-grid > label { display: grid; gap: .3rem; color: #294d63; font-size: .72rem; font-weight: 760; }
+.behavior-data-scope .app-dropdown,.behavior-display-grid .app-dropdown { width: 100%; }
+.behavior-fixed-axis { display: grid; gap: .2rem; padding: .7rem; border: 1px solid #d5e5ee; border-radius: 9px; background: #fff; }
+.behavior-fixed-axis strong { color: #173e58; font-size: .76rem; }
+.behavior-fixed-axis small { color: #708493; font-size: .67rem; line-height: 1.45; }
+.behavior-display-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: end; gap: .7rem; }
+.behavior-display-grid .chart-color-picker { min-height: 42px; }
+.behavior-preview { min-height: 420px; border-color: #cee1ed; }
+.behavior-preview .custom-preview-tooltip { top: 72px; right: 1rem; }
+.behavior-preview .custom-preview-series-legend small { flex-basis: 100%; color: #61788a; font-size: .67rem; text-align: center; }
+.analytics-page .custom-chart-guided-actions button { min-height: 38px; padding: .48rem .78rem; border: 1px solid #c9dced; border-radius: 8px; color: #274e71; background: #fff !important; box-shadow: none; font-size: .72rem; font-weight: 760; }
+.analytics-page .custom-chart-guided-actions .custom-chart-save { border-color: #087f90; color: #fff; background: #087f90 !important; }
+.analytics-page .chart-color-picker button { width: 25px; height: 25px; min-height: 25px; padding: 0; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #bad0e6; }
+.analytics-page .chart-color-picker button[aria-pressed="true"] { box-shadow: 0 0 0 2px #087f90; }
+html[data-theme="dark"] .analytics-page .behavior-chart-builder { border-color: #36546f; background: #172b3c; }
+html[data-theme="dark"] .behavior-only-badge { border-color: #2d766f; color: #9fe2d7; background: #173f3d; }
+html[data-theme="dark"] .behavior-explorer .report-dashboard-selection b { color: #eff7ff; }
+html[data-theme="dark"] .behavior-explorer .report-dashboard-selection span { color: #bed0df; }
+html[data-theme="dark"] .behavior-fixed-axis { border-color: #36546f; background: #20384e; }
+html[data-theme="dark"] .behavior-fixed-axis strong { color: #eff7ff; }
+html[data-theme="dark"] .behavior-fixed-axis small { color: #bed0df; }
+@media (max-width: 760px) { .behavior-display-grid { grid-template-columns: 1fr; }.analytics-page .behavior-chart-builder { padding: .6rem; }.behavior-preview { min-height: 360px; } }
+@media (max-width: 600px) { .behavior-explorer .report-dashboard-chart-panel { min-height: 0; }.behavior-only-badge { width: fit-content; } }

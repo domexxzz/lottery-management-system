@@ -709,6 +709,9 @@ model DirectMessage {
 
   body      String?
   createdAt DateTime @default(now())
+  /// เมื่อผู้ส่งยกเลิกข้อความ ให้เก็บแถวไว้เพื่อรักษาลำดับเวลา
+  /// แต่ซ่อนเนื้อหาและไฟล์แนบจากผู้ใช้ทั้งสองฝั่ง
+  cancelledAt DateTime?
 
   attachments DirectMessageAttachment[]
 

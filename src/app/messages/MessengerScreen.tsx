@@ -44,6 +44,7 @@ type Message = {
   body: string | null;
   mine: boolean;
   createdAt: string;
+  cancelledAt: string | null;
   readByOther: boolean;
   attachments: Attachment[];
 };
@@ -114,6 +115,9 @@ export function MessengerScreen({ myName, myRole, openWithUserId }: { myName: st
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [cancellingMessageId, setCancellingMessageId] = useState<string | null>(null);
+  const [openMessageMenu, setOpenMessageMenu] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showList, setShowList] = useState(true);
 
@@ -192,6 +196,30 @@ export function MessengerScreen({ myName, myRole, openWithUserId }: { myName: st
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [thread?.messages.length, activeId]);
 
+  useEffect(() => {
+    if (!openMessageMenu) return;
+    function closeMenu(event: PointerEvent) {
+      const target = event.target;
+      const menu = target instanceof Element ? target.closest<HTMLElement>("[data-message-menu]") : null;
+      if (menu?.dataset.messageMenu !== openMessageMenu) setOpenMessageMenu(null);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpenMessageMenu(null);
+    }
+    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [openMessageMenu]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 2500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
   async function openWith(userId: string) {
     setError(null);
     const response = await fetch("/api/messages/conversations", {
@@ -241,6 +269,46 @@ export function MessengerScreen({ myName, myRole, openWithUserId }: { myName: st
       setError(caught instanceof Error ? caught.message : "ส่งข้อความไม่สำเร็จ");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function copyMessage(message: Message) {
+    if (!message.body || message.cancelledAt) return;
+    try {
+      await navigator.clipboard.writeText(message.body);
+    } catch {
+      const helper = document.createElement("textarea");
+      helper.value = message.body;
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.appendChild(helper);
+      helper.select();
+      document.execCommand("copy");
+      helper.remove();
+    }
+    setOpenMessageMenu(null);
+    setNotice("คัดลอกข้อความแล้ว");
+  }
+
+  async function cancelSentMessage(message: Message) {
+    if (!activeId || !message.mine || message.cancelledAt || cancellingMessageId) return;
+    const confirmed = window.confirm("ยกเลิกข้อความนี้สำหรับทุกคนหรือไม่? เนื้อหาและไฟล์แนบจะไม่สามารถเปิดดูได้อีก");
+    if (!confirmed) return;
+    setCancellingMessageId(message.id);
+    setOpenMessageMenu(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/messages/conversations/${activeId}/messages/${message.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: { message?: string } };
+        throw new Error(payload.error?.message ?? "ยกเลิกข้อความไม่สำเร็จ");
+      }
+      await Promise.all([loadThread(activeId), loadRooms()]);
+      setNotice("ยกเลิกข้อความแล้ว");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "ยกเลิกข้อความไม่สำเร็จ");
+    } finally {
+      setCancellingMessageId(null);
     }
   }
 
@@ -347,29 +415,67 @@ export function MessengerScreen({ myName, myRole, openWithUserId }: { myName: st
                     {newDay && <div className="msg-day">{dayOf(message.createdAt)}</div>}
                     <div className={`msg-bubble-row ${message.mine ? "mine" : "theirs"}`}>
                       {!message.mine && <Avatar person={thread.other} size="sm" />}
-                      <div className="msg-bubble">
-                        {message.body && <p>{message.body}</p>}
-                        {message.attachments.map((file) =>
-                          file.isImage ? (
-                            <a key={file.id} href={`/api/messages/files/${file.id}`} target="_blank" rel="noreferrer">
-                              <img className="msg-image" src={`/api/messages/files/${file.id}`} alt={file.originalName} />
-                            </a>
-                          ) : (
-                            <a key={file.id} className="msg-file" href={`/api/messages/files/${file.id}?download=1`}>
-                              {file.originalName}
-                            </a>
-                          ),
+                      <div className={`msg-bubble ${message.cancelledAt ? "is-cancelled" : ""}`}>
+                        {message.cancelledAt ? (
+                          <p className="msg-cancelled">ยกเลิกข้อความแล้ว</p>
+                        ) : (
+                          <>
+                            {message.body && <p>{message.body}</p>}
+                            {message.attachments.map((file) =>
+                              file.isImage ? (
+                                <a key={file.id} href={`/api/messages/files/${file.id}`} target="_blank" rel="noreferrer">
+                                  <img className="msg-image" src={`/api/messages/files/${file.id}`} alt={file.originalName} />
+                                </a>
+                              ) : (
+                                <a key={file.id} className="msg-file" href={`/api/messages/files/${file.id}?download=1`}>
+                                  {file.originalName}
+                                </a>
+                              ),
+                            )}
+                          </>
                         )}
                         <span className="msg-meta">
                           {clockOf(message.createdAt)}
-                          {message.mine && <em>{message.readByOther ? "อ่านแล้ว" : "ส่งแล้ว"}</em>}
+                          {message.mine && !message.cancelledAt && <em>{message.readByOther ? "อ่านแล้ว" : "ส่งแล้ว"}</em>}
                         </span>
                       </div>
+                      {!message.cancelledAt && (Boolean(message.body) || message.mine) && (
+                        <div className="msg-message-menu" data-message-menu={message.id}>
+                          <button
+                            type="button"
+                            className="msg-menu-trigger"
+                            aria-label="ตัวเลือกข้อความ"
+                            aria-haspopup="menu"
+                            aria-expanded={openMessageMenu === message.id}
+                            onClick={() => setOpenMessageMenu(openMessageMenu === message.id ? null : message.id)}
+                          >
+                            •••
+                          </button>
+                          {openMessageMenu === message.id && (
+                            <div className="msg-menu-popover" role="menu">
+                              {message.body && <button type="button" role="menuitem" onClick={() => void copyMessage(message)}>คัดลอก</button>}
+                              {message.mine && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="is-danger"
+                                  disabled={cancellingMessageId === message.id}
+                                  onClick={() => void cancelSentMessage(message)}
+                                >
+                                  {cancellingMessageId === message.id ? "กำลังยกเลิก…" : "ยกเลิกข้อความ"}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
+
+            {notice && <p className="msg-notice" role="status">{notice}</p>}
 
             {error && <p className="msg-error" role="alert">{error}</p>}
 
