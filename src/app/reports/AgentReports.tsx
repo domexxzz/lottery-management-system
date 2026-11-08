@@ -3,6 +3,7 @@ import type { Actor } from "@/lib/auth/context";
 import { customerProfileKey } from "@/lib/customers/profile-key";
 import { getAgentReport, type AgentReportFilter, type AgentReportView } from "@/lib/reports/agent-report";
 import { AgentReportActions, AgentReportControls } from "./AgentReportControls";
+import { ReportChart } from "./ReportChart";
 
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const DATE = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Bangkok" });
@@ -72,6 +73,7 @@ export async function AgentReports({ actor, filters }: { actor: Actor; filters: 
       </dl>
 
       {report.selectedView === "summary" && <>
+        <ReportChart datasets={[{ key: "draws", label: "รายงวด", description: "แนวโน้มผลงานของฉันตามงวด", rows: [...report.rows].reverse().filter((row) => row.billCount > 0).map((row) => ({ id: row.drawId, code: DATE.format(row.cutoffAt), name: row.drawName, href: `/reports?draw=${row.drawId}&view=bills`, gross: Number(row.gross), payout: Number(row.payout), commission: Number(row.commission ?? 0), net: Number(row.net ?? 0), bills: row.billCount, items: row.itemCount, winners: row.winnerCount })) }]} />
         <div className="report-section-title"><div><p className="page-eyebrow">Round Performance</p><h3>ผลการดำเนินงานรายงวด</h3></div><span>{report.rows.length} งวด</span></div>
         {report.rows.length === 0 ? <p className="agent-report-empty">ไม่พบข้อมูลตามตัวกรอง</p> : <div className="table-wrap"><table className="agent-round-table"><thead><tr><th>งวด</th><th>วันที่ปิดรับ</th><th className="num">บิล</th><th className="num">รายการ</th><th className="num">ยอดขาย</th><th className="num">จ่ายรางวัล</th><th className="num">คอมมิชชัน</th><th className="num">สุทธิ</th><th>สถานะ</th><th>รายละเอียด</th></tr></thead><tbody>{report.rows.map((row) => <tr key={row.drawId}><td><strong>{row.drawName}</strong></td><td>{DATE.format(row.cutoffAt)}</td><td className="num">{row.billCount}</td><td className="num">{row.itemCount}</td><td className="num">{MONEY.format(Number(row.gross))}</td><td className="num payout">{MONEY.format(Number(row.payout))}</td><td className="num">{row.commission === null ? "—" : MONEY.format(Number(row.commission))}</td><td className={`num ${row.net?.isNegative() ? "negative" : ""}`}>{row.net === null ? "—" : MONEY.format(Number(row.net))}</td><td>{settlementBadge(row.settlementStatus)}</td><td><Link href={`/reports?draw=${row.drawId}&view=bills`}>ดูรายละเอียด →</Link></td></tr>)}</tbody><tfoot><tr><th>รวมทั้งหมด</th><th /><th className="num">{report.totals.billCount}</th><th className="num">{report.totals.itemCount}</th><th className="num">{MONEY.format(Number(report.totals.gross))}</th><th className="num payout">{MONEY.format(Number(report.totals.payout))}</th><th className="num">{MONEY.format(Number(report.totals.commission))}</th><th className={`num ${report.totals.net.isNegative() ? "negative" : ""}`}>{MONEY.format(Number(report.totals.net))}</th><th /><th /></tr></tfoot></table></div>}
 

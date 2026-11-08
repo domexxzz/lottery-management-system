@@ -100,6 +100,8 @@ export type AgentRow = {
   agentCode: string;
   agentName: string;
   billCount: number;
+  itemCount: number;
+  winnerCount: number;
   gross: Prisma.Decimal;
   payout: Prisma.Decimal;
   commission: Prisma.Decimal;
@@ -117,6 +119,7 @@ export async function byAgent(actor: Actor, drawId?: string): Promise<AgentRow[]
       totalStake: true,
       totalPayout: true,
       agent: { select: { code: true, name: true } },
+      items: { select: { isWinner: true } },
     },
   });
 
@@ -138,16 +141,18 @@ export async function byAgent(actor: Actor, drawId?: string): Promise<AgentRow[]
 
   const buckets = new Map<
     string,
-    { code: string; name: string; bills: number; stakes: Prisma.Decimal[]; payouts: Prisma.Decimal[] }
+    { code: string; name: string; bills: number; items: number; winners: number; stakes: Prisma.Decimal[]; payouts: Prisma.Decimal[] }
   >();
 
   for (const bill of bills) {
     let bucket = buckets.get(bill.agentId);
     if (!bucket) {
-      bucket = { code: bill.agent.code, name: bill.agent.name, bills: 0, stakes: [], payouts: [] };
+      bucket = { code: bill.agent.code, name: bill.agent.name, bills: 0, items: 0, winners: 0, stakes: [], payouts: [] };
       buckets.set(bill.agentId, bucket);
     }
     bucket.bills += 1;
+    bucket.items += bill.items.length;
+    bucket.winners += bill.items.filter((item) => item.isWinner).length;
     bucket.stakes.push(bill.totalStake);
     bucket.payouts.push(bill.totalPayout);
   }
@@ -160,6 +165,8 @@ export async function byAgent(actor: Actor, drawId?: string): Promise<AgentRow[]
         agentCode: b.code,
         agentName: b.name,
         billCount: b.bills,
+        itemCount: b.items,
+        winnerCount: b.winners,
         gross: sumMoney(b.stakes),
         payout: sumMoney(b.payouts),
         commission: sumMoney(settlement?.commissions ?? []),
@@ -167,6 +174,86 @@ export async function byAgent(actor: Actor, drawId?: string): Promise<AgentRow[]
       };
     })
     .sort((a, b) => a.agentCode.localeCompare(b.agentCode));
+}
+
+export type DrawReportRow = {
+  drawId: string;
+  drawName: string;
+  cutoffAt: Date;
+  billCount: number;
+  itemCount: number;
+  winnerCount: number;
+  gross: Prisma.Decimal;
+  payout: Prisma.Decimal;
+  commission: Prisma.Decimal;
+  net: Prisma.Decimal;
+};
+
+/** แนวโน้มรายงวดสำหรับกราฟเจาะลึก เรียงเก่าไปใหม่เพื่อแสดงเส้นเวลา */
+export async function byDraw(actor: Actor, drawId?: string): Promise<DrawReportRow[]> {
+  requirePermission(actor, "bill.viewOwn");
+  const draws = await prisma.draw.findMany({
+    where: {
+      ...orgScope(actor),
+      ...(drawId ? { id: drawId } : {}),
+      bills: { some: { ...reportScope(actor), status: { in: COUNTED_STATUSES } } },
+    },
+    orderBy: { cutoffAt: "desc" },
+    take: drawId ? 1 : 24,
+    select: { id: true, name: true, cutoffAt: true },
+  });
+  const drawIds = draws.map((draw) => draw.id);
+  if (drawIds.length === 0) return [];
+
+  const [bills, settlements] = await Promise.all([
+    prisma.bill.findMany({
+      where: { ...reportScope(actor), drawId: { in: drawIds }, status: { in: COUNTED_STATUSES } },
+      select: { drawId: true, totalStake: true, totalPayout: true, items: { select: { isWinner: true } } },
+    }),
+    prisma.settlement.findMany({
+      where: {
+        ...orgScope(actor),
+        drawId: { in: drawIds },
+        ...(actor.role === "AGENT" && { agentId: actor.agentId ?? "__no_agent__" }),
+      },
+      select: { drawId: true, commission: true, net: true },
+    }),
+  ]);
+
+  const billBuckets = new Map<string, { count: number; items: number; winners: number; gross: Prisma.Decimal[]; payout: Prisma.Decimal[] }>();
+  for (const bill of bills) {
+    const bucket = billBuckets.get(bill.drawId) ?? { count: 0, items: 0, winners: 0, gross: [], payout: [] };
+    bucket.count += 1;
+    bucket.items += bill.items.length;
+    bucket.winners += bill.items.filter((item) => item.isWinner).length;
+    bucket.gross.push(bill.totalStake);
+    bucket.payout.push(bill.totalPayout);
+    billBuckets.set(bill.drawId, bucket);
+  }
+  const settlementBuckets = new Map<string, { commission: Prisma.Decimal[]; net: Prisma.Decimal[] }>();
+  for (const settlement of settlements) {
+    const bucket = settlementBuckets.get(settlement.drawId) ?? { commission: [], net: [] };
+    bucket.commission.push(settlement.commission);
+    bucket.net.push(settlement.net);
+    settlementBuckets.set(settlement.drawId, bucket);
+  }
+
+  return draws.reverse().map((draw) => {
+    const bill = billBuckets.get(draw.id);
+    const settlement = settlementBuckets.get(draw.id);
+    return {
+      drawId: draw.id,
+      drawName: draw.name,
+      cutoffAt: draw.cutoffAt,
+      billCount: bill?.count ?? 0,
+      itemCount: bill?.items ?? 0,
+      winnerCount: bill?.winners ?? 0,
+      gross: sumMoney(bill?.gross ?? []),
+      payout: sumMoney(bill?.payout ?? []),
+      commission: sumMoney(settlement?.commission ?? []),
+      net: sumMoney(settlement?.net ?? []),
+    };
+  });
 }
 
 export type PrizeTypeRow = {

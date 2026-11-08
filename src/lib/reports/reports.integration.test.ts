@@ -5,7 +5,7 @@ import { confirmBill, createDraftBill, replaceDraftItems } from "@/lib/bills/ser
 import { lockDrawManually } from "@/lib/draws/service";
 import { approveResult, enterResult } from "@/lib/results/service";
 import { calculateSettlement } from "@/lib/settlement/service";
-import { byAgent, byPrizeType, drawSummary, searchBills } from "@/lib/reports/service";
+import { byAgent, byDraw, byPrizeType, drawSummary, searchBills } from "@/lib/reports/service";
 import { sumMoney } from "@/lib/money";
 
 /**
@@ -92,6 +92,18 @@ describe("รายงานตรงกับ Settlement", () => {
     expect(sumMoney(prizes.map((p) => p.gross)).equals(summary.gross)).toBe(true);
     expect(sumMoney(prizes.map((p) => p.payout)).equals(summary.payout)).toBe(true);
     expect(prizes.reduce((n, p) => n + p.itemCount, 0)).toBe(summary.itemCount);
+  });
+
+  test("ข้อมูลกราฟรายงวดตรงกับตัวเลขสรุป", async () => {
+    await settledDraw();
+    const summary = await drawSummary(f.actors.OWNER, f.draw.id);
+    const rows = await byDraw(f.actors.OWNER, f.draw.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.gross.equals(summary.gross)).toBe(true);
+    expect(rows[0]!.payout.equals(summary.payout)).toBe(true);
+    expect(rows[0]!.commission.equals(summary.commission)).toBe(true);
+    expect(rows[0]!.net.equals(summary.net)).toBe(true);
+    expect(rows[0]!.itemCount).toBe(summary.itemCount);
   });
 
   test("นับจำนวนผู้ถูกรางวัลต่อประเภทได้ถูกต้อง", async () => {

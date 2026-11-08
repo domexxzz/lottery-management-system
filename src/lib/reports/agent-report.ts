@@ -26,6 +26,7 @@ export type AgentRoundReportRow = {
   drawStatus: string;
   billCount: number;
   itemCount: number;
+  winnerCount: number;
   gross: Prisma.Decimal;
   payout: Prisma.Decimal;
   commission: Prisma.Decimal | null;
@@ -63,6 +64,7 @@ function totalRows(rows: AgentRoundReportRow[]) {
   return {
     billCount: rows.reduce((sum, row) => sum + row.billCount, 0),
     itemCount: rows.reduce((sum, row) => sum + row.itemCount, 0),
+    winnerCount: rows.reduce((sum, row) => sum + row.winnerCount, 0),
     gross: sumMoney(rows.map((row) => row.gross)),
     payout: sumMoney(rows.map((row) => row.payout)),
     commission: sumMoney(rows.map((row) => row.commission ?? ZERO)),
@@ -102,7 +104,7 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
     const [bills, settlements] = await Promise.all([
       prisma.bill.findMany({
         where: { ...scope, agentId, drawId: { in: drawIds }, status: { in: COUNTED_STATUSES } },
-        select: { drawId: true, totalStake: true, totalPayout: true, _count: { select: { items: true } } },
+        select: { drawId: true, totalStake: true, totalPayout: true, items: { select: { isWinner: true } } },
       }),
       prisma.settlement.findMany({
         where: { ...scope, agentId, drawId: { in: drawIds } },
@@ -110,11 +112,12 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
       }),
     ]);
 
-    const billBuckets = new Map<string, { count: number; items: number; gross: Prisma.Decimal[]; payout: Prisma.Decimal[] }>();
+    const billBuckets = new Map<string, { count: number; items: number; winners: number; gross: Prisma.Decimal[]; payout: Prisma.Decimal[] }>();
     for (const bill of bills) {
-      const bucket = billBuckets.get(bill.drawId) ?? { count: 0, items: 0, gross: [], payout: [] };
+      const bucket = billBuckets.get(bill.drawId) ?? { count: 0, items: 0, winners: 0, gross: [], payout: [] };
       bucket.count += 1;
-      bucket.items += bill._count.items;
+      bucket.items += bill.items.length;
+      bucket.winners += bill.items.filter((item) => item.isWinner).length;
       bucket.gross.push(bill.totalStake);
       bucket.payout.push(bill.totalPayout);
       billBuckets.set(bill.drawId, bucket);
@@ -131,6 +134,7 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
         drawStatus: draw.status,
         billCount: billsForDraw?.count ?? 0,
         itemCount: billsForDraw?.items ?? 0,
+        winnerCount: billsForDraw?.winners ?? 0,
         gross: sumMoney(billsForDraw?.gross ?? []),
         payout: sumMoney(billsForDraw?.payout ?? []),
         commission: settlement?.commission ?? null,

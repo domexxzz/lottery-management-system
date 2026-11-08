@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { defaultOfficialDrawWindow, officialDrawName, parseBangkokDateTimeLocal, toBangkokDateTimeLocal } from "@/lib/draws/schedule";
 import { AppDropdown } from "../AppDropdown";
 import { createDrawAction, lockDrawAction, type ActionState } from "./actions";
+import { DateTimePicker } from "@/components/calendar";
 
 const INITIAL: ActionState = { error: null, message: null };
 const DATE_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
@@ -76,8 +77,8 @@ export function CreateDrawForm({ drawDates, automaticDrawDate, createdDrawDates 
           description: createdDrawDateSet.has(date) ? "เคยสร้างแล้ว แต่สามารถสร้างซ้ำได้" : "งวดวันที่ 1 หรือ 16",
           badge: createdDrawDateSet.has(date) ? "มีงวดเดิม" : undefined,
         }))} /></label>
-        <label htmlFor="opensAt">วันเวลาเปิดรับ<input id="opensAt" type="datetime-local" value={opensAt} onChange={(event) => setOpensAt(event.target.value)} required /></label>
-        <label htmlFor="cutoffAt">วันเวลาปิดรับ<input id="cutoffAt" type="datetime-local" value={cutoffAt} onChange={(event) => setCutoffAt(event.target.value)} required /></label>
+        <label htmlFor="opensAt">วันเวลาเปิดรับ<DateTimePicker id="opensAt" value={opensAt} onChange={setOpensAt} required /></label>
+        <label htmlFor="cutoffAt">วันเวลาปิดรับ<DateTimePicker id="cutoffAt" value={cutoffAt} onChange={setCutoffAt} required /></label>
       </section>}
 
       {prepared && isDuplicate && <p className="draw-duplicate-warning" role="status"><strong>กำลังสร้างงวดซ้ำ</strong><span>งวด {drawName} เคยถูกสร้างแล้ว ระบบจะเก็บรายการใหม่นี้เป็นคนละงวด</span></p>}

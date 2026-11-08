@@ -37,7 +37,7 @@ export function OwnerBusinessCharts({ draws, agents, volume }: { draws: FinanceR
         <FinanceSummary label="คอมมิชชัน" icon="percent" value={total.commission} />
         <FinanceSummary label="คงเหลือสุทธิ" icon="wallet" value={total.net} tone={total.net < 0 ? "negative" : "positive"} />
       </div>}
-      <FinanceBars rows={draws} max={maxFinance}/>
+      <FinanceSmallMultiples rows={draws}/>
     </>}
     {view === "agents" && <><div className="owner-view-title"><strong>ผลงาน Agent</strong><span>เรียงตามยอดขายสูงสุด</span></div><FinanceBars rows={agents} max={maxFinance} agent/></>}
     {view === "volume" && (volume.length ? <div className="owner-volume-chart">{volume.map((row) => <article key={row.label}><div><strong>{row.label}</strong><span>{row.bills} บิล</span></div><div className="volume-bars"><span><i style={{ width: `${row.bills / maxBills * 100}%` }}/></span><span className="average"><i style={{ width: `${row.average / maxAverage * 100}%` }}/></span></div><b>{MONEY.format(row.average)}<small>บาทเฉลี่ย/บิล</small></b></article>)}</div> : <p className="empty-state">ไม่พบบิลตามตัวกรองที่เลือก</p>)}
@@ -51,11 +51,43 @@ function FinanceSummary({ label, icon, value, tone }: {
   return <div className={tone}>
     <i aria-hidden="true"><DashboardIcon name={icon} /></i>
     <span>{label}</span>
-    <strong>{MONEY.format(value)} ฿</strong>
+    <strong>{MONEY.format(value)}<span className="money-unit">&nbsp;บาท</span></strong>
   </div>;
+}
+
+const FINANCE_METRICS = [
+  { key: "gross", label: "ยอดขาย", detail: "สเกลเฉพาะยอดขาย", tone: "gross" },
+  { key: "payout", label: "จ่ายรางวัล", detail: "สเกลเฉพาะยอดจ่ายรางวัล", tone: "payout" },
+  { key: "net", label: "ยอดสุทธิ", detail: "เส้นกลางคือศูนย์ · ซ้ายลบ / ขวาบวก", tone: "net" },
+] as const;
+
+function FinanceSmallMultiples({ rows }: { rows: FinanceRow[] }) {
+  if (rows.length === 0) return <p className="empty-state">ยังไม่มี Settlement สำหรับแสดงกราฟจริง</p>;
+
+  return <section className="finance-small-multiples" aria-label="กราฟการเงินแยกสเกลตามตัวชี้วัด">
+    <p className="finance-scale-note"><b>หมายเหตุเรื่องสเกล</b> กราฟแต่ละชุดใช้สเกลของตัวเองเพื่อให้เห็นแนวโน้มชัดเจน จึงไม่ควรเปรียบเทียบความยาวแท่งข้ามชุด</p>
+    <div className="finance-small-grid">{FINANCE_METRICS.map((metric) => {
+      const maximum = Math.max(...rows.map((row) => Math.abs(row[metric.key])), 1);
+      return <article className={`finance-small-card ${metric.tone}`} key={metric.key}>
+        <header><div><strong>{metric.label}</strong><small>{metric.detail}</small></div><span>ค่าสูงสุด {MONEY.format(maximum)} บาท</span></header>
+        <div className="finance-small-rows">{rows.map((row) => {
+          const value = row[metric.key];
+          const percent = Math.abs(value) / maximum * 100;
+          const barStyle = metric.key === "net"
+            ? value < 0 ? { width: `${percent / 2}%`, right: "50%" } : { width: `${percent / 2}%`, left: "50%" }
+            : { width: `${percent}%`, left: 0 };
+          return <div className="finance-small-row" key={row.label} title={`${row.label}: ${MONEY.format(value)} บาท`}>
+            <span>{row.label}</span>
+            <i className={metric.key === "net" ? "has-zero" : undefined}><b className={value < 0 ? "negative" : "positive"} style={barStyle}/></i>
+            <strong className={value < 0 ? "negative" : undefined}>{MONEY.format(value)}<span className="money-unit">&nbsp;บาท</span></strong>
+          </div>;
+        })}</div>
+      </article>;
+    })}</div>
+  </section>;
 }
 
 function FinanceBars({ rows, max, agent = false }: { rows: FinanceRow[]; max: number; agent?: boolean }) {
   if (rows.length === 0) return <p className="empty-state">ยังไม่มี Settlement สำหรับแสดงกราฟจริง</p>;
-  return <div className="owner-finance-bars">{rows.map((row) => <article key={row.label}><header><strong>{row.label}</strong><small>{agent ? "ผลงานสะสม" : "Settlement จริง"}</small></header><div className="finance-metrics"><div><span>ยอดขาย</span><i><b className="gross" style={{ width: `${row.gross / max * 100}%` }}/></i><strong>{MONEY.format(row.gross)} ฿</strong></div><div><span>จ่ายรางวัล</span><i><b className="payout" style={{ width: `${row.payout / max * 100}%` }}/></i><strong>{MONEY.format(row.payout)} ฿</strong></div><div><span>สุทธิ</span><i><b className={row.net < 0 ? "net negative" : "net"} style={{ width: `${Math.abs(row.net) / max * 100}%` }}/></i><strong className={row.net < 0 ? "negative" : "positive"}>{MONEY.format(row.net)} ฿</strong></div></div></article>)}</div>;
+  return <div className="owner-finance-bars">{rows.map((row) => <article key={row.label}><header><strong>{row.label}</strong><small>{agent ? "ผลงานสะสม" : "Settlement จริง"}</small></header><div className="finance-metrics"><div><span>ยอดขาย</span><i><b className="gross" style={{ width: `${row.gross / max * 100}%` }}/></i><strong>{MONEY.format(row.gross)}<span className="money-unit">&nbsp;บาท</span></strong></div><div><span>จ่ายรางวัล</span><i><b className="payout" style={{ width: `${row.payout / max * 100}%` }}/></i><strong>{MONEY.format(row.payout)}<span className="money-unit">&nbsp;บาท</span></strong></div><div><span>สุทธิ</span><i><b className={row.net < 0 ? "net negative" : "net"} style={{ width: `${Math.abs(row.net) / max * 100}%` }}/></i><strong className={row.net < 0 ? "negative" : "positive"}>{MONEY.format(row.net)}<span className="money-unit">&nbsp;บาท</span></strong></div></div></article>)}</div>;
 }

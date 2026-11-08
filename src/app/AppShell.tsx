@@ -2,7 +2,8 @@ import type { Role } from "@prisma/client";
 import { SidebarNav } from "./SidebarNav";
 import { logoutAction } from "./logout-action";
 import { DashboardIcon } from "./DashboardIcon";
-import { AccountMenu, MobileNavigation, SystemStatus } from "./ShellControls";
+import { AccountMenu, MobileNavigation, SystemStatus, ThemeToggle } from "./ShellControls";
+import { MockDataToggle } from "./MockDataToggle";
 import "./owner-chatbot.css";
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -15,13 +16,16 @@ export function AppShell({
   children,
   displayName,
   role,
+  mockDataEnabled,
 }: {
   children: React.ReactNode;
   displayName: string;
   role: Role;
+  mockDataEnabled: boolean;
 }) {
   return (
     <div className="dashboard-shell">
+      <a className="skip-link" href="#main-content">ข้ามไปยังเนื้อหาหลัก</a>
       <aside className="dashboard-sidebar">
         <div className="brand-mark">
           <span><DashboardIcon name="brand" /></span>
@@ -43,9 +47,13 @@ export function AppShell({
             <MobileNavigation role={role} />
             <SystemStatus />
           </div>
-          <AccountMenu displayName={displayName} roleLabel={ROLE_LABEL[role]} />
+          <div className="topbar-end">
+            <ThemeToggle />
+            <MockDataToggle initialEnabled={mockDataEnabled} canManage={role === "OWNER"} />
+            <AccountMenu displayName={displayName} roleLabel={ROLE_LABEL[role]} />
+          </div>
         </header>
-        <div className="app-page">{children}</div>
+        <div className="app-page" id="main-content" tabIndex={-1}>{children}</div>
       </section>
     </div>
   );

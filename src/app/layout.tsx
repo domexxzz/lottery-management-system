@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { getActor } from "@/lib/auth/context";
 import { AppShell } from "./AppShell";
+import { isMockDataEnabled } from "@/lib/mock-data";
 import "./globals.css";
 import "./home.css";
 import "./premium-theme.css";
+import "@/components/calendar/calendar.css";
 
 const sarabun = localFont({
   variable: "--font-sarabun",
@@ -36,12 +38,18 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const actor = await getActor();
+  const mockDataEnabled = actor
+    ? await isMockDataEnabled(actor.organizationId)
+    : false;
 
   return (
-    <html lang="th" className={sarabun.variable}>
+    <html lang="th" className={sarabun.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('lottery-theme');var r=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.dataset.theme=r}catch(e){}})()` }} />
+      </head>
       <body>
         {actor !== null && !actor.mustChangePassword ? (
-          <AppShell displayName={actor.displayName} role={actor.role}>
+          <AppShell displayName={actor.displayName} role={actor.role} mockDataEnabled={mockDataEnabled}>
             {children}
           </AppShell>
         ) : (

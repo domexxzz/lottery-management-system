@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { AppDropdown } from "../AppDropdown";
+import { DateRangePicker, type DateRangeValue } from "@/components/calendar";
 
 type DrawOption = { id: string; name: string };
 
@@ -25,11 +26,17 @@ export function AgentReportControls({ draws, agentLabel }: { draws: DrawOption[]
     startTransition(() => router.replace(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false }));
   }
 
+  function updateRange(value: DateRangeValue) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value.startDate) params.set("dateFrom", value.startDate); else params.delete("dateFrom");
+    if (value.endDate) params.set("dateTo", value.endDate); else params.delete("dateTo");
+    startTransition(() => router.replace(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false }));
+  }
+
   return <section className={`agent-report-controls ${pending ? "is-loading" : ""}`} aria-label="ตัวกรองรายงาน">
     <div className="agent-report-filter-grid">
       <label>งวด<AppDropdown value={searchParams.get("draw") ?? ""} onValueChange={(value) => update("draw", value)} options={[{ value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.name }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" /></label>
-      <label>ตั้งแต่วันที่<input type="date" value={searchParams.get("dateFrom") ?? ""} onChange={(event) => update("dateFrom", event.target.value)} /></label>
-      <label>ถึงวันที่<input type="date" value={searchParams.get("dateTo") ?? ""} onChange={(event) => update("dateTo", event.target.value)} /></label>
+      <DateRangePicker startLabel="ตั้งแต่วันที่" endLabel="ถึงวันที่" startDate={searchParams.get("dateFrom") ?? ""} endDate={searchParams.get("dateTo") ?? ""} onChange={updateRange} />
       <label>สถานะ Settlement<AppDropdown value={searchParams.get("settlement") ?? ""} onValueChange={(value) => update("settlement", value)} options={[{ value: "", label: "ทุกสถานะ" }, { value: "PENDING", label: "รอ Settlement" }, { value: "DRAFT", label: "คำนวณแล้ว" }, { value: "RECONCILED", label: "ตรวจสอบยอดแล้ว" }, { value: "APPROVED", label: "อนุมัติแล้ว" }]} /></label>
       <button type="button" className="agent-report-clear" onClick={clearFilters}>ล้างตัวกรอง</button>
     </div>

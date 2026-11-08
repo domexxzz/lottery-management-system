@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "prisma generate",
     "dev": "next dev",
     "build": "node scripts/build.mjs",
     "start": "next start",
@@ -13,6 +14,8 @@
     "db:seed": "prisma db seed",
     "db:seed:history": "tsx scripts/seed-three-month-demo.ts",
     "db:demo:winners": "tsx scripts/rebalance-demo-winners.ts",
+    "db:mock:on": "tsx scripts/toggle-mock-data.ts --on",
+    "db:mock:off": "tsx scripts/toggle-mock-data.ts --off",
     "db:studio": "prisma studio",
     "verify": "npm run typecheck && npm run lint && npm test && npm run test:integration && npm run build",
     "test": "vitest run --config vitest.config.mts",
