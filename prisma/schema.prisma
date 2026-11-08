@@ -139,9 +139,11 @@ model Organization {
 
   /// ตัวนับเลขบิล เพิ่มแบบ atomic ด้วย UPDATE ... RETURNING ตอนยืนยันบิล
   /// ใช้ตัวนับระดับองค์กรเพื่อให้เลขบิลไม่ซ้ำข้ามรอบ
-  billSequence Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  billSequence    Int      @default(0)
+  /// สถานะข้อมูลจำลองระดับองค์กร ทุกบัญชีในองค์กรเห็นค่าเดียวกัน
+  mockDataEnabled Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   users                  User[]
   agents                 Agent[]
@@ -155,6 +157,9 @@ model Organization {
   billAttachments        BillAttachment[]
   billPayments           BillPayment[]
   ownerChatConversations OwnerChatConversation[]
+  conversations          Conversation[]
+  directMessages         DirectMessage[]
+  directMessageFiles     DirectMessageAttachment[]
 
   @@map("organizations")
 }
@@ -175,11 +180,19 @@ model User {
   /// ต้องผูกก่อนจึงจะกดปุ่มในแชทได้ เพราะทุกการเปลี่ยนสถานะต้องรู้ว่าใครทำ
   /// ถ้าปล่อยให้ใครในกลุ่มก็กดได้ Audit จะบันทึกได้แค่ว่า "บอททำ"
   /// ซึ่งเท่ากับไม่มีผู้รับผิดชอบ และขัดหลักข้อแรกของระบบ
-  telegramUserId     String?   @unique
+  telegramUserId String? @unique
 
   /// บังคับเปลี่ยนรหัสผ่านในการ login ครั้งถัดไป
   mustChangePassword Boolean   @default(true)
   lastLoginAt        DateTime?
+
+  /// รูปโปรไฟล์ที่เก็บใน Private Storage เดียวกับหลักฐาน
+  /// ว่างได้ หน้าจอจะใช้อักษรย่อของชื่อแทน
+  avatarKey String?
+
+  /// เวลาที่เห็นผู้ใช้คนนี้ครั้งล่าสุด ใช้บอกสถานะออนไลน์ในหน้าสนทนา
+  /// อัปเดตเมื่อผู้ใช้เรียกข้อมูลแชท ไม่ใช่ presence แบบ realtime
+  lastSeenAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -200,6 +213,9 @@ model User {
   verifiedAttachments    BillAttachment[]        @relation("AttachmentVerifier")
   verifiedPayments       BillPayment[]           @relation("PaymentVerifier")
   ownerChatConversations OwnerChatConversation[] @relation("OwnerChatConversationOwner")
+  conversationsAsA       Conversation[]          @relation("ConversationUserA")
+  conversationsAsB       Conversation[]          @relation("ConversationUserB")
+  sentMessages           DirectMessage[]         @relation("DirectMessageSender")
 
   @@unique([organizationId, login])
   @@index([organizationId, role])
@@ -314,6 +330,8 @@ model Draw {
   cutoffAt DateTime
 
   status   DrawStatus @default(OPEN)
+  /// งวดที่ระบบสร้างสำหรับโหมดข้อมูลจำลอง ลบได้โดยไม่แตะข้อมูลจริง
+  isMock   Boolean    @default(false)
   lockedAt DateTime?
   closedAt DateTime?
 
@@ -326,6 +344,7 @@ model Draw {
 
   @@index([organizationId, name])
   @@index([organizationId, status])
+  @@index([organizationId, isMock])
   @@index([status, cutoffAt])
   @@map("draws")
 }
@@ -510,7 +529,7 @@ model Result {
   /// value ยังคงเก็บค่าแรกไว้เพื่อรองรับข้อมูลและโค้ดรุ่นก่อน
   values  String[] @default([])
   /// เพิ่มทีละ 1 เมื่อมีการแก้ผลหลังประกาศ
-  version Int    @default(1)
+  version Int      @default(1)
 
   status ResultStatus @default(DRAFT)
 
@@ -632,4 +651,84 @@ model OwnerChatMessage {
   @@unique([conversationId, sequence])
   @@index([conversationId, createdAt])
   @@map("owner_chat_messages")
+}
+
+/// ห้องสนทนาระหว่างคนสองคนในองค์กรเดียวกัน
+///
+/// เก็บคู่สนทนาเป็น userA/userB โดยบังคับเรียง id จากน้อยไปมากเสมอตอนสร้าง
+/// จึงทำ unique กันห้องซ้ำได้ ถ้าไม่เรียง คนสองคนจะสร้างห้องซ้อนกันสองห้อง
+/// แล้วข้อความจะกระจายไปคนละห้องโดยไม่มีใครรู้
+///
+/// ยังไม่รองรับห้องกลุ่มหลายคน ถ้าจะทำต้องแยกตารางผู้เข้าร่วมออกมา
+model Conversation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  userAId String
+  userA   User   @relation("ConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId String
+  userB   User   @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  /// เวลาอ่านล่าสุดของแต่ละฝั่ง ใช้คำนวณจำนวนข้อความที่ยังไม่อ่าน
+  /// และใช้บอกว่าอีกฝ่ายอ่านข้อความของเราแล้วหรือยัง
+  userALastReadAt DateTime?
+  userBLastReadAt DateTime?
+
+  /// เวลาข้อความล่าสุด ใช้เรียงห้องใน Sidebar โดยไม่ต้อง join ตารางข้อความ
+  lastMessageAt DateTime?
+
+  createdAt DateTime        @default(now())
+  messages  DirectMessage[]
+
+  @@unique([organizationId, userAId, userBId])
+  @@index([organizationId, lastMessageAt])
+  @@map("conversations")
+}
+
+/// ข้อความหนึ่งบรรทัดในห้องสนทนา
+///
+/// body ว่างได้เมื่อส่งเฉพาะรูปหรือไฟล์ แต่ต้องมีอย่างใดอย่างหนึ่งเสมอ
+/// ซึ่งบังคับที่ชั้น service ไม่ใช่ที่ฐานข้อมูล
+model DirectMessage {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  senderId String
+  sender   User   @relation("DirectMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  body      String?
+  createdAt DateTime @default(now())
+
+  attachments DirectMessageAttachment[]
+
+  @@index([conversationId, createdAt])
+  @@map("direct_messages")
+}
+
+/// ไฟล์แนบของข้อความ เก็บใน Private Storage เดียวกับหลักฐานบิล
+///
+/// ไม่เก็บ URL สาธารณะ หน้าจอขอ signed URL อายุสั้นทีละครั้ง
+/// ด้วยเหตุผลเดียวกับหลักฐานบิล คือไฟล์ของลูกค้าต้องไม่หลุดออกไปถาวร
+model DirectMessageAttachment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  messageId String
+  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  storageKey   String
+  originalName String
+  mimeType     String
+  fileSize     Int
+
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+  @@map("direct_message_attachments")
 }

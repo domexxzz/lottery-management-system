@@ -1,0 +1,449 @@
+/*
+ * หน้าสนทนาภายในองค์กร
+ *
+ * ใช้โทเคนสีของธีม Premium Blue & White เดิมทั้งหมด ไม่ตั้งสีใหม่เอง
+ * เพื่อให้เปลี่ยนธีมที่เดียวแล้วหน้านี้ตามไปด้วย
+ *
+ * โครงเป็นสองคอลัมน์บนจอกว้าง ส่วนบนมือถือซ้อนกันแล้วสลับด้วยคลาส
+ * show-list / show-thread เพราะสองแผงพร้อมกันบนจอ 375px แคบเกินจะใช้งานได้
+ */
+
+/*
+ * ทุก selector ที่คุมปุ่มต้องนำหน้าด้วย .msg-shell
+ *
+ * ธีมกลางตั้ง .app-page button ไว้เป็น gradient ซึ่ง specificity (0,1,1)
+ * สูงกว่า .msg-row เดี่ยว ๆ (0,1,0) ถ้าไม่นำหน้า แถวรายชื่อจะกลายเป็น
+ * ปุ่มสีเขียวทึบทั้งแถบ ไม่ใช่รายการแบบที่ตั้งใจ
+ */
+.msg-shell {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr;
+  gap: 1rem;
+  height: calc(100vh - 9rem);
+  min-height: 520px;
+}
+
+/*
+ * ช่องเลือกไฟล์ต้องบังคับซ่อนด้วย !important
+ *
+ * attribute hidden อย่างเดียวไม่พอ เพราะมี global style ตั้ง display ให้ input ทับไว้
+ * ของเดิมในโปรเจกต์ก็ต้องทำแบบนี้ ดู .evidence-file-input
+ */
+.msg-file-input {
+  display: none !important;
+}
+
+/* ---------- แผงรายชื่อ ---------- */
+
+.msg-sidebar {
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid var(--premium-border);
+  border-radius: var(--premium-radius);
+  background: var(--premium-surface);
+}
+
+.msg-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .85rem 1rem;
+  border-bottom: 1px solid var(--premium-border);
+}
+
+.msg-sidebar-head strong {
+  display: block;
+  color: var(--premium-text);
+  font-size: .95rem;
+}
+
+.msg-sidebar-head small {
+  color: var(--premium-secondary);
+  font-size: .72rem;
+}
+
+.msg-shell .msg-avatar-edit {
+  padding: .35rem .6rem;
+  border: 1px solid var(--premium-border);
+  border-radius: 999px;
+  color: var(--premium-action);
+  background: transparent;
+  font-size: .68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.msg-search {
+  padding: .7rem 1rem;
+  border-bottom: 1px solid var(--premium-border);
+}
+
+.msg-search input {
+  width: 100%;
+  min-height: 38px;
+  padding: .45rem .7rem;
+  border: 1px solid var(--premium-border);
+  border-radius: var(--premium-radius-sm);
+  background: var(--premium-bg);
+  font-size: .82rem;
+}
+
+.msg-list {
+  overflow-y: auto;
+  padding: .4rem;
+  flex: 1;
+}
+
+.msg-group {
+  margin: .6rem .6rem .25rem;
+  color: var(--premium-muted);
+  font-size: .66rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/*
+ * ต้องตั้ง color เองด้วย ไม่ใช่แค่ background
+ *
+ * global style ของโปรเจกต์ตั้ง button { background: var(--accent); color: #fff }
+ * ไว้ การตั้งแค่พื้นหลังโปร่งใสทำให้เหลือตัวหนังสือสีขาวบนพื้นอ่อน อ่านไม่ออก
+ */
+.msg-shell .msg-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: .65rem;
+  padding: .55rem .6rem;
+  border: 0;
+  border-radius: var(--premium-radius-sm);
+  color: var(--premium-text);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.msg-shell .msg-row:hover {
+  background: var(--premium-subtle);
+}
+
+.msg-shell .msg-row.is-active {
+  background: var(--premium-subtle);
+  box-shadow: inset 3px 0 var(--premium-teal);
+}
+
+.msg-row-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.msg-row-text strong {
+  display: block;
+  overflow: hidden;
+  color: var(--premium-text);
+  font-size: .85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-row-text small {
+  display: block;
+  overflow: hidden;
+  color: var(--premium-secondary);
+  font-size: .72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-badge {
+  min-width: 20px;
+  padding: .1rem .35rem;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--premium-teal);
+  font-size: .68rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+/* ---------- รูปประจำตัวและจุดออนไลน์ ---------- */
+
+.msg-avatar {
+  position: relative;
+  display: grid;
+  overflow: visible;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--premium-navy);
+  background: var(--premium-subtle);
+  font-weight: 800;
+}
+
+.msg-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.msg-avatar-md { width: 40px; height: 40px; font-size: .85rem; }
+.msg-avatar-sm { width: 32px; height: 32px; font-size: .75rem; }
+
+.msg-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--premium-surface);
+  border-radius: 50%;
+  background: var(--premium-muted);
+}
+
+.msg-dot.online {
+  background: var(--premium-success);
+}
+
+/* ---------- พื้นที่สนทนา ---------- */
+
+.msg-thread {
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid var(--premium-border);
+  border-radius: var(--premium-radius);
+  background: var(--premium-surface);
+}
+
+.msg-thread-head {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--premium-border);
+}
+
+.msg-thread-head strong {
+  display: block;
+  color: var(--premium-text);
+  font-size: .9rem;
+}
+
+.msg-thread-head small {
+  color: var(--premium-secondary);
+  font-size: .72rem;
+}
+
+.msg-shell .msg-back {
+  display: none;
+  border: 0;
+  background: transparent;
+  color: var(--premium-action);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.msg-body {
+  display: flex;
+  overflow-y: auto;
+  flex: 1;
+  flex-direction: column;
+  gap: .5rem;
+  padding: 1rem;
+  background: var(--premium-bg);
+}
+
+.msg-day {
+  align-self: center;
+  margin: .4rem 0;
+  padding: .2rem .7rem;
+  border-radius: 999px;
+  color: var(--premium-secondary);
+  background: var(--premium-surface);
+  font-size: .68rem;
+}
+
+.msg-bubble-row {
+  display: flex;
+  align-items: flex-end;
+  gap: .5rem;
+  margin-bottom: .35rem;
+}
+
+.msg-bubble-row.mine {
+  justify-content: flex-end;
+}
+
+.msg-bubble {
+  max-width: min(74%, 520px);
+  padding: .55rem .8rem;
+  border: 1px solid var(--premium-border);
+  border-radius: 16px 16px 16px 4px;
+  color: var(--premium-text);
+  background: var(--premium-surface);
+}
+
+.msg-bubble-row.mine .msg-bubble {
+  border-color: transparent;
+  border-radius: 16px 16px 4px;
+  color: #fff;
+  background: var(--premium-action);
+}
+
+.msg-bubble p {
+  margin: 0;
+  font-size: .88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg-image {
+  display: block;
+  max-width: 100%;
+  margin-top: .35rem;
+  border-radius: 10px;
+}
+
+.msg-file {
+  display: inline-block;
+  margin-top: .35rem;
+  padding: .35rem .6rem;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 18%);
+  color: inherit;
+  font-size: .78rem;
+}
+
+.msg-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .4rem;
+  margin-top: .25rem;
+  font-size: .64rem;
+  opacity: .75;
+}
+
+.msg-meta em {
+  font-style: normal;
+}
+
+/* ---------- ช่องพิมพ์ ---------- */
+
+.msg-compose {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .7rem 1rem;
+  border-top: 1px solid var(--premium-border);
+}
+
+.msg-compose input[type="text"],
+.msg-compose input:not([type]) {
+  min-height: 42px;
+  padding: .5rem .8rem;
+  border: 1px solid var(--premium-border);
+  border-radius: 999px;
+  background: var(--premium-bg);
+  flex: 1;
+  font-size: .88rem;
+}
+
+.msg-shell .msg-compose button {
+  min-height: 42px;
+  padding: .5rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--premium-action);
+  font-size: .85rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.msg-shell .msg-compose button[type="button"] {
+  width: 42px;
+  padding: 0;
+  color: var(--premium-action);
+  background: var(--premium-subtle);
+  font-size: 1.1rem;
+}
+
+.msg-shell .msg-compose button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.msg-pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  padding: .5rem 1rem 0;
+}
+
+.msg-pending span {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .25rem .55rem;
+  border-radius: 999px;
+  background: var(--premium-subtle);
+  font-size: .72rem;
+}
+
+.msg-shell .msg-pending button {
+  border: 0;
+  background: transparent;
+  color: var(--premium-danger-ink);
+  cursor: pointer;
+}
+
+.msg-empty,
+.msg-placeholder {
+  margin: auto;
+  padding: 2rem 1rem;
+  color: var(--premium-secondary);
+  font-size: .85rem;
+  text-align: center;
+}
+
+.msg-placeholder strong {
+  display: block;
+  margin-bottom: .35rem;
+  color: var(--premium-text);
+  font-size: 1rem;
+}
+
+.msg-error {
+  margin: 0;
+  padding: .5rem 1rem;
+  color: var(--premium-danger-ink);
+  background: #fff5f6;
+  font-size: .78rem;
+}
+
+/* ---------- มือถือ ---------- */
+
+@media (max-width: 860px) {
+  .msg-shell {
+    grid-template-columns: 1fr;
+    height: calc(100vh - 7rem);
+  }
+
+  .msg-shell.show-list .msg-thread,
+  .msg-shell.show-thread .msg-sidebar {
+    display: none;
+  }
+
+  .msg-shell .msg-back {
+    display: block;
+  }
+
+  .msg-bubble {
+    max-width: 82%;
+  }
+}
