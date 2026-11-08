@@ -375,28 +375,6 @@ export async function signedAvatarUrl(
   return storage.getSignedUrl({ key: user.avatarKey, fileName: `${user.displayName}.webp`, disposition: "inline" });
 }
 
-/** ตั้งรูปโปรไฟล์ของตัวเอง เปลี่ยนของคนอื่นไม่ได้ */
-export async function setOwnAvatar(
-  actor: Actor,
-  file: OutgoingFile,
-  storage: PrivateObjectStorage = getStorageProvider(),
-): Promise<void> {
-  const processed = await validateAndProcessEvidenceImage({
-    bytes: file.bytes,
-    fileName: file.fileName,
-    declaredMimeType: file.declaredMimeType,
-  });
-  const storageKey = `organizations/${actor.organizationId}/avatars/${actor.userId}/${randomUUID()}.webp`;
-  await storage.upload({ key: storageKey, body: processed.body, contentType: processed.mimeType });
-
-  const previous = await prisma.user.findUnique({
-    where: { id: actor.userId },
-    select: { avatarKey: true },
-  });
-  await prisma.user.update({ where: { id: actor.userId }, data: { avatarKey: storageKey } });
-  // ลบของเก่าหลังชี้ไปของใหม่แล้ว ถ้าลบก่อนแล้วอัปเดตพัง จะเหลือรูปที่เปิดไม่ได้
-  if (previous?.avatarKey) await storage.delete(previous.avatarKey).catch(() => undefined);
-}
 
 export type { Role };
 export { isStaff };

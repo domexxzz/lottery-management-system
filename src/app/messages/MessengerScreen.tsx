@@ -54,6 +54,28 @@ const ROLE_LABEL: Record<Contact["role"], string> = {
   AGENT: "ตัวแทน",
 };
 
+/**
+ * คำแนะนำการค้นหา แยกตามบทบาทของคนที่กำลังใช้
+ *
+ * ขอบเขตที่แต่ละคนค้นเจอไม่เท่ากัน ตัวแทนเห็นเฉพาะเจ้าของกิจการกับผู้ดูแล
+ * ถ้าบอกเหมือนกันหมด ตัวแทนจะพิมพ์ชื่อเพื่อนตัวแทนแล้วไม่เจอ โดยไม่รู้ว่า
+ * พิมพ์ผิดหรือไม่มีสิทธิ์ ซึ่งเป็นคนละปัญหาและแก้คนละทาง
+ */
+const SEARCH_HINT: Record<Contact["role"], { placeholder: string; hint: string }> = {
+  OWNER: {
+    placeholder: "ค้นหาชื่อ หรือชื่อผู้ใช้...",
+    hint: "คุณคุยได้กับทุกคนในองค์กร พิมพ์ชื่อที่แสดง เช่น ตัวแทน กรุงเทพ หรือชื่อผู้ใช้ เช่น agent2",
+  },
+  ADMIN: {
+    placeholder: "ค้นหาชื่อ หรือชื่อผู้ใช้...",
+    hint: "คุณคุยได้กับทุกคนในองค์กร พิมพ์ชื่อที่แสดง เช่น ตัวแทน กรุงเทพ หรือชื่อผู้ใช้ เช่น agent2",
+  },
+  AGENT: {
+    placeholder: "ค้นหาเจ้าของกิจการ หรือผู้ดูแล...",
+    hint: "คุณคุยได้เฉพาะเจ้าของกิจการและผู้ดูแลระบบ พิมพ์ชื่อที่แสดง หรือชื่อผู้ใช้ เช่น owner, admin · ตัวแทนด้วยกันคุยกันไม่ได้",
+  },
+};
+
 function initials(name: string): string {
   return name.trim().slice(0, 1).toUpperCase() || "?";
 }
@@ -83,7 +105,7 @@ function Avatar({ person, size }: { person: { id: string; displayName: string; h
   );
 }
 
-export function MessengerScreen({ myName }: { myName: string }) {
+export function MessengerScreen({ myName, myRole, openWithUserId }: { myName: string; myRole: Contact["role"]; openWithUserId?: string }) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [search, setSearch] = useState("");
@@ -97,7 +119,6 @@ export function MessengerScreen({ myName }: { myName: string }) {
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const avatarRef = useRef<HTMLInputElement>(null);
 
   const loadRooms = useCallback(async () => {
     const response = await fetch("/api/messages/conversations", { cache: "no-store" });
@@ -126,6 +147,20 @@ export function MessengerScreen({ myName }: { myName: string }) {
     void loadRooms();
     void loadContacts("");
   }, [loadRooms, loadContacts]);
+
+  /*
+   * มาจากปุ่ม "ส่งข้อความ" ในหน้าโปรไฟล์ Agent
+   *
+   * เปิดห้องให้เลยโดยไม่ต้องให้ผู้ใช้ไปไล่หาชื่อในรายการอีกรอบ
+   * ถ้าคุยกับคนนั้นไม่ได้ openWith จะขึ้น error ตามกฎสิทธิ์เหมือนกดเอง
+   */
+  const openedFromLink = useRef(false);
+  useEffect(() => {
+    // กันเปิดซ้ำตอน re-render เพราะ openWith เปลี่ยน state แล้ว effect วิ่งใหม่ได้
+    if (!openWithUserId || openedFromLink.current) return;
+    openedFromLink.current = true;
+    void openWith(openWithUserId);
+  }, [openWithUserId]);
 
   // ดึงซ้ำเป็นช่วง ๆ แทน realtime
   useEffect(() => {
@@ -197,18 +232,6 @@ export function MessengerScreen({ myName }: { myName: string }) {
     }
   }
 
-  async function uploadAvatar(file: File) {
-    const form = new FormData();
-    form.set("file", file);
-    const response = await fetch("/api/messages/avatar", { method: "POST", body: form });
-    if (!response.ok) {
-      const payload = (await response.json()) as { error?: { message?: string } };
-      setError(payload.error?.message ?? "เปลี่ยนรูปโปรไฟล์ไม่สำเร็จ");
-      return;
-    }
-    await loadRooms();
-    if (activeId) await loadThread(activeId);
-  }
 
   const roomIds = useMemo(() => new Set(rooms.map((room) => room.other.id)), [rooms]);
   const newContacts = useMemo(() => contacts.filter((person) => !roomIds.has(person.id)), [contacts, roomIds]);
@@ -222,21 +245,6 @@ export function MessengerScreen({ myName }: { myName: string }) {
             <strong>ข้อความ</strong>
             <small>{totalUnread > 0 ? `ยังไม่ได้อ่าน ${totalUnread} ข้อความ` : "อ่านครบแล้ว"}</small>
           </div>
-          <button type="button" className="msg-avatar-edit" onClick={() => avatarRef.current?.click()}>
-            เปลี่ยนรูปของฉัน
-          </button>
-          <input
-            ref={avatarRef}
-            className="msg-file-input"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            hidden
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void uploadAvatar(file);
-              event.target.value = "";
-            }}
-          />
         </header>
 
         <div className="msg-search">
@@ -244,9 +252,18 @@ export function MessengerScreen({ myName }: { myName: string }) {
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="ค้นหาชื่อผู้ใช้..."
+            placeholder={SEARCH_HINT[myRole].placeholder}
             aria-label="ค้นหาผู้ใช้"
+            aria-describedby="msg-search-hint"
           />
+          {/*
+            * คำแนะนำต่างกันตามบทบาท เพราะขอบเขตที่ค้นเจอก็ต่างกัน
+            * ถ้าเขียนข้อความกลาง ๆ เหมือนกันหมด ตัวแทนจะพิมพ์ชื่อตัวแทนคนอื่น
+            * แล้วไม่เจอ โดยไม่รู้ว่าเพราะพิมพ์ผิดหรือเพราะไม่มีสิทธิ์
+            */}
+          <p id="msg-search-hint" className="msg-hint">
+            {SEARCH_HINT[myRole].hint}
+          </p>
         </div>
 
         <div className="msg-list" role="list">

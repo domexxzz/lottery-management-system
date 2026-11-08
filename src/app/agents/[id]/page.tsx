@@ -44,7 +44,7 @@ export default async function AgentProfilePage({
         commissionRate: true,
         creditLimit: true,
         perNumberLimit: true,
-        user: { select: { login: true, lastLoginAt: true } },
+        user: { select: { id: true, login: true, lastLoginAt: true } },
       },
     }),
     prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true, cutoffAt: true } }),
@@ -98,7 +98,21 @@ export default async function AgentProfilePage({
     <p className="agent-profile-back"><Link href="/agents">← กลับหน้าจัดการ Agent</Link></p>
     <header className="agent-profile-hero">
       <div className="agent-profile-person"><span>{agent.code.slice(0, 2)}</span><div><p>Agent Intelligence Profile</p><h1>{agent.code} · {agent.name}</h1><div><b className={`profile-status status-${agent.status.toLowerCase()}`}>{AGENT_STATUS[agent.status]}</b><small>{agent.user ? `บัญชี ${agent.user.login}` : "ยังไม่ผูกบัญชีผู้ใช้"}</small></div></div></div>
-      <AgentProfileFilter draws={draws.map((draw) => ({ id: draw.id, name: draw.name }))} />
+      <div className="agent-profile-hero-actions">
+        {/*
+          * ปุ่มนี้ขึ้นเฉพาะเมื่อ Agent ผูกบัญชีผู้ใช้ไว้แล้ว
+          * ถ้ายังไม่ผูกก็ไม่มีใครให้ทักและกดไปก็ได้แต่หน้าว่าง
+          *
+          * หน้านี้เปิดได้เฉพาะคนที่มีสิทธิ์ report.viewAllAgents ซึ่งคือ
+          * Owner และ Admin ทั้งคู่คุยกับตัวแทนได้อยู่แล้วตามกฎใน policy.ts
+          */}
+        {agent.user && (
+          <Link className="agent-profile-chat" href={`/messages?user=${agent.user.id}`}>
+            ส่งข้อความ
+          </Link>
+        )}
+        <AgentProfileFilter draws={draws.map((draw) => ({ id: draw.id, name: draw.name }))} />
+      </div>
     </header>
 
     <section className="agent-profile-limits" aria-label="ข้อมูล Agent"><div><span>อัตราคอมมิชชัน</span><strong>{agent.commissionRate.toFixed(2)}%</strong></div><div><span>วงเงินต่องวด</span><strong>{agent.creditLimit ? `${MONEY.format(Number(agent.creditLimit))} บาท` : "ไม่จำกัด"}</strong></div><div><span>วงเงินต่อเลข</span><strong>{agent.perNumberLimit ? `${MONEY.format(Number(agent.perNumberLimit))} บาท` : "ไม่จำกัด"}</strong></div><div><span>เข้าใช้ล่าสุด</span><strong>{agent.user?.lastLoginAt ? DATE_TIME.format(agent.user.lastLoginAt) : "ยังไม่เคยเข้าใช้"}</strong></div></section>

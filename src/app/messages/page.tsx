@@ -15,9 +15,25 @@ export const dynamic = "force-dynamic";
  * เปิดได้ทุกบทบาท ส่วนกฎว่าใครคุยกับใครได้บังคับที่ชั้น service
  * ไม่ใช่ที่หน้านี้ เพราะหน้าจอไม่ใช่ทางเข้าเดียวของ API
  */
-export default async function MessagesPage() {
+export default async function MessagesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const actor = await getActor();
   if (!actor) redirect("/login");
   if (actor.mustChangePassword) redirect("/change-password");
-  return <MessengerScreen myName={actor.displayName} />;
+
+  // ?user= มาจากปุ่มส่งข้อความในหน้าโปรไฟล์ Agent
+  const query = await searchParams;
+  const raw = query.user;
+  const openWithUserId = Array.isArray(raw) ? raw[0] : raw;
+
+  return (
+    <MessengerScreen
+      myName={actor.displayName}
+      myRole={actor.role}
+      openWithUserId={openWithUserId}
+    />
+  );
 }

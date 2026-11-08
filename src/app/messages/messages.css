@@ -64,17 +64,6 @@
   font-size: .72rem;
 }
 
-.msg-shell .msg-avatar-edit {
-  padding: .35rem .6rem;
-  border: 1px solid var(--premium-border);
-  border-radius: 999px;
-  color: var(--premium-action);
-  background: transparent;
-  font-size: .68rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 .msg-search {
   padding: .7rem 1rem;
   border-bottom: 1px solid var(--premium-border);
@@ -88,6 +77,13 @@
   border-radius: var(--premium-radius-sm);
   background: var(--premium-bg);
   font-size: .82rem;
+}
+
+.msg-hint {
+  margin: .45rem .1rem 0;
+  color: var(--premium-secondary);
+  font-size: .68rem;
+  line-height: 1.5;
 }
 
 .msg-list {
