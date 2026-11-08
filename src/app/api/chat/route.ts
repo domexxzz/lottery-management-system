@@ -41,9 +41,9 @@ function upstreamMessage(failure: string): string {
     return "Typhoon ไม่รับคำขอนี้ กรุณาตรวจสอบค่า TYPHOON_MODEL และ TYPHOON_BASE_URL";
   }
   if (status === 429) {
-    return "Typhoon จำกัดอัตราการเรียกชั่วคราว กรุณารอสักครู่แล้วลองใหม่";
+    return "ตอนนี้มีคำถามเข้ามาพร้อมกันมาก กรุณารอสักครู่แล้วลองใหม่ครับ";
   }
-  return "ไม่สามารถติดต่อ Typhoon ได้ กรุณาลองใหม่ภายหลัง";
+  return "ตอนนี้ผมติดต่อระบบวิเคราะห์ไม่ได้ กรุณาลองใหม่อีกครั้งครับ";
 }
 
 export async function POST(request: Request) {
@@ -117,15 +117,15 @@ export async function POST(request: Request) {
     logger.warn("owner assistant failed", { requestId: actor.requestId, failure });
 
     if (failure === "TYPHOON_NOT_CONFIGURED") {
-      return NextResponse.json({ error: "ยังไม่ได้ตั้งค่า Typhoon API สำหรับระบบนี้" }, { status: 503 });
+      return NextResponse.json({ error: "ยังไม่ได้ตั้งค่าผู้ช่วยสำหรับระบบนี้ กรุณาติดต่อผู้ดูแล" }, { status: 503 });
     }
     if (failure === "TIMEOUT") {
-      return NextResponse.json({ error: "Typhoon ใช้เวลาตอบนานเกินไป กรุณาลองใหม่" }, { status: 504 });
+      return NextResponse.json({ error: "ผมใช้เวลาคิดนานเกินไป กรุณาลองถามใหม่อีกครั้งครับ" }, { status: 504 });
     }
     // ติดต่อได้แต่แกะข้อความไม่ได้ — คนละเรื่องกับติดต่อไม่ได้ จึงไม่ควรบอกเหมือนกัน
     if (failure === "TYPHOON_EMPTY_RESPONSE") {
       return NextResponse.json(
-        { error: "Typhoon ตอบกลับมาแต่ไม่มีข้อความที่อ่านได้ กรุณาลองถามใหม่อีกครั้ง" },
+        { error: "ผมตอบกลับมาไม่สมบูรณ์ กรุณาลองถามใหม่อีกครั้งครับ" },
         { status: 502 },
       );
     }

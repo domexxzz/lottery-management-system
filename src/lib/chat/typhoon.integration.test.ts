@@ -134,9 +134,33 @@ describe("คำขอที่ยิงไปยัง Typhoon", () => {
     expect(system).toContain("ผู้ช่วยล็อตเตอรี่");
     expect(system).toContain("ผมผู้ช่วยล็อตเตอรี่ครับ มีอะไรให้ช่วยบอกมาได้เลยครับ");
     // ต้องห้ามไม่ให้เผยว่าเป็นโมเดลอะไร ไม่งั้นคำตอบจะขัดกับชื่อที่ตั้งไว้
-    expect(system).toContain("ห้ามบอกว่าเป็นโมเดลภาษา");
+    expect(system).toContain("ห้ามบอกว่าตัวเองเป็นโมเดลภาษา");
+    /*
+     * กฎแนะนำตัวเคยกว้างเกินจนกลืนคำถามอื่น ถามสรุปยอดขายแล้วตอบแค่
+     * "ผมผู้ช่วยล็อตเตอรี่ครับ" ไม่แตะข้อมูลเลย ต้องมีข้อห้ามกำกับไว้เสมอ
+     */
+    expect(system).toContain("ห้ามใช้ประโยคแนะนำตัวนั้นตอบคำถามอื่น");
     // ชื่อเดิมต้องไม่หลงเหลือ
     expect(system).not.toContain("คุณคือ Typhoon");
+  });
+
+  /*
+   * หน้าจอ render ข้อความเป็น plain text ไม่แปลง Markdown
+   * ถ้ากติกาข้อนี้หลุด ผู้ใช้จะเห็น ** และ | ตาราง | ดิบ ๆ ติดมากับคำตอบ
+   */
+  test("system prompt กำหนดรูปแบบคำตอบให้อ่านง่าย", async () => {
+    const spy = stubFetch({ body: OK_BODY });
+    await askOwnerAssistant(f.actors.OWNER, [{ role: "user", content: "สรุปยอดขาย" }]);
+
+    const system = systemPromptOf(spy);
+    expect(system).toContain("ขึ้นต้นด้วยคำตอบตรง ๆ หนึ่งประโยคก่อนเสมอ");
+    expect(system).toContain("ห้ามใช้สัญลักษณ์ Markdown");
+    expect(system).toContain("เครื่องหมายคั่นหลักพัน");
+    expect(system).toContain("6 บรรทัด");
+    // เคยตอบว่ารวม 16 รายการ แล้วไล่ย่อยเป็น 0 ทั้งสี่ข้อในคำตอบเดียวกัน
+    expect(system).toContain("ห้ามตอบขัดกันเอง");
+    // เคยพ่นชื่อฟิลด์ดิบอย่าง (evidenceReviews) ออกมาให้ผู้ใช้เห็น
+    expect(system).toContain("ห้ามแสดงชื่อฟิลด์หรือชื่อตัวแปรภาษาอังกฤษ");
   });
 
   test("system prompt จำกัดแหล่งข้อมูลไว้ที่ฐานข้อมูลใน snapshot เท่านั้น", async () => {
@@ -152,7 +176,7 @@ describe("คำขอที่ยิงไปยัง Typhoon", () => {
     expect(system).toContain('"mutationToolsAvailable":false');
     expect(system).toContain("แหล่งข้อมูลเดียว");
     expect(system).toContain("ห้ามใช้ความรู้เดิมของโมเดล");
-    expect(system).toContain("ไม่มีข้อมูลนี้ในระบบที่ฉันเข้าถึงได้");
+    expect(system).toContain("ไม่มีข้อมูลนี้ในระบบที่ผมเข้าถึงได้");
     expect(system).toContain("ขอบเขตองค์กรของ Owner");
     expect(system).toContain("generatedAt");
     expect(system).toContain("pendingWork");

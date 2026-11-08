@@ -270,7 +270,7 @@ export function OwnerChatbot({
         <form className="owner-chat-composer" onSubmit={submit}>
           <div>
             <input value={message} onChange={(event) => setMessage(event.target.value)}
-              placeholder={configured ? "พิมพ์คำถาม..." : "กรุณาตั้งค่า Typhoon API ก่อนใช้งาน"}
+              placeholder={configured ? "พิมพ์คำถาม..." : "ยังไม่ได้ตั้งค่าผู้ช่วย ติดต่อผู้ดูแลระบบ"}
               aria-label="พิมพ์คำถาม" maxLength={2_000} disabled={!configured || isSending} autoFocus />
             <button type="submit" disabled={!configured || !message.trim() || isSending} aria-label="ส่งข้อความ">
               <DashboardIcon name="send" />
