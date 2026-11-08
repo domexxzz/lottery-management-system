@@ -17,6 +17,23 @@ type ConversationSummary = {
   updatedAt: string;
 };
 
+/**
+ * รูปประจำตัวของผู้ช่วย
+ *
+ * แยกเป็นคอมโพเนนต์เพราะใช้ซ้ำสามที่ คือหัวข้อ ทุกข้อความที่ผู้ช่วยตอบ
+ * และตอนกำลังโหลด ถ้าเปลี่ยนรูปทีหลังจะได้แก้ที่เดียว
+ *
+ * alt ว่างและ aria-hidden เพราะเป็นของตกแต่ง ตัวตนของผู้พูดสื่อผ่าน
+ * โครงสร้างข้อความอยู่แล้ว ไม่ต้องให้โปรแกรมอ่านหน้าจออ่านซ้ำทุกบรรทัด
+ */
+function AssistantAvatar({ className }: { className: string }) {
+  return (
+    <span className={className} aria-hidden="true">
+      <img src="/lottery-assistant.webp" alt="" />
+    </span>
+  );
+}
+
 export function OwnerChatbot({
   ownerName,
   configured,
@@ -136,12 +153,12 @@ export function OwnerChatbot({
 
   return (
     <div className="owner-chatbot owner-chatbot-page">
-      <section className="owner-chat-panel" aria-label="ผู้ช่วยสำหรับเจ้าของกิจการ">
+      <section className="owner-chat-panel" aria-label="ผู้ช่วยล็อตเตอรี่">
         <header className="owner-chat-header">
           <div className="owner-chat-brand">
-            <span className="owner-chat-logo" aria-hidden="true">AI</span>
+            <AssistantAvatar className="owner-chat-logo" />
             <div>
-              <h1>ผู้ช่วยผู้บริหาร</h1>
+              <h1>ผู้ช่วยล็อตเตอรี่</h1>
               <p>วิเคราะห์ข้อมูลล่าสุดจากระบบให้คุณ</p>
             </div>
           </div>
@@ -184,10 +201,10 @@ export function OwnerChatbot({
         <div ref={bodyRef} className="owner-chat-body" aria-live="polite" aria-busy={isSending || isHistoryLoading}>
           <div className="owner-chat-day">วันนี้</div>
           <div className="owner-chat-message assistant">
-            <span className="owner-chat-avatar">AI</span>
+            <AssistantAvatar className="owner-chat-avatar" />
             <div>
-              <p>สวัสดีคุณ{ownerName}</p>
-              <p>ถามภาพรวมธุรกิจ ยอดขาย งานที่รอตรวจ หรือสถานะงวดได้เลย ฉันจะตอบเฉพาะข้อมูลจากฐานข้อมูลในระบบ</p>
+              <p>สวัสดีคุณ{ownerName} ผมผู้ช่วยล็อตเตอรี่ครับ มีอะไรให้ช่วยบอกมาได้เลยครับ</p>
+              <p>ถามภาพรวมธุรกิจ ยอดขาย งานที่รอตรวจ หรือสถานะงวดได้เลยครับ ผมตอบเฉพาะข้อมูลจากฐานข้อมูลในระบบเท่านั้น</p>
             </div>
           </div>
 
@@ -212,7 +229,7 @@ export function OwnerChatbot({
 
           {messages.map((item) => (
             <div key={item.id} className={`owner-chat-message ${item.role}${item.error ? " error" : ""}`}>
-              {item.role === "assistant" && <span className="owner-chat-avatar">AI</span>}
+              {item.role === "assistant" && <AssistantAvatar className="owner-chat-avatar" />}
               <div><p>{item.content}</p></div>
               {item.role === "user" && (
                 <span className="owner-chat-avatar owner-chat-user-avatar" aria-hidden="true">
@@ -224,7 +241,7 @@ export function OwnerChatbot({
 
           {isSending && (
             <div className="owner-chat-message assistant loading">
-              <span className="owner-chat-avatar">AI</span>
+              <AssistantAvatar className="owner-chat-avatar" />
               <div><span /><span /><span /><em>กำลังวิเคราะห์ข้อมูล...</em></div>
             </div>
           )}

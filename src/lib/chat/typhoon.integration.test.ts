@@ -121,6 +121,24 @@ describe("คำขอที่ยิงไปยัง Typhoon", () => {
     expect(body.stream).toBe(false);
   });
 
+  /*
+   * ชื่อและการแนะนำตัวเป็นสิ่งที่ผู้ใช้เห็น ไม่ใช่รายละเอียดภายใน
+   * ถ้ามีคนแก้ prompt ทีหลังแล้วกฎนี้หลุด บอทจะกลับไปบอกว่าตัวเองเป็นโมเดลภาษา
+   * โดยไม่มีอะไรเตือน เทสนี้จึงล็อกไว้
+   */
+  test("system prompt กำหนดให้แนะนำตัวว่าเป็นผู้ช่วยล็อตเตอรี่", async () => {
+    const spy = stubFetch({ body: OK_BODY });
+    await askOwnerAssistant(f.actors.OWNER, [{ role: "user", content: "คุณคือใคร" }]);
+
+    const system = systemPromptOf(spy);
+    expect(system).toContain("ผู้ช่วยล็อตเตอรี่");
+    expect(system).toContain("ผมผู้ช่วยล็อตเตอรี่ครับ มีอะไรให้ช่วยบอกมาได้เลยครับ");
+    // ต้องห้ามไม่ให้เผยว่าเป็นโมเดลอะไร ไม่งั้นคำตอบจะขัดกับชื่อที่ตั้งไว้
+    expect(system).toContain("ห้ามบอกว่าเป็นโมเดลภาษา");
+    // ชื่อเดิมต้องไม่หลงเหลือ
+    expect(system).not.toContain("คุณคือ Typhoon");
+  });
+
   test("system prompt จำกัดแหล่งข้อมูลไว้ที่ฐานข้อมูลใน snapshot เท่านั้น", async () => {
     const spy = stubFetch({ body: OK_BODY });
     await askOwnerAssistant(f.actors.OWNER, [{ role: "user", content: "สรุปให้หน่อย" }]);

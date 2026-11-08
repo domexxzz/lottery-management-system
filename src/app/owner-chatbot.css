@@ -84,6 +84,25 @@
   box-shadow: 0 9px 22px rgb(35 174 181 / 16%);
 }
 
+/*
+ * รูปผู้ช่วยเป็นสติกเกอร์สีน้ำเงินบนพื้นขาว วางบนพื้นขาวจึงอ่านออกชัด
+ * ถ้าปล่อยบนไล่สีเขียวเดิมตัวการ์ตูนจะจมไปกับพื้นหลัง
+ *
+ * เจาะจงเฉพาะฝั่งผู้ช่วย รูปวงกลมอักษรย่อของผู้ใช้ยังใช้ไล่สีเดิม
+ */
+.owner-chat-logo,
+.owner-chat-message.assistant .owner-chat-avatar {
+  padding: 2px;
+  background: #fff;
+}
+
+.owner-chat-logo img,
+.owner-chat-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .owner-chat-logo {
   width: 54px;
   height: 54px;

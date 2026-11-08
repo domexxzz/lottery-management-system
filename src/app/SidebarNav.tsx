@@ -25,7 +25,7 @@ const ITEMS: MenuItem[] = [
   { href: "/evidence", label: "ตรวจหลักฐาน", icon: "evidence", roles: AUDIT_ROLES },
   { href: "/audit", label: "ประวัติการตรวจ", icon: "audit", roles: AUDIT_ROLES },
   { href: "/analytics", label: "วิเคราะห์เชิงลึก", icon: "analytics", roles: OWNER_ROLES },
-  { href: "/chat", label: "ผู้ช่วย AI", icon: "chat", roles: OWNER_ROLES },
+  { href: "/chat", label: "ผู้ช่วยล็อตเตอรี่", icon: "chat", roles: OWNER_ROLES },
   { href: "/prize-types", label: "Rulebook รางวัล", icon: "book", roles: MANAGEMENT_ROLES },
   { href: "/agents", label: "ภาพรวม Agent", icon: "agent", roles: MANAGEMENT_ROLES },
   { href: "/users", label: "จัดการผู้ใช้งาน", icon: "lock", roles: OWNER_ROLES },
