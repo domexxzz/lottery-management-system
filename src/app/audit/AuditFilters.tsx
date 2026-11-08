@@ -12,7 +12,7 @@ export function AuditFilters({ draws, users }: { draws: Option[]; users: Option[
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState(params.get("q") ?? "");
-  function update(key: string, value: string) { const next = new URLSearchParams(params.toString()); if (value) next.set(key, value); else next.delete(key); startTransition(() => router.replace(`${pathname}${next.size ? `?${next}` : ""}`, { scroll: false })); }
+  function update(key: string, value: string) { const next = new URLSearchParams(params.toString()); next.delete("page"); if (value) next.set(key, value); else next.delete(key); startTransition(() => router.replace(`${pathname}${next.size ? `?${next}` : ""}`, { scroll: false })); }
   useEffect(() => { const timer = window.setTimeout(() => { if (query !== (params.get("q") ?? "")) update("q", query.trim()); }, 350); return () => window.clearTimeout(timer); }, [query, params]);
   return <section className={`inspection-filters ${pending ? "is-loading" : ""}`} aria-label="ตัวกรองประวัติการตรวจผลรางวัล">
     <label>ค้นหาเลข<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="เลขบิล เลขที่คีย์ หรือชื่อลูกค้า"/></label>
