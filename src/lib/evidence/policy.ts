@@ -4,6 +4,14 @@ export function canManageDraftEvidence(input: { role: Role; billStatus: BillStat
   return input.billStatus === "DRAFT";
 }
 
+/**
+ * เพิ่มหลักฐานใหม่ได้ทั้งบิลร่างและบิลที่ยืนยันแล้วแต่ยังไม่ปิดรับ
+ * เพราะหน้าแทงเลขยืนยันบิลทันที แล้วให้แนบหลักฐานตามมาภายหลัง
+ */
+export function canAddEvidence(input: { role: Role; billStatus: BillStatus }): boolean {
+  return input.billStatus === "DRAFT" || input.billStatus === "CONFIRMED";
+}
+
 export function canReplaceRejectedEvidence(input: {
   role: Role;
   billStatus: BillStatus;
@@ -17,5 +25,5 @@ export function canReplaceRejectedEvidence(input: {
 }
 
 export function canReviewEvidence(role: Role): boolean {
-  return role === "OWNER" || role === "ADMIN";
+  return role === "GODMODE" || role === "OWNER" || role === "ADMIN";
 }

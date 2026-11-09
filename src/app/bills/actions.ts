@@ -8,6 +8,7 @@ import {
   cancelBill,
   confirmBill,
   createDraftBill,
+  placeBill,
   replaceDraftItems,
   requestCancelAfterCutoff,
 } from "@/lib/bills/service";
@@ -136,4 +137,85 @@ export async function cancelBillAction(
 
   revalidatePath(`/bills/${billId}`);
   return { error: null };
+}
+
+const PlaceSchema = z.object({
+  drawId: z.string().min(1, "ไม่พบงวดที่เปิดรับ"),
+  title: z.string().trim().min(1, "กรุณากรอกชื่อลูกค้า").max(120),
+  items: z
+    .array(
+      z.object({
+        prizeTypeId: z.string().min(1),
+        number: z.string().regex(/^\d{1,6}$/, "เลขไม่ถูกต้อง"),
+        stake: z.number().int("ยอดเดิมพันต้องเป็นจำนวนเต็ม").positive("ยอดเดิมพันต้องมากกว่า 0").max(10_000_000),
+      }),
+    )
+    .min(1, "ยังไม่มีรายการแทง")
+    .max(500, "รายการในโพยเดียวต้องไม่เกิน 500 รายการ"),
+});
+
+function readSlip(formData: FormData) {
+  let rawItems: unknown;
+  try {
+    rawItems = JSON.parse(String(formData.get("items") ?? "[]"));
+  } catch {
+    return { error: "รายการแทงไม่ถูกต้อง" } as const;
+  }
+  const parsed = PlaceSchema.safeParse({
+    drawId: formData.get("drawId"),
+    title: formData.get("title"),
+    items: rawItems,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง" } as const;
+  const representativeUserId = String(formData.get("representativeUserId") ?? "").trim() || undefined;
+  return {
+    data: {
+      ...parsed.data,
+      representativeUserId,
+      items: parsed.data.items.map((item) => ({ ...item, stake: String(item.stake) })),
+    },
+  } as const;
+}
+
+/** หน้าสร้างบิล: สร้างและยืนยันบิลในขั้นตอนเดียว */
+export async function placeBillAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const slip = readSlip(formData);
+  if ("error" in slip) return { error: slip.error ?? "ข้อมูลไม่ถูกต้อง" };
+
+  let billId: string;
+  try {
+    const placed = await placeBill(actor, slip.data);
+    billId = placed.billId;
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath("/bills");
+  redirect(`/bills/${billId}?placed=1#bill-evidence`);
+}
+
+/** หน้าสร้างบิล: บันทึกเป็นร่างไว้ก่อน แก้หรือยืนยันภายหลังได้จากหน้ารายละเอียด */
+export async function saveDraftBillAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const slip = readSlip(formData);
+  if ("error" in slip) return { error: slip.error ?? "ข้อมูลไม่ถูกต้อง" };
+
+  let billId: string;
+  try {
+    const created = await createDraftBill(actor, {
+      drawId: slip.data.drawId,
+      title: slip.data.title,
+      representativeUserId: actor.role === "AGENT" ? undefined : slip.data.representativeUserId,
+    });
+    billId = created.billId;
+    await replaceDraftItems(actor, billId, slip.data.items);
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath("/bills");
+  redirect(`/bills/${billId}`);
 }

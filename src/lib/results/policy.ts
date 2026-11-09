@@ -2,7 +2,7 @@ import type { Role, ResultStatus } from "@prisma/client";
 
 /** Owner และ Admin บันทึกพร้อมยืนยันผลใน Action เดียว */
 export function shouldApproveResultOnEntry(role: Role): boolean {
-  return role === "OWNER" || role === "ADMIN";
+  return role === "GODMODE" || role === "OWNER" || role === "ADMIN";
 }
 
 /**

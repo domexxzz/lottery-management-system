@@ -62,6 +62,7 @@ async function main() {
 
   // Admin รับผิดชอบงานปฏิบัติการและงานตรวจสอบทั้งหมด
   const users = [
+    { login: "godmode", displayName: "Godmode", role: "GODMODE" as const },
     { login: "owner", displayName: "เจ้าของกิจการ", role: "OWNER" as const },
     { login: "admin", displayName: "ผู้ดูแลระบบ", role: "ADMIN" as const },
     { login: "agent", displayName: "ตัวแทน กรุงเทพ", role: "AGENT" as const },

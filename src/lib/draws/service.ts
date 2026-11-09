@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
-import { officialDrawCutoffAt, officialDrawName, parseBangkokDateTimeLocal } from "./schedule";
+import { nextOfficialDrawDate, officialDrawCutoffAt, officialDrawName, parseBangkokDateTimeLocal } from "./schedule";
 
 export type DrawInput = {
   drawDate: string;
@@ -58,7 +58,15 @@ export async function createDraw(actor: Actor, input: DrawInput): Promise<{ draw
       where: { ...orgScope(actor), name },
     });
     const created = await tx.draw.create({
-      data: { organizationId: actor.organizationId, name, opensAt, cutoffAt, status: "OPEN" },
+      data: {
+        organizationId: actor.organizationId,
+        name,
+        lotteryType: "THAI_GOVERNMENT",
+        drawDate: nextOfficialDrawDate(input.drawDate),
+        opensAt,
+        cutoffAt,
+        status: "OPEN",
+      },
       select: { id: true, name: true, opensAt: true, cutoffAt: true, status: true },
     });
 

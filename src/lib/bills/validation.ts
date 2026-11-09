@@ -42,6 +42,7 @@ export type ValidationIssue = {
     | "STAKE_NOT_POSITIVE"
     | "STAKE_OVER_ITEM_LIMIT"
     | "DUPLICATE_ITEM"
+    | "NUMBER_CLOSED"
     | "OVER_PER_NUMBER_LIMIT"
     | "OVER_CREDIT_LIMIT"
     | "DRAW_NOT_OPEN"
@@ -100,6 +101,13 @@ export type ValidateInput = {
   /** ยอดที่ Agent รายนี้ใช้ไปแล้วในรอบนี้จากบิลใบอื่น */
   existingStakeInDraw: Prisma.Decimal;
   now: Date;
+  /** เลขเต็ม/เลขอั้นของงวด คีย์เดียวกับ dedupeKey */
+  restrictions?: ReadonlyMap<string, NumberRestriction>;
+};
+
+export type NumberRestriction = {
+  kind: "CLOSED" | "REDUCED_RATE";
+  payoutRate: Prisma.Decimal | null;
 };
 
 export function validateBill(input: ValidateInput): ValidationIssue[] {
@@ -161,6 +169,13 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
     }
 
     const key = dedupeKey(item.prizeTypeId, item.number, rule.matchRule);
+    if (input.restrictions?.get(key)?.kind === "CLOSED") {
+      issues.push({
+        itemIndex: index,
+        code: "NUMBER_CLOSED",
+        message: `รายการที่ ${index + 1}: ${rule.name} เลข ${item.number} เป็นเลขเต็ม ปิดรับแล้ว`,
+      });
+    }
     if (seen.has(key)) {
       issues.push({
         itemIndex: index,

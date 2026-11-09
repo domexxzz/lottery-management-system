@@ -12,7 +12,7 @@ export type PrizeOption = { id: string; code: number; name: string; digits: numb
 export type RepresentativeOption = {
   id: string;
   displayName: string;
-  role: "OWNER" | "ADMIN" | "AGENT";
+  role: "GODMODE" | "OWNER" | "ADMIN" | "AGENT";
   agent: { id: string; code: string; name: string; status: string } | null;
 };
 
@@ -47,8 +47,24 @@ function customerMatchScore(name: string, query: string): number | null {
   return distance <= Math.max(2, Math.floor(Math.max(candidate.length, search.length) * 0.3)) ? 3 + distance : null;
 }
 
-function CustomerNameCombobox({ names, disabledHint }: { names: string[]; disabledHint?: string }) {
-  const [value, setValue] = useState("");
+export function CustomerNameCombobox({
+  names,
+  disabledHint,
+  label = "ชื่อบิลหรือรหัสอ้างอิงลูกค้า",
+  value: controlledValue,
+  onValueChange,
+  disabled = false,
+}: {
+  names: string[];
+  disabledHint?: string;
+  label?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [innerValue, setInnerValue] = useState("");
+  const value = controlledValue ?? innerValue;
+  const setValue = onValueChange ?? setInnerValue;
   const [open, setOpen] = useState(false);
   const matches = useMemo(() => names
     .map((name, index) => ({ name, index, score: customerMatchScore(name, value) }))
@@ -57,13 +73,14 @@ function CustomerNameCombobox({ names, disabledHint }: { names: string[]; disabl
     .slice(0, 8), [names, value]);
 
   return <label htmlFor="title" className="customer-name-field">
-    ชื่อบิลหรือรหัสอ้างอิงลูกค้า
+    {label}
     <span className="customer-combobox">
       <input
         id="title"
         name="title"
         required
         maxLength={120}
+        disabled={disabled}
         value={value}
         onChange={(event) => { setValue(event.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
@@ -166,7 +183,7 @@ export function BillForm({
             options={representatives.map((representative) => ({
               value: representative.id,
               label: representative.displayName,
-              description: `${representative.role === "OWNER" ? "Owner" : representative.role === "ADMIN" ? "Admin" : "Agent"}${representative.agent ? ` · ${representative.agent.code}` : " · ระบบจะสร้าง Agent ให้อัตโนมัติ"}`,
+              description: `${representative.role === "GODMODE" ? "Godmode" : representative.role === "OWNER" ? "Owner" : representative.role === "ADMIN" ? "Admin" : "Agent"}${representative.agent ? ` · ${representative.agent.code}` : " · ระบบจะสร้าง Agent ให้อัตโนมัติ"}`,
             }))}
           />
         </div>

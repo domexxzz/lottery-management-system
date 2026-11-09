@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const actor = await getActor();
   if (!actor) return NextResponse.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
-  if (actor.role !== "OWNER") {
-    return NextResponse.json({ error: "เฉพาะ Owner เท่านั้นที่ดูประวัติการสนทนาได้" }, { status: 403 });
+  if (actor.role !== "GODMODE" && actor.role !== "OWNER") {
+    return NextResponse.json({ error: "เฉพาะ Godmode หรือ Owner เท่านั้นที่ดูประวัติการสนทนาได้" }, { status: 403 });
   }
 
   const { id } = await context.params;

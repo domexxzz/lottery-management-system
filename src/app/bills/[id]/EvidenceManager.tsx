@@ -101,7 +101,7 @@ export function EvidenceManager({
   const orderItems = useMemo(() => activeItems.filter((item) => item.type === "ORDER_EVIDENCE"), [activeItems]);
   const paymentItems = useMemo(() => activeItems.filter((item) => item.type === "PAYMENT_EVIDENCE"), [activeItems]);
   const otherItems = useMemo(() => activeItems.filter((item) => item.type === "OTHER"), [activeItems]);
-  const canAddNew = canUpload && billStatus === "DRAFT" && activeItems.length < maxFiles;
+  const canAddNew = canUpload && (billStatus === "DRAFT" || billStatus === "CONFIRMED") && activeItems.length < maxFiles;
   const hasCorrectedPending = activeItems.some((item) => item.status === "PENDING" && item.replacesId !== null);
 
   function upload(file: File, type: AttachmentType, replacesId?: string) {
@@ -212,7 +212,7 @@ export function EvidenceManager({
   }
 
   return (
-    <section className="evidence-section" aria-labelledby="customer-evidence-heading">
+    <section id="bill-evidence" className="evidence-section" aria-labelledby="customer-evidence-heading">
       <div className="evidence-heading">
         <div><p className="page-eyebrow">Customer Evidence</p><h2 id="customer-evidence-heading">หลักฐานจากลูกค้า</h2><p>ไฟล์ทั้งหมดเก็บแบบ Private และเปิดดูได้เฉพาะผู้มีสิทธิ์</p></div>
         <span className="evidence-count">{activeItems.length}/{maxFiles} รูป</span>

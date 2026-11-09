@@ -7,6 +7,7 @@ import { MockDataToggle } from "./MockDataToggle";
 import "./owner-chatbot.css";
 
 const ROLE_LABEL: Record<Role, string> = {
+  GODMODE: "ผู้ดูแลระบบสูงสุด",
   OWNER: "เจ้าของกิจการ",
   ADMIN: "ผู้ดูแลระบบ",
   AGENT: "ตัวแทน",
@@ -49,7 +50,7 @@ export function AppShell({
           </div>
           <div className="topbar-end">
             <ThemeToggle />
-            <MockDataToggle initialEnabled={mockDataEnabled} canManage={role === "OWNER"} />
+            <MockDataToggle initialEnabled={mockDataEnabled} canManage={role === "GODMODE" || role === "OWNER"} />
             <AccountMenu displayName={displayName} roleLabel={ROLE_LABEL[role]} />
           </div>
         </header>

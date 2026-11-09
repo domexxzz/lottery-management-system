@@ -8,10 +8,8 @@ type DrawOption = { id: string; name: string; status: string };
 
 const STATUS_LABEL: Record<string, string> = {
   OPEN: "เปิดรับ",
-  LOCKED: "ปิดรับแล้ว",
-  RESULT_PENDING: "รอผล",
-  SETTLED: "คำนวณแล้ว",
-  CLOSED: "ปิดบัญชี",
+  CLOSED: "ปิดรับ",
+  CHECKED: "ตรวจผลแล้ว",
 };
 
 export function AllDrawFilters({ draws }: { draws: DrawOption[] }) {
@@ -28,7 +26,7 @@ export function AllDrawFilters({ draws }: { draws: DrawOption[] }) {
 
   return <section className={`all-draw-filters ${pending ? "is-loading" : ""}`} aria-label="ค้นหาและกรองงวด">
     <div className="all-draw-search-field"><span>ค้นหางวด</span><AppDropdown value={searchParams.get("q") ?? ""} onValueChange={(value) => update("q", value)} placeholder="ทุกงวด" searchPlaceholder="พิมพ์ชื่องวด" emptyMessage="ไม่พบงวดที่ค้นหา" searchable options={[{ value: "", label: "ทุกงวด", description: "แสดงงวดทั้งหมด" }, ...draws.map((draw) => ({ value: draw.name, label: draw.name, description: STATUS_LABEL[draw.status] ?? draw.status, badge: "เลือก" }))]} /></div>
-    <label>สถานะ<AppDropdown value={searchParams.get("status") ?? ""} onValueChange={(value) => update("status", value)} options={[{ value: "", label: "ทุกสถานะ" }, { value: "OPEN", label: "เปิดรับ" }, { value: "LOCKED", label: "ปิดรับแล้ว" }, { value: "RESULT_PENDING", label: "รอผล" }, { value: "SETTLED", label: "คำนวณแล้ว" }, { value: "CLOSED", label: "ปิดบัญชี" }]} /></label>
+    <label>สถานะ<AppDropdown value={searchParams.get("status") ?? ""} onValueChange={(value) => update("status", value)} options={[{ value: "", label: "ทุกสถานะ" }, { value: "OPEN", label: "เปิดรับ" }, { value: "CLOSED", label: "ปิดรับ" }, { value: "CHECKED", label: "ตรวจผลแล้ว" }]} /></label>
     <span className="all-draw-sort">เปิดรับใหม่สุด → เก่าสุด</span>
     <button type="button" className="all-draw-clear" onClick={() => startTransition(() => router.replace(pathname, { scroll: false }))}>ล้างตัวกรอง</button>
     {pending && <small role="status">กำลังค้นหา…</small>}

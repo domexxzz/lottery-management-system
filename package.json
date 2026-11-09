@@ -12,6 +12,7 @@
     "db:up": "docker compose up -d",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
+    "user:godmode": "tsx scripts/bootstrap-godmode.ts",
     "db:seed:history": "tsx scripts/seed-three-month-demo.ts",
     "db:demo:winners": "tsx scripts/rebalance-demo-winners.ts",
     "db:mock:on": "tsx scripts/toggle-mock-data.ts --on",

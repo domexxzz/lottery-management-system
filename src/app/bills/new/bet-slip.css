@@ -1,0 +1,247 @@
+/*
+ * หน้าสร้างบิล
+ *
+ * ใช้ container query กับพื้นที่เนื้อหาจริง ไม่ใช่ความกว้างหน้าจอ
+ * เพราะ sidebar กินพื้นที่ไปราว 230px ทำให้ breakpoint ตาม viewport เบียดกันบนโน้ตบุ๊ก
+ *   ≥ 1040px  สามคอลัมน์: รายการ | แป้น | ตรวจสอบ
+ *   760–1039  สองคอลัมน์: แป้นด้านซ้าย รายการกับตรวจสอบซ้อนกันด้านขวา
+ *   < 760     คอลัมน์เดียว แป้นก่อน แล้วรายการและปุ่มยืนยัน
+ */
+.bet-slip-page { container: betslip / inline-size; }
+.bet-slip {
+  --bs-text: #0d2847;
+  --bs-muted: #5d7391;
+  --bs-border: #d4e3f3;
+  --bs-soft: #eef5fd;
+  --bs-surface: #fff;
+  --bs-blue: #0b6cf0;
+  --bs-blue-dark: #0752c2;
+  --bs-green: #12a35c;
+  --bs-red: #e2475a;
+  --bs-amber: #e8941a;
+  --bs-radius: 16px;
+  display: grid;
+  gap: 1rem;
+  color: var(--bs-text);
+}
+
+.bs-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: 0 0 .75rem; color: #5d7391; font-size: .85rem; }
+.bs-breadcrumb a { color: #2d5d93; text-decoration: none; }
+.bs-breadcrumb a:hover { text-decoration: underline; }
+.bs-breadcrumb span:last-child { color: #0d2847; font-weight: 600; }
+
+/* ---------------------------------------------------------------- หัวหน้า */
+.bs-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 1.5rem; }
+.bs-title { display: flex; align-items: center; gap: .9rem; min-width: 0; }
+.bs-title-icon { display: grid; flex: none; width: 56px; height: 56px; place-items: center; border-radius: 16px; color: var(--bs-blue); background: linear-gradient(145deg, #fff, #e3efff); box-shadow: 0 8px 20px rgb(11 108 240 / 14%); }
+.app-page .bs-title h1 { margin: 0; color: var(--bs-text); font-size: clamp(1.5rem, 2.4vw, 2.1rem); font-weight: 800; line-height: 1.15; letter-spacing: -.02em; }
+.bs-title p { margin: .2rem 0 0; color: var(--bs-muted); font-size: .92rem; }
+.bs-draw-bar { display: flex; width: 100%; justify-content: center; }
+.bs-draw-panel { display: grid; grid-template-columns: minmax(220px, auto) auto auto; align-items: center; gap: .4rem; max-width: 100%; padding: .38rem; border: 1px solid var(--bs-border); border-radius: 16px; background: rgb(255 255 255 / 88%); box-shadow: 0 10px 26px rgb(20 70 130 / 11%); backdrop-filter: blur(12px); }
+.bs-draw-select { display: inline-flex; min-height: 42px; align-items: center; gap: .55rem; padding: 0 .7rem; border-radius: 11px; background: #f1f7ff; }
+.bs-draw-flag { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 8px; background: #fff; box-shadow: 0 2px 7px rgb(31 85 145 / 12%); }
+.bs-draw-select select { width: 100%; min-height: 38px; padding: 0 .2rem; border: 0; outline: 0; color: var(--bs-text); background: transparent; font-size: .95rem; font-weight: 750; }
+.bs-draw-select strong { font-size: .98rem; }
+.bs-open-state { display: inline-flex; min-height: 38px; align-items: center; gap: .4rem; padding: 0 .75rem; border-radius: 11px; font-size: .86rem; font-weight: 800; white-space: nowrap; }
+.bs-open-state i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px rgb(255 255 255 / 55%); }
+.bs-open-state.is-open { color: #087a47; background: #def7e9; }
+.bs-open-state.is-closed { color: #56677a; background: #edf1f5; }
+.bs-countdown { display: inline-flex; min-height: 38px; align-items: center; gap: .5rem; padding: 0 .8rem; border-left: 1px solid #dce8f5; color: var(--bs-muted); white-space: nowrap; }
+.bs-countdown small { font-size: .8rem; }
+.bs-countdown strong { color: var(--bs-green); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+
+.bs-banner { display: flex; align-items: center; gap: .6rem; margin: 0; padding: .75rem 1rem; border: 1px solid #f3d27a; border-radius: 12px; color: #6a4b00; background: #fff8e0; font-weight: 600; }
+.bs-banner span { display: grid; width: 1.3rem; height: 1.3rem; place-items: center; border-radius: 50%; color: #fff; background: #c98a00; font-size: .78rem; font-style: italic; }
+
+/* ---------------------------------------------------------------- โครงสามคอลัมน์ */
+.bs-layout { display: grid; grid-template-columns: minmax(250px, .9fr) minmax(390px, 1.5fr) minmax(260px, .9fr); grid-template-areas: "list pad review"; align-items: start; gap: 1rem; }
+.bs-list { grid-area: list; }
+.bs-pad { grid-area: pad; }
+.bs-review { grid-area: review; }
+
+.bs-card { display: flex; min-width: 0; flex-direction: column; border: 1px solid var(--bs-border); border-radius: var(--bs-radius); background: var(--bs-surface); box-shadow: 0 10px 28px rgb(20 70 130 / 9%); }
+.bs-card-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .95rem 1.1rem; border-bottom: 1px solid var(--bs-border); }
+.app-page .bet-slip .bs-card-head h2 { display: flex; align-items: center; gap: .55rem; margin: 0; color: var(--bs-text); font-size: 1.08rem; font-weight: 800; }
+.bs-count { padding: .25rem .7rem; border-radius: 999px; color: var(--bs-blue); background: var(--bs-soft); font-size: .85rem; font-weight: 700; white-space: nowrap; }
+
+/* ---------------------------------------------------------------- รายการในบิล */
+.bs-list { min-height: 520px; }
+.bs-list-fields { display: grid; gap: .75rem; padding: 1rem 1.1rem .5rem; }
+.bs-field { display: grid; gap: .35rem; margin: 0; color: var(--bs-text); font-size: .88rem; font-weight: 600; }
+.bs-field select, .bs-list .customer-combobox > input { width: 100%; min-height: 44px; border: 1px solid #c8dbef; border-radius: 10px; color: var(--bs-text); background: #fff; font-size: .95rem; }
+.bs-list .customer-name-field { margin: 0; font-size: .88rem; font-weight: 600; }
+.bs-list .customer-field-hint { font-size: .75rem; }
+.bs-entries { display: grid; flex: 1; align-content: start; gap: .5rem; max-height: min(52vh, 460px); margin: 0; padding: .5rem 1.1rem 1rem; overflow-y: auto; list-style: none; scrollbar-width: thin; }
+.bs-empty { display: grid; justify-items: center; gap: .2rem; padding: 2rem .5rem; border: 1px dashed #bcd3ec; border-radius: 12px; color: var(--bs-muted); text-align: center; }
+.bs-empty strong { color: var(--bs-text); }
+.bs-empty small { font-size: .82rem; }
+.bs-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .5rem; padding: .55rem .6rem; border: 1px solid #e1ecf7; border-radius: 12px; background: #fbfdff; }
+.bs-badge { padding: .2rem .55rem; border-radius: 8px; color: #1d5fae; background: #e4f0ff; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.bs-badge-d2 { color: #148046; background: #e1f6ea; }
+.bs-badge-d3 { color: #1d5fae; background: #e4f0ff; }
+.bs-badge-run { color: #a35b00; background: #fff0d9; }
+.bs-badge-d4, .bs-badge-d5, .bs-badge-d6 { color: #6a3fb8; background: #efe8ff; }
+.bs-entry-main { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; }
+.bs-entry-number { color: var(--bs-text); font-size: 1.2rem; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
+.bs-entry-reduced { color: var(--bs-amber); font-size: .72rem; font-style: normal; }
+.bs-entry-stake { color: var(--bs-blue); font-size: .95rem; font-weight: 700; white-space: nowrap; }
+.bs-entry-stake small { color: var(--bs-muted); font-weight: 500; }
+.bs-entry-input { width: 96px; min-height: 34px; padding: 0 .5rem; border: 1px solid var(--bs-blue); border-radius: 8px; text-align: right; font-size: .95rem; }
+.bs-entry-actions { display: flex; gap: .3rem; }
+.app-page .bet-slip .bs-icon-button { display: grid; width: 32px; min-height: 32px; height: 32px; place-items: center; padding: 0; border: 1px solid #d3e3f4; border-radius: 8px; color: var(--bs-blue); background: #fff; box-shadow: none; }
+.app-page .bet-slip .bs-icon-button.is-danger { color: var(--bs-red); }
+.app-page .bet-slip .bs-icon-button:hover:not(:disabled) { background: var(--bs-soft); transform: none; }
+.bs-list-foot { display: grid; gap: .6rem; margin-top: auto; padding: .9rem 1.1rem 1.1rem; border-top: 1px solid var(--bs-border); }
+.app-page .bet-slip .bs-link-button { justify-self: start; min-height: 32px; padding: 0 .2rem; border: 0; color: var(--bs-blue); background: none; box-shadow: none; font-size: .88rem; font-weight: 700; }
+.app-page .bet-slip .bs-link-button:disabled { color: #9db0c6; }
+.bs-list-total { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .8rem 1rem; border-radius: 12px; background: var(--bs-soft); }
+.bs-list-total span { color: var(--bs-muted); font-weight: 600; }
+.bs-list-total strong { color: var(--bs-blue); font-size: 1.3rem; white-space: nowrap; }
+
+/* ---------------------------------------------------------------- แป้นแทงเลข */
+.bs-pad { gap: 0; }
+.bs-step { display: grid; justify-items: center; gap: .75rem; padding: 1rem 1.1rem; }
+.bs-step + .bs-step { border-top: 1px solid var(--bs-border); }
+.app-page .bet-slip .bs-step-title { display: flex; width: 100%; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 0; color: var(--bs-text); font-size: 1rem; font-weight: 800; }
+.bs-step-title > span, .bs-step-badge { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; color: #fff; background: var(--bs-blue); font-size: .82rem; font-weight: 800; }
+.bs-step-title small { color: var(--bs-muted); font-size: .8rem; font-weight: 500; }
+
+/* แท็บอยู่แถวเดียวเสมอ ถ้าพื้นที่ไม่พอให้เลื่อนแนวนอนแทนการตกบรรทัด */
+.bs-tabs { display: grid; width: 100%; grid-auto-columns: minmax(56px, 1fr); grid-auto-flow: column; gap: .4rem; overflow-x: auto; scrollbar-width: thin; }
+.app-page .bet-slip .bs-tab { display: grid; min-height: 62px; align-content: center; justify-items: center; gap: .15rem; padding: .45rem .35rem; border: 1px solid #cfe0f3; border-radius: 12px; color: var(--bs-text); background: #fff; box-shadow: none; }
+.app-page .bet-slip .bs-tab:hover:not(:disabled) { border-color: var(--bs-blue); transform: none; }
+.app-page .bet-slip .bs-tab[aria-selected="true"] { border-color: var(--bs-blue-dark); color: #fff; background: linear-gradient(145deg, #1f86ff, var(--bs-blue-dark)); box-shadow: 0 8px 18px rgb(11 108 240 / 28%); }
+.bs-tab-label { font-size: 1rem; font-weight: 800; white-space: nowrap; }
+.app-page .bet-slip .bs-tab small { color: var(--bs-muted); font-size: .7rem; white-space: nowrap; }
+/* premium-theme บังคับสีของ small ทุกตัวด้วย !important จึงต้องบังคับกลับในแท็บที่เลือก */
+.dashboard-shell .app-page .bet-slip .bs-tab[aria-selected="true"] small { color: rgb(255 255 255 / 88%) !important; }
+
+.bs-options { display: flex; width: 100%; flex-wrap: wrap; justify-content: center; gap: .45rem; }
+.app-page .bet-slip .bs-option { min-height: 38px; padding: 0 .9rem; border: 1px solid #cfe0f3; border-radius: 999px; color: #2d4a6b; background: #fff; box-shadow: none; font-size: .88rem; font-weight: 600; }
+.app-page .bet-slip .bs-option[aria-pressed="true"] { border-color: var(--bs-blue); color: #fff; background: var(--bs-blue); }
+.app-page .bet-slip .bs-option-reverse[aria-pressed="true"] { border-color: var(--bs-amber); background: var(--bs-amber); }
+.app-page .bet-slip .bs-option:hover:not(:disabled) { transform: none; }
+
+.bs-amount { display: grid; width: min(100%, 520px); gap: .75rem; }
+.bs-stepper { display: grid; width: 100%; grid-template-columns: 56px minmax(0, 1fr) 56px; }
+.app-page .bet-slip .bs-stepper button { min-height: 46px; padding: 0; border-radius: 0; color: #fff; box-shadow: none; font-size: 1.3rem; font-weight: 800; }
+.app-page .bet-slip .bs-minus { border-radius: 10px 0 0 10px; background: var(--bs-red); }
+.app-page .bet-slip .bs-plus { border-radius: 0 10px 10px 0; background: var(--bs-blue); }
+.bs-stepper input { min-width: 0; min-height: 46px; border: 1px solid #c8dbef; border-width: 1px 0; border-radius: 0; color: var(--bs-text); text-align: center; font-size: 1.2rem; font-weight: 800; }
+.bs-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; }
+.app-page .bet-slip .bs-chip { --chip: #f2c230; display: grid; width: 46px; min-height: 46px; height: 46px; place-items: center; padding: 0; border: 3px dashed rgb(255 255 255 / 85%); border-radius: 50%; color: #1f2a37; background: radial-gradient(circle, #fff 0 52%, var(--chip) 54%); box-shadow: 0 0 0 2px var(--chip), 0 3px 8px rgb(0 0 0 / 15%); font-size: .74rem; font-weight: 800; }
+.app-page .bet-slip .bs-chip:hover:not(:disabled) { transform: translateY(-2px); }
+.app-page .bet-slip .bs-chip-10 { --chip: #e46ab7; }
+.app-page .bet-slip .bs-chip-20 { --chip: #34b763; }
+.app-page .bet-slip .bs-chip-50 { --chip: #3fa9de; }
+.app-page .bet-slip .bs-chip-100 { --chip: #e8452c; }
+.app-page .bet-slip .bs-chip-500 { --chip: #9b59d0; }
+.app-page .bet-slip .bs-chip-1000 { --chip: #8f989f; }
+
+.bs-digits { display: flex; justify-content: center; gap: .7rem; }
+.bs-digits span { display: grid; width: 64px; height: 68px; place-items: center; border: 1px solid #bcd3ec; border-radius: 12px; color: var(--bs-blue-dark); background: #f6faff; font-size: 2rem; font-weight: 800; }
+.bs-digits span.is-filled { border-color: var(--bs-blue); background: #e8f2ff; }
+.bs-notice { width: min(100%, 520px); min-height: 1.9rem; margin: 0; padding: .3rem .6rem; border-radius: 8px; color: #13603a; background: #e5f6ec; font-size: .84rem; text-align: center; }
+.bs-notice.is-idle { background: transparent; }
+.bs-notice.is-error { color: #fff; background: var(--bs-red); }
+.bs-keypad { display: grid; width: min(100%, 520px); grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.app-page .bet-slip .bs-key { min-height: 52px; border: 1px solid #cfe0f3; border-radius: 10px; color: var(--bs-text); background: #fff; box-shadow: 0 2px 0 #dbe8f6; font-size: 1.3rem; font-weight: 700; }
+.app-page .bet-slip .bs-key:hover:not(:disabled) { background: var(--bs-soft); transform: none; }
+.app-page .bet-slip .bs-key:active:not(:disabled) { background: #dcebff; box-shadow: none; transform: translateY(1px); }
+.app-page .bet-slip .bs-key-muted { color: #44566c; background: #eef2f6; font-size: 1rem; }
+.app-page .bet-slip .bs-key-danger { border-color: #f4bcc4; color: var(--bs-red); background: #fff4f5; font-size: 1rem; }
+
+/* ---------------------------------------------------------------- ตรวจสอบบิล */
+.bs-summary { display: grid; gap: 0; margin: 0; padding: .4rem 1.1rem; }
+.bs-summary > div { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: .6rem 0; border-bottom: 1px solid #e6eef7; }
+.bs-summary dt { color: var(--bs-muted); font-size: .9rem; }
+.bs-summary dt small { font-size: .75rem; }
+.bs-summary dd { min-width: 0; margin: 0; overflow: hidden; color: var(--bs-text); font-weight: 700; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.bs-summary .is-total { margin: .35rem -.6rem; padding: .75rem .6rem; border: 0; border-radius: 10px; background: var(--bs-soft); }
+.bs-summary .is-total dd { color: var(--bs-blue); font-size: 1.35rem; }
+.bs-summary .is-commission dd { color: var(--bs-green); }
+.bs-finish-flow { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .65rem; margin: .65rem 1.1rem 0; padding: .7rem .85rem; border: 1px solid #dbe9f8; border-radius: 12px; color: #58718e; background: #f6faff; font-size: .8rem; font-weight: 700; }
+.bs-finish-flow span { display: flex; align-items: center; justify-content: center; gap: .45rem; white-space: nowrap; }
+.bs-finish-flow b { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; color: #fff; background: #9eb3ca; font-size: .75rem; }
+.bs-finish-flow .is-current { color: var(--bs-blue); }
+.bs-finish-flow .is-current b { background: var(--bs-blue); }
+.bs-finish-flow i { color: #91a5bc; font-style: normal; }
+.bs-checks { display: grid; gap: .45rem; margin: .5rem 1.1rem 0; padding: .8rem .9rem; border-radius: 12px; list-style: none; background: #f4f8fc; }
+.bs-checks li { display: flex; align-items: center; gap: .55rem; color: var(--bs-muted); font-size: .9rem; }
+.bs-checks li span { display: grid; flex: none; width: 20px; height: 20px; place-items: center; border-radius: 50%; color: #fff; background: #b9c6d4; font-size: .72rem; font-weight: 800; }
+.bs-checks li.is-ready { color: var(--bs-text); }
+.bs-checks li.is-ready span { background: var(--bs-green); }
+.bs-review-note { margin: 0 1.1rem 1rem; color: var(--bs-muted); font-size: .8rem; line-height: 1.5; text-align: center; }
+.bs-error { margin: .6rem 1.1rem 0; padding: .55rem .75rem; border-radius: 10px; color: #fff; background: var(--bs-red); font-size: .85rem; }
+.bs-review-actions { display: grid; gap: .55rem; padding: .9rem 1.1rem; }
+.app-page .bet-slip button.bs-draft { min-height: 46px; border: 1px solid var(--bs-blue); border-radius: 12px; color: var(--bs-blue); background: #fff; box-shadow: none; font-size: .98rem; font-weight: 700; }
+.app-page .bet-slip button.bs-confirm, .app-page .bs-modal button.bs-confirm { min-height: 52px; border: 0; border-radius: 12px; color: #fff; background: linear-gradient(135deg, #1f86ff, var(--bs-blue-dark, #0752c2)); box-shadow: 0 10px 22px rgb(11 108 240 / 28%); font-size: 1.02rem; font-weight: 800; }
+.bs-info-links { display: flex; flex-wrap: wrap; gap: .4rem; padding: .75rem 1.1rem 1rem; border-top: 1px solid var(--bs-border); }
+.app-page .bet-slip .bs-info-links button { display: inline-flex; min-height: 32px; align-items: center; gap: .3rem; padding: 0 .7rem; border: 1px solid #d3e3f4; border-radius: 999px; color: #2d4a6b; background: #fff; box-shadow: none; font-size: .8rem; }
+.bs-info-links b { display: grid; min-width: 18px; height: 18px; place-items: center; border-radius: 9px; color: #fff; background: var(--bs-red); font-size: .68rem; }
+
+/* ---------------------------------------------------------------- หน้าต่างข้อมูล */
+.bs-modal { width: min(540px, calc(100vw - 32px)); max-height: min(82vh, 660px); padding: 0; border: 0; border-radius: 16px; color: #0d2847; background: #fff; box-shadow: 0 24px 60px rgb(0 0 0 / 28%); }
+.bs-modal::backdrop { background: rgb(8 24 44 / 55%); }
+.bs-modal > header { display: flex; align-items: center; justify-content: space-between; padding: .9rem 1.1rem; border-bottom: 1px solid #e3ecf5; }
+.app-page .bs-modal h2 { margin: 0; color: #0d2847; font-size: 1.1rem; }
+.app-page .bs-modal .bs-modal-close { width: 34px; min-height: 34px; padding: 0; border-radius: 50%; color: #2d4a6b; background: #eef3f8; box-shadow: none; font-size: 1.2rem; }
+.bs-modal-body { max-height: calc(min(82vh, 660px) - 130px); padding: 1rem 1.1rem; overflow-y: auto; }
+.bs-modal .bs-summary { padding: 0; }
+.bs-modal > footer { display: grid; grid-template-columns: 1fr 1.4fr; gap: .6rem; padding: .9rem 1.1rem; border-top: 1px solid #e3ecf5; }
+.app-page .bs-modal .bs-secondary { min-height: 52px; border: 1px solid #cfe0f3; border-radius: 12px; color: #2d4a6b; background: #fff; box-shadow: none; }
+.bs-table { width: 100%; border-collapse: collapse; }
+.bs-table th, .bs-table td { padding: .55rem .5rem; border-bottom: 1px solid #edf2f7; text-align: left; }
+.bs-table .num { text-align: right; }
+.bs-rules { display: grid; gap: .5rem; margin: 0; padding-left: 1.1rem; line-height: 1.6; }
+.bs-pull-list { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
+.app-page .bs-modal .bs-pull-list button { display: flex; width: 100%; min-height: 56px; flex-direction: column; align-items: flex-start; justify-content: center; gap: .15rem; padding: .55rem .8rem; border: 1px solid #dbe7f3; border-radius: 10px; color: #0d2847; background: #f8fbff; box-shadow: none; text-align: left; }
+.app-page .bs-modal .bs-pull-list button:hover { border-color: #0b6cf0; background: #eef5ff; transform: none; }
+.bs-pull-list small { color: #5d7391; }
+
+/* ---------------------------------------------------------------- ปรับตามพื้นที่จริง */
+@container betslip (max-width: 1039px) {
+  .bs-layout { grid-template-columns: minmax(0, 1.35fr) minmax(300px, 1fr); grid-template-areas: "pad list" "pad review"; }
+  .bs-list { min-height: 0; }
+  .bs-entries { max-height: 320px; }
+}
+@container betslip (max-width: 759px) {
+  .bs-header { align-items: stretch; flex-direction: column; }
+  .bs-title-icon { width: 46px; height: 46px; }
+  .bs-draw-panel { grid-template-columns: minmax(0, 1fr) auto; width: 100%; }
+  .bs-countdown { grid-column: 1 / -1; justify-content: center; margin-top: .1rem; padding-top: .4rem; border-top: 1px solid #dce8f5; border-left: 0; }
+  .bs-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pad" "list" "review"; }
+  .bs-entries { max-height: none; }
+  /* มือถือ: แถบยืนยันเล็ก ๆ ติดด้านล่าง เหนือแถบเมนูของแอป เหลือแค่ยอดรวมกับปุ่ม */
+  .bs-review { position: sticky; bottom: calc(var(--mobile-nav-height, 0px) + env(safe-area-inset-bottom) + .5rem); z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .5rem; padding: .55rem .7rem; box-shadow: 0 -6px 24px rgb(20 70 130 / 18%); }
+  .bs-review > :is(.bs-card-head, .bs-finish-flow, .bs-checks, .bs-review-note, .bs-info-links) { display: none; }
+  .bs-review .bs-summary { padding: 0; }
+  .bs-review .bs-summary > div:not(.is-total) { display: none; }
+  .bs-review .bs-summary .is-total { flex-direction: column; align-items: flex-start; gap: 0; margin: 0; padding: 0 .2rem; background: none; }
+  .bs-review .bs-summary .is-total dt { font-size: .75rem; }
+  .bs-review .bs-summary .is-total dd { overflow: visible; font-size: 1.15rem; text-align: left; }
+  .bs-review .bs-error { grid-column: 1 / -1; margin: 0; }
+  .bs-review-actions { display: flex; padding: 0; }
+  .app-page .bet-slip .bs-review button.bs-draft { display: none; }
+  .app-page .bet-slip .bs-review button.bs-confirm { min-height: 44px; padding: 0 1rem; font-size: .92rem; }
+}
+@container betslip (max-width: 420px) {
+  .bs-step, .bs-list-fields, .bs-entries, .bs-list-foot { padding-inline: .8rem; }
+  .bs-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bs-digits span { width: 54px; height: 58px; font-size: 1.7rem; }
+  .app-page .bet-slip .bs-chip { width: 40px; min-height: 40px; height: 40px; font-size: .68rem; }
+}
+
+/* ---------------------------------------------------------------- โหมดมืด */
+html[data-theme="dark"] .bet-slip { --bs-text: #e6f0fb; --bs-muted: #9fb3c9; --bs-border: #2b445c; --bs-soft: #16314b; --bs-surface: #122536; }
+html[data-theme="dark"] .bs-breadcrumb, html[data-theme="dark"] .bs-breadcrumb span:last-child { color: #c9d8e8; }
+html[data-theme="dark"] .bs-breadcrumb a { color: #8cc0ff; }
+html[data-theme="dark"] .bs-title-icon { background: #16314b; box-shadow: none; }
+html[data-theme="dark"] .bs-draw-panel { border-color: #2b445c; background: rgb(18 37 54 / 92%); box-shadow: none; }
+html[data-theme="dark"] .bs-draw-select { background: #16314b; }
+html[data-theme="dark"] .bs-draw-flag { background: #20384d; box-shadow: none; }
+html[data-theme="dark"] .bs-countdown { border-color: #2b445c; }
+html[data-theme="dark"] :is(.bs-entry, .bs-checks, .bs-digits span, .bs-field select, .bs-list .customer-combobox > input, .bs-stepper input, .bs-entry-input) { border-color: #2b445c; color: var(--bs-text); background: #0f1f2e; }
+html[data-theme="dark"] .app-page .bet-slip :is(.bs-tab, .bs-option, .bs-key, .bs-icon-button, .bs-info-links button, .bs-draft) { border-color: #2b445c; color: var(--bs-text); background: #0f1f2e; box-shadow: none; }
+html[data-theme="dark"] .app-page .bet-slip .bs-tab[aria-selected="true"], html[data-theme="dark"] .app-page .bet-slip .bs-option[aria-pressed="true"] { color: #fff; background: var(--bs-blue); }
+html[data-theme="dark"] .bs-banner { border-color: #6b5520; color: #ffe2a0; background: #2c2412; }

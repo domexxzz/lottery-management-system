@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -22,8 +23,15 @@ export type Actor = {
   ipAddress: string | undefined;
 };
 
-/** คืน Actor ถ้ามี session ที่ใช้ได้ ไม่งั้นคืน null — ใช้กับหน้าที่เปิดสาธารณะได้ */
-export async function getActor(): Promise<Actor | null> {
+/**
+ * คืน Actor ถ้ามี session ที่ใช้ได้ ไม่งั้นคืน null — ใช้กับหน้าที่เปิดสาธารณะได้
+ *
+ * ห่อด้วย cache() ให้ layout กับ page ใน request เดียวกันใช้ผลลัพธ์ร่วมกัน
+ * เดิมทุกหน้าค้นหา session ซ้ำสองรอบ (layout หนึ่งรอบ page อีกรอบ)
+ */
+export const getActor = cache(resolveActor);
+
+async function resolveActor(): Promise<Actor | null> {
   const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   const session = await resolveSession(token);
   if (!session) return null;

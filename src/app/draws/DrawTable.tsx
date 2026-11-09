@@ -3,6 +3,11 @@ import { DashboardIcon } from "../DashboardIcon";
 import { LockDrawForm } from "./DrawForms";
 import { DrawReviewButton } from "./DrawReviewButton";
 import type { listDraws } from "@/lib/draws/service";
+import {
+  DRAW_DISPLAY_STATUS_LABEL,
+  getDrawDisplayStatus as resolveDrawDisplayStatus,
+  type DrawDisplayStatus,
+} from "@/lib/draws/display-status";
 
 const BANGKOK = new Intl.DateTimeFormat("th-TH", {
   dateStyle: "medium",
@@ -10,18 +15,12 @@ const BANGKOK = new Intl.DateTimeFormat("th-TH", {
   timeZone: "Asia/Bangkok",
 });
 
-export const DRAW_STATUS_LABEL: Record<string, string> = {
-  OPEN: "เปิดรับ",
-  LOCKED: "ปิดรับแล้ว",
-  RESULT_PENDING: "รอผล",
-  SETTLED: "คำนวณแล้ว",
-  CLOSED: "ปิดบัญชี",
-};
+export const DRAW_STATUS_LABEL = DRAW_DISPLAY_STATUS_LABEL;
 
 export type DrawRow = Awaited<ReturnType<typeof listDraws>>[number];
 
-export function getDrawDisplayStatus(draw: DrawRow): string {
-  return draw.status;
+export function getDrawDisplayStatus(draw: DrawRow): DrawDisplayStatus {
+  return resolveDrawDisplayStatus(draw);
 }
 
 export function DrawTable({
@@ -60,7 +59,7 @@ export function DrawTable({
           <td>{BANGKOK.format(draw.cutoffAt)}</td>
           <td>{draw._count.bills}</td>
           <td>
-            <span className={`status-pill ${draw.status === "OPEN" || draw.status === "CLOSED" ? "success" : draw.status === "RESULT_PENDING" ? "warning" : "info"}`}>
+            <span className={`status-pill ${displayStatus === "OPEN" ? "success" : displayStatus === "CLOSED" ? "warning" : "info"}`}>
               {DRAW_STATUS_LABEL[displayStatus] ?? displayStatus}
             </span>
             {draw.lockedAt !== null && <span className="muted"> · {BANGKOK.format(draw.lockedAt)}</span>}

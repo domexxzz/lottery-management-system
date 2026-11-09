@@ -7,7 +7,7 @@ import {
 } from "./policy";
 
 describe("ยืนยันผลในขั้นตอนเดียว", () => {
-  test.each(["OWNER", "ADMIN"] as const)("%s บันทึกแล้วอนุมัติทันที", (role) => {
+  test.each(["GODMODE", "OWNER", "ADMIN"] as const)("%s บันทึกแล้วอนุมัติทันที", (role) => {
     expect(shouldApproveResultOnEntry(role)).toBe(true);
   });
 

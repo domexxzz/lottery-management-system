@@ -12,23 +12,13 @@ import "./mobile-ux.css";
 const sarabun = localFont({
   variable: "--font-sarabun",
   display: "swap",
+  // ใช้เฉพาะน้ำหนักที่หน้าจอใช้จริง เดิมโหลด 16 ไฟล์รวมตัวเอียงและน้ำหนักบางที่ไม่ได้ใช้
   src: [
-    { path: "./fonts/Sarabun-Thin.ttf", weight: "100", style: "normal" },
-    { path: "./fonts/Sarabun-ThinItalic.ttf", weight: "100", style: "italic" },
-    { path: "./fonts/Sarabun-ExtraLight.ttf", weight: "200", style: "normal" },
-    { path: "./fonts/Sarabun-ExtraLightItalic.ttf", weight: "200", style: "italic" },
-    { path: "./fonts/Sarabun-Light.ttf", weight: "300", style: "normal" },
-    { path: "./fonts/Sarabun-LightItalic.ttf", weight: "300", style: "italic" },
     { path: "./fonts/Sarabun-Regular.ttf", weight: "400", style: "normal" },
-    { path: "./fonts/Sarabun-Italic.ttf", weight: "400", style: "italic" },
     { path: "./fonts/Sarabun-Medium.ttf", weight: "500", style: "normal" },
-    { path: "./fonts/Sarabun-MediumItalic.ttf", weight: "500", style: "italic" },
     { path: "./fonts/Sarabun-SemiBold.ttf", weight: "600", style: "normal" },
-    { path: "./fonts/Sarabun-SemiBoldItalic.ttf", weight: "600", style: "italic" },
     { path: "./fonts/Sarabun-Bold.ttf", weight: "700", style: "normal" },
-    { path: "./fonts/Sarabun-BoldItalic.ttf", weight: "700", style: "italic" },
     { path: "./fonts/Sarabun-ExtraBold.ttf", weight: "800", style: "normal" },
-    { path: "./fonts/Sarabun-ExtraBoldItalic.ttf", weight: "800", style: "italic" },
   ],
 });
 

@@ -15,6 +15,7 @@ import {
   reconcileSettlement,
 } from "@/lib/settlement/service";
 import { AppError } from "@/lib/errors";
+import { addRestriction, removeRestriction } from "@/lib/draws/restrictions";
 
 export type ActionState = { error: string | null; message: string | null };
 
@@ -186,4 +187,36 @@ export async function approveSettlementAction(
 
   revalidatePath(`/draws/${drawId}`);
   return { error: null, message: "ปิดบัญชีงวดแล้ว" };
+}
+
+export async function addRestrictionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const drawId = String(formData.get("drawId") ?? "");
+  const kind = formData.get("kind") === "REDUCED_RATE" ? "REDUCED_RATE" : "CLOSED";
+  try {
+    await addRestriction(actor, {
+      drawId,
+      prizeTypeId: String(formData.get("prizeTypeId") ?? ""),
+      number: String(formData.get("number") ?? ""),
+      kind,
+      payoutRate: String(formData.get("payoutRate") ?? ""),
+    });
+  } catch (error) {
+    return fail(error);
+  }
+  revalidatePath(`/draws/${drawId}`);
+  revalidatePath("/bills/new");
+  return { error: null, message: kind === "CLOSED" ? "บันทึกเลขเต็มแล้ว" : "บันทึกเลขอั้นแล้ว" };
+}
+
+export async function removeRestrictionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  try {
+    const { drawId } = await removeRestriction(actor, String(formData.get("restrictionId") ?? ""));
+    revalidatePath(`/draws/${drawId}`);
+    revalidatePath("/bills/new");
+  } catch (error) {
+    return fail(error);
+  }
+  return { error: null, message: "ยกเลิกแล้ว" };
 }

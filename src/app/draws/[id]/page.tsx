@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { DashboardIcon } from "../../DashboardIcon";
 import { notFound, redirect } from "next/navigation";
-import { getActor } from "@/lib/auth/context";
+import { getActor, orgScope } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { expectedResultLength } from "@/lib/results/matching";
 import { listResults } from "@/lib/results/service";
@@ -18,17 +18,14 @@ import {
   SaveAllResultsForm,
 } from "./DrawForms";
 import { GloResultImporter } from "./GloResultImporter";
+import { RestrictionManager } from "./RestrictionManager";
+import { listRestrictions } from "@/lib/draws/restrictions";
+import { compactRate } from "@/lib/bills/betting";
+import { prisma } from "@/lib/db";
+import { DRAW_DISPLAY_STATUS_LABEL, getDrawDisplayStatus } from "@/lib/draws/display-status";
 import "./draw-detail.css";
 
 export const dynamic = "force-dynamic";
-
-const DRAW_STATUS: Record<string, string> = {
-  OPEN: "เปิดรับ",
-  LOCKED: "ปิดรับแล้ว",
-  RESULT_PENDING: "รอผลและการอนุมัติ",
-  SETTLED: "คำนวณแล้ว รอปิดบัญชี",
-  CLOSED: "ปิดบัญชีแล้ว",
-};
 
 const RESULT_STATUS: Record<string, string> = {
   DRAFT: "รอตรวจ",
@@ -68,6 +65,17 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
   }
 
   const { draw, prizeTypes, latestByPrizeType, approvedByPrizeType } = results;
+  const canManageRestrictions = can(actor.role, "draw.manage");
+  const [restrictionRows, restrictionPrizeTypes] = canManageRestrictions
+    ? await Promise.all([
+        listRestrictions(actor, draw.id),
+        prisma.prizeType.findMany({
+          where: { ...orgScope(actor), isActive: true },
+          orderBy: { code: "asc" },
+          select: { id: true, name: true, digits: true, payoutRate: true },
+        }),
+      ])
+    : [[], []];
   const canEnter = can(actor.role, "result.enter");
   const canApproveResult = can(actor.role, "result.approve");
   const canProposeCorrection = can(actor.role, "result.proposeCorrection");
@@ -75,6 +83,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
   const canApproveSettlement = can(actor.role, "settlement.approve");
 
   const approvedCount = approvedByPrizeType.size;
+  const displayStatus = getDrawDisplayStatus(draw);
   const bulkFormId = "bulk-result-form";
   const editableCount = prizeTypes.filter((pt) => !approvedByPrizeType.has(pt.id)).length;
   const pendingCorrections = prizeTypes.filter(
@@ -89,8 +98,8 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
     <main className="workspace-page draw-detail-page">
       <section className="card workspace-card" aria-labelledby="draw-heading">
         <p><Link href="/draws">← กลับไปรายการงวด</Link></p>
-        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Draw & Settlement</p><h1 id="draw-heading">{draw.name}</h1><p>บันทึกผลและคำนวณ Settlement จากข้อมูลจริงของงวด</p></div><span className={`status-pill ${draw.status === "CLOSED" ? "success" : draw.status === "RESULT_PENDING" ? "warning" : "info"}`}>{DRAW_STATUS[draw.status] ?? draw.status}</span></header>
-        <div className="draw-detail-summary"><div><span>ผลที่อนุมัติแล้ว</span><strong>{approvedCount} / {prizeTypes.length}</strong></div><div><span>Settlement</span><strong>{settlementData.settlements.length}</strong><small>Agent</small></div><div><span>สถานะงวด</span><strong>{DRAW_STATUS[draw.status] ?? draw.status}</strong></div></div>
+        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Draw & Settlement</p><h1 id="draw-heading">{draw.name}</h1><p>บันทึกผลและคำนวณ Settlement จากข้อมูลจริงของงวด</p></div><span className={`status-pill ${displayStatus === "OPEN" ? "success" : displayStatus === "CLOSED" ? "warning" : "info"}`}>{DRAW_DISPLAY_STATUS_LABEL[displayStatus]}</span></header>
+        <div className="draw-detail-summary"><div><span>ผลที่อนุมัติแล้ว</span><strong>{approvedCount} / {prizeTypes.length}</strong></div><div><span>Settlement</span><strong>{settlementData.settlements.length}</strong><small>Agent</small></div><div><span>สถานะงวด</span><strong>{DRAW_DISPLAY_STATUS_LABEL[displayStatus]}</strong></div></div>
 
         <h2>ผลรางวัล</h2>
         {draw.status === "OPEN" ? (
@@ -277,6 +286,26 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
               <ApproveSettlementForm drawId={draw.id} />
             )}
           </>
+        )}
+        {canManageRestrictions && (
+          <RestrictionManager
+            drawId={draw.id}
+            editable={draw.status === "OPEN"}
+            prizeTypes={restrictionPrizeTypes.map((prizeType) => ({
+              id: prizeType.id,
+              name: prizeType.name,
+              digits: prizeType.digits,
+              payoutRate: compactRate(prizeType.payoutRate),
+            }))}
+            rows={restrictionRows.map((row) => ({
+              id: row.id,
+              number: row.number,
+              kind: row.kind,
+              payoutRate: row.payoutRate ? compactRate(row.payoutRate) : null,
+              prizeTypeName: row.prizeType.name,
+              normalRate: compactRate(row.prizeType.payoutRate),
+            }))}
+          />
         )}
       </section>
     </main>

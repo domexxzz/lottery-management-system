@@ -15,7 +15,7 @@ import type { Role } from "@prisma/client";
  */
 
 /** บทบาทที่คุยได้กับทุกคนในองค์กร */
-const STAFF_ROLES: readonly Role[] = ["OWNER", "ADMIN"];
+const STAFF_ROLES: readonly Role[] = ["GODMODE", "OWNER", "ADMIN"];
 
 export function isStaff(role: Role): boolean {
   return STAFF_ROLES.includes(role);

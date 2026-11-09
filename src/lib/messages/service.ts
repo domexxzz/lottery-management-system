@@ -40,10 +40,19 @@ function isOnline(lastSeenAt: Date | null, now: Date): boolean {
  * เรียกจากทุก endpoint ของแชท ถือเป็นสัญญาณชีพที่ถูกที่สุดที่มี
  * โดยไม่ต้องเปิด websocket หรือ job แยก
  */
+/** เขียนเวลาที่เห็นผู้ใช้ไม่บ่อยกว่านี้ ช่วงออนไลน์คือ 2 นาที จึงยังแสดงสถานะได้ถูกต้อง */
+const PRESENCE_WRITE_INTERVAL_MS = 30 * 1000;
+
 export async function touchPresence(actor: Actor): Promise<void> {
-  await prisma.user.update({
-    where: { id: actor.userId },
-    data: { lastSeenAt: new Date() },
+  // หน้าแชท poll ทุกไม่กี่วินาที ถ้าเขียนทุกครั้งจะเป็นการ UPDATE ตาราง users ถี่โดยไม่จำเป็น
+  // updateMany ที่มีเงื่อนไขเวลาจะไม่แตะแถวเลยถ้าเพิ่งบันทึกไปไม่นาน
+  const now = new Date();
+  await prisma.user.updateMany({
+    where: {
+      id: actor.userId,
+      OR: [{ lastSeenAt: null }, { lastSeenAt: { lt: new Date(now.getTime() - PRESENCE_WRITE_INTERVAL_MS) } }],
+    },
+    data: { lastSeenAt: now },
   });
 }
 
@@ -137,20 +146,29 @@ export async function listConversations(actor: Actor) {
     take: 100,
   });
 
+  // นับข้อความที่ยังไม่อ่านของทุกห้องใน query เดียว
+  // เดิมนับทีละห้องแบบรอคิว ห้องละหนึ่ง query สูงสุด 100 query ทุกครั้งที่หน้าแชท poll
+  const lastReadOf = (row: (typeof rows)[number]) => (row.userAId === actor.userId ? row.userALastReadAt : row.userBLastReadAt);
+  const unreadRows = rows.length === 0 ? [] : await prisma.directMessage.groupBy({
+    by: ["conversationId"],
+    where: {
+      senderId: { not: actor.userId },
+      cancelledAt: null,
+      OR: rows.map((row) => {
+        const myLastRead = lastReadOf(row);
+        return { conversationId: row.id, ...(myLastRead ? { createdAt: { gt: myLastRead } } : {}) };
+      }),
+    },
+    _count: { _all: true },
+  });
+  const unreadByConversation = new Map(unreadRows.map((row) => [row.conversationId, row._count._all]));
+
   const now = new Date();
   const result = [];
   for (const row of rows) {
     const iAmA = row.userAId === actor.userId;
     const other = iAmA ? row.userB : row.userA;
-    const myLastRead = iAmA ? row.userALastReadAt : row.userBLastReadAt;
-    const unread = await prisma.directMessage.count({
-      where: {
-        conversationId: row.id,
-        senderId: { not: actor.userId },
-        cancelledAt: null,
-        ...(myLastRead ? { createdAt: { gt: myLastRead } } : {}),
-      },
-    });
+    const unread = unreadByConversation.get(row.id) ?? 0;
     const last = row.messages[0];
     result.push({
       id: row.id,

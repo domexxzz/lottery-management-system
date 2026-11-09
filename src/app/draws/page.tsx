@@ -48,7 +48,18 @@ export default async function DrawsPage() {
 
         <section className="draw-overview-section" aria-labelledby="draw-overview-heading">
           <div className="draw-section-heading"><div><p className="page-eyebrow">Draw Summary</p><h2 id="draw-overview-heading">สถานะของงวดทั้งหมด</h2></div><span>{draws.length} งวด</span></div>
-          <div className="draw-status-overview">{Object.entries(DRAW_STATUS_LABEL).map(([status, label]) => <div key={status} className={`draw-status-${status.toLowerCase()}`}><span>{label}</span><strong>{draws.filter((draw) => getDrawDisplayStatus(draw) === status).length}</strong><small>งวด</small></div>)}</div>
+          <div className="draw-status-overview">{Object.entries(DRAW_STATUS_LABEL).map(([status, label]) => {
+            const count = draws.filter((draw) => getDrawDisplayStatus(draw) === status).length;
+            return <Link
+              key={status}
+              href={{ pathname: "/draws/all", query: { status } }}
+              prefetch={false}
+              className={`draw-status-${status.toLowerCase()}`}
+              aria-label={`${label} ${count} งวด ดูรายการทั้งหมด`}
+            >
+              <span>{label}</span><strong>{count}</strong><small>งวด</small><b>ดูงวด →</b>
+            </Link>;
+          })}</div>
         </section>
 
         <section className="draw-latest-section" aria-labelledby="latest-draws-heading">

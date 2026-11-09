@@ -1,5 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { can } from "./permissions";
+import { can, PERMISSIONS } from "./permissions";
+
+describe("Godmode เป็นผู้ดูแลระบบสูงสุด", () => {
+  test("มีสิทธิ์ครบทุกความสามารถที่ระบบประกาศ", () => {
+    for (const permission of PERMISSIONS) expect(can("GODMODE", permission)).toBe(true);
+  });
+});
 
 describe("Admin เป็นผู้ปฏิบัติงานและผู้ตรวจ", () => {
   test("Admin กรอกและยืนยันผลได้", () => {
@@ -12,8 +18,9 @@ describe("Admin เป็นผู้ปฏิบัติงานและผ�
     expect(can("ADMIN", "user.manage")).toBe(false);
   });
 
-  test("Owner ยังเป็นผู้เดียวที่จัดการ Agent ได้", () => {
+  test("Owner ยังจัดการ Agent ได้ตามบทบาทเจ้าของกิจการ", () => {
     expect(can("OWNER", "agent.manage")).toBe(true);
+    expect(can("OWNER", "system.override")).toBe(false);
   });
 });
 

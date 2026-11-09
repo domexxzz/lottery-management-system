@@ -268,6 +268,32 @@ async function planAndRunQuery(
   }
 }
 
+/**
+ * ภาพรวมธุรกิจระดับองค์กรที่ส่งให้โมเดลทุกข้อความ ใช้ query ราว 50 ตัวต่อครั้ง
+ *
+ * เก็บไว้ช่วงสั้น ๆ ต่อองค์กรและบทบาท คำถามต่อเนื่องในบทสนทนาเดียวกันจึงไม่ต้องคำนวณใหม่ทุกข้อความ
+ * ข้อมูลอาจช้ากว่าความจริงได้ไม่เกิน CONTEXT_TTL_MS ส่วนบริบทที่ขึ้นกับคำถามยังคำนวณใหม่ทุกครั้ง
+ */
+const CONTEXT_TTL_MS = 30_000;
+type OrgContext = [Awaited<ReturnType<typeof buildOwnerSnapshot>>, Awaited<ReturnType<typeof buildOwnerAnalytics>>, Awaited<ReturnType<typeof buildMarketInsight>>];
+const orgContextCache = new Map<string, { expiresAt: number; value: Promise<OrgContext> }>();
+
+function cachedOrgContext(actor: Actor): Promise<OrgContext> {
+  const key = `${actor.organizationId}:${actor.role}`;
+  const now = Date.now();
+  const hit = orgContextCache.get(key);
+  if (hit && hit.expiresAt > now) return hit.value;
+
+  for (const [cacheKey, entry] of orgContextCache) {
+    if (entry.expiresAt <= now) orgContextCache.delete(cacheKey);
+  }
+  const value = Promise.all([buildOwnerSnapshot(actor), buildOwnerAnalytics(actor), buildMarketInsight(actor)]);
+  orgContextCache.set(key, { expiresAt: now + CONTEXT_TTL_MS, value });
+  // ถ้าคำนวณล้มเหลว อย่าเก็บ error ไว้ให้ข้อความถัดไปล้มตาม
+  value.catch(() => orgContextCache.delete(key));
+  return value;
+}
+
 export async function askOwnerAssistant(actor: Actor, messages: OwnerChatMessage[]): Promise<string> {
   const apiKey = process.env.TYPHOON_API_KEY?.trim();
   if (!apiKey) throw new Error("TYPHOON_NOT_CONFIGURED");
@@ -275,11 +301,9 @@ export async function askOwnerAssistant(actor: Actor, messages: OwnerChatMessage
   const latestUserMessage =
     [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
 
-  const [snapshot, readOnlyContext, analytics, market, queryResult] = await Promise.all([
-    buildOwnerSnapshot(actor),
+  const [[snapshot, analytics, market], readOnlyContext, queryResult] = await Promise.all([
+    cachedOrgContext(actor),
     buildReadOnlyBusinessContext(actor, latestUserMessage),
-    buildOwnerAnalytics(actor),
-    buildMarketInsight(actor),
     planAndRunQuery(apiKey, actor, messages),
   ]);
 

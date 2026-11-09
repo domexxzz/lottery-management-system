@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { createUserAction, setUserStatusAction, type UserActionState } from "./actions";
+import { createUserAction, setUserStatusAction, updateUserIdentityAction, type UserActionState } from "./actions";
 
 const INITIAL: UserActionState = { error: null, ok: false };
 
@@ -31,4 +31,20 @@ export function UserStatusForm({ userId, currentStatus }: { userId: string; curr
     {state.error && <small className="error" role="alert">{state.error}</small>}
     <button type="submit" className={nextStatus === "SUSPENDED" ? "danger" : "secondary"} disabled={pending}>{pending ? "กำลังบันทึก..." : label}</button>
   </form>;
+}
+
+export function UserIdentityForm({ userId, login, displayName }: { userId: string; login: string; displayName: string }) {
+  const [state, action, pending] = useActionState(updateUserIdentityAction, INITIAL);
+  return <details className="user-identity-editor">
+    <summary>แก้ชื่อ / ชื่อผู้ใช้</summary>
+    <form action={action}>
+      <input type="hidden" name="userId" value={userId} />
+      <label>ชื่อผู้ใช้<input name="login" defaultValue={login} required maxLength={64} /></label>
+      <label>ชื่อที่แสดง<input name="displayName" defaultValue={displayName} required maxLength={120} /></label>
+      <label>เหตุผล<input name="reason" required maxLength={200} placeholder="ระบุสาเหตุเพื่อ Audit Log" /></label>
+      {state.error && <small className="error" role="alert">{state.error}</small>}
+      {state.ok && <small className="success" role="status">บันทึกแล้ว</small>}
+      <button type="submit" disabled={pending}>{pending ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}</button>
+    </form>
+  </details>;
 }

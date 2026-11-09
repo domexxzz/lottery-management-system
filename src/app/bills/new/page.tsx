@@ -1,34 +1,50 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { billScope, getActor, orgScope } from "@/lib/auth/context";
+import { getActor, orgScope } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
-import { BillForm } from "./BillForm";
+import { BetSlip, type SlipRepresentative, type SlipRestriction } from "./BetSlip";
+import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
 import "./new-bill.css";
+import "./bet-slip.css";
 
 export const dynamic = "force-dynamic";
 
-const BANGKOK = new Intl.DateTimeFormat("th-TH", {
-  dateStyle: "medium",
-  timeStyle: "short",
+const CUTOFF_LABEL = new Intl.DateTimeFormat("th-TH", {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
   timeZone: "Asia/Bangkok",
 });
 
+const ROLE_LABEL = { GODMODE: "Godmode", OWNER: "Owner", ADMIN: "Admin", AGENT: "Agent" } as const;
+
+/**
+ * หน้าสร้างบิล ใช้หน้าเดียวกันทุกบทบาท
+ *
+ * โหลดเฉพาะสิ่งที่ต้องใช้ตอนเปิดหน้า (งวด รางวัล เลขเต็ม/อั้น ผู้รับบิล)
+ * ชื่อลูกค้าเดิมและโพยเดิมโหลดผ่าน /api/bills/slip-data ภายหลัง
+ * เดิมหน้านี้ดึงบิลถึง 5,000 ใบพร้อมรายการเลขทุกครั้งที่เปิด
+ */
 export default async function NewBillPage() {
   const actor = await getActor();
   if (!actor) redirect("/login");
+  if (actor.mustChangePassword) redirect("/change-password");
   if (!can(actor.role, "bill.create")) redirect("/bills");
 
-  const [draws, prizeTypes, representatives, historicalBills] = await Promise.all([
+  const drawSelect = { id: true, name: true, drawDate: true, lotteryType: true, cutoffAt: true, status: true } as const;
+  const [openDraws, prizeTypes, representatives, ownAgent] = await Promise.all([
     prisma.draw.findMany({
-      where: { ...orgScope(actor), status: "OPEN" },
+      where: { ...orgScope(actor), status: "OPEN", cutoffAt: { gt: new Date() } },
       orderBy: { cutoffAt: "asc" },
-      select: { id: true, name: true, cutoffAt: true },
+      take: 12,
+      select: drawSelect,
     }),
     prisma.prizeType.findMany({
       where: { ...orgScope(actor), isActive: true },
       orderBy: { code: "asc" },
-      select: { id: true, code: true, name: true, digits: true },
+      select: { id: true, code: true, name: true, digits: true, matchRule: true, payoutRate: true },
     }),
     actor.role === "AGENT"
       ? Promise.resolve(null)
@@ -36,61 +52,67 @@ export default async function NewBillPage() {
           where: {
             ...orgScope(actor),
             status: "ACTIVE",
-            role: { in: actor.role === "OWNER" ? ["OWNER", "ADMIN", "AGENT"] : ["ADMIN", "AGENT"] },
+            role: { in: actor.role === "GODMODE" ? ["GODMODE", "OWNER", "ADMIN", "AGENT"] : actor.role === "OWNER" ? ["OWNER", "ADMIN", "AGENT"] : ["ADMIN", "AGENT"] },
+            OR: [{ agent: null }, { agent: { status: "ACTIVE" } }],
           },
           orderBy: [{ role: "asc" }, { displayName: "asc" }],
-          select: {
-            id: true,
-            displayName: true,
-            role: true,
-            agent: { select: { id: true, code: true, name: true, status: true } },
-          },
+          select: { id: true, displayName: true, role: true, agent: { select: { code: true, commissionRate: true } } },
         }),
-    prisma.bill.findMany({
-      where: actor.role === "AGENT" ? billScope(actor) : orgScope(actor),
-      orderBy: { createdAt: "desc" },
-      take: 5000,
-      select: { agentId: true, title: true, agent: { select: { userId: true } } },
-    }),
+    actor.agentId
+      ? prisma.agent.findUnique({ where: { id: actor.agentId }, select: { commissionRate: true } })
+      : Promise.resolve(null),
   ]);
 
-  const customerNamesByRepresentative: Record<string, string[]> = {};
-  const seenByRepresentative = new Map<string, Set<string>>();
-  for (const bill of historicalBills) {
-    const representativeKey = actor.role === "AGENT" ? bill.agentId : bill.agent.userId;
-    if (!representativeKey) continue;
-    const title = bill.title.trim();
-    if (!title) continue;
-    const seen = seenByRepresentative.get(representativeKey) ?? new Set<string>();
-    const normalized = title.toLocaleLowerCase("th-TH");
-    if (seen.has(normalized) || seen.size >= 100) continue;
-    seen.add(normalized);
-    seenByRepresentative.set(representativeKey, seen);
-    (customerNamesByRepresentative[representativeKey] ??= []).push(title);
+  // ไม่มีงวดเปิดรับ ให้แสดงงวดล่าสุดพร้อมแถบ "หมดเวลาการเดิมพัน"
+  const draws = openDraws.length > 0
+    ? openDraws
+    : await prisma.draw.findMany({ where: orgScope(actor), orderBy: { cutoffAt: "desc" }, take: 1, select: drawSelect });
+
+  const restrictionRows = draws.length === 0 ? [] : await prisma.restrictedNumber.findMany({
+    where: { ...orgScope(actor), drawId: { in: draws.map((draw) => draw.id) } },
+    select: { drawId: true, prizeTypeId: true, number: true, kind: true, payoutRate: true },
+  });
+  const restrictions: Record<string, SlipRestriction[]> = {};
+  for (const row of restrictionRows) {
+    (restrictions[row.drawId] ??= []).push({
+      prizeTypeId: row.prizeTypeId,
+      number: row.number,
+      kind: row.kind,
+      payoutRate: row.payoutRate?.toFixed(4) ?? null,
+    });
   }
 
-  return (
-    <main className="workspace-page new-bill-page">
-      <section className="card workspace-card" aria-labelledby="new-bill-heading">
-        <p><Link href="/bills">← กลับไปรายการบิล</Link></p>
-        <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">Create Bill</p><h1 id="new-bill-heading">สร้างบิลใหม่</h1><p>เลือกงวด เจ้าของบิล และเพิ่มรายการรับแทงอย่างเป็นขั้นตอน</p></div></header>
+  const slipRepresentatives: SlipRepresentative[] | null = representatives?.map((user) => ({
+    id: user.id,
+    displayName: user.displayName,
+    roleLabel: ROLE_LABEL[user.role],
+    agentCode: user.agent?.code ?? null,
+    commissionRate: user.agent ? user.agent.commissionRate.toFixed(4) : null,
+  })) ?? null;
 
-        {draws.length === 0 ? (
-          <p className="error">ยังไม่มีงวดที่เปิดรับรายการ</p>
-        ) : (
-          <BillForm
-            draws={draws.map((d) => ({
-              id: d.id,
-              name: d.name,
-              cutoffAt: BANGKOK.format(d.cutoffAt),
-            }))}
-            prizeTypes={prizeTypes}
-            representatives={representatives}
-            currentRepresentativeId={actor.role === "AGENT" ? actor.agentId : actor.userId}
-            customerNamesByRepresentative={customerNamesByRepresentative}
-          />
-        )}
-      </section>
+  return (
+    <main className="workspace-page new-bill-page bet-slip-page">
+      <nav className="bs-breadcrumb" aria-label="ตำแหน่งหน้า">
+        <Link href="/">หน้าหลัก</Link><span aria-hidden="true">/</span><Link href="/bills">รายการบิล</Link><span aria-hidden="true">/</span><span>สร้างบิลใหม่</span>
+      </nav>
+      {draws.length === 0 ? (
+        <p className="error">ยังไม่มีงวดในระบบ</p>
+      ) : (
+        <BetSlip
+          draws={draws.map((draw) => ({
+            id: draw.id,
+            lotteryLabel: lotteryLabel(draw.lotteryType),
+            dateLabel: drawDateLabel(draw),
+            cutoffAt: draw.cutoffAt.toISOString(),
+            cutoffLabel: CUTOFF_LABEL.format(draw.cutoffAt),
+            open: draw.status === "OPEN",
+          }))}
+          prizeTypes={prizeTypes.map((prizeType) => ({ ...prizeType, payoutRate: prizeType.payoutRate.toFixed(4) }))}
+          restrictions={restrictions}
+          representatives={slipRepresentatives}
+          ownCommissionRate={ownAgent ? ownAgent.commissionRate.toFixed(4) : null}
+        />
+      )}
     </main>
   );
 }

@@ -258,3 +258,33 @@ describe("totalStake", () => {
     expect(totalStake([]).toFixed(2)).toBe("0.00");
   });
 });
+
+describe("เลขเต็มและเลขอั้น", () => {
+  const restricted = (kind: "CLOSED" | "REDUCED_RATE") =>
+    new Map([[dedupeKey(THREE_TOD.id, "123", "PERMUTATION"), { kind, payoutRate: kind === "CLOSED" ? null : d("100") }]]);
+
+  function runWith(restrictions: ReturnType<typeof restricted>, numberValue: string) {
+    return validateBill({
+      items: [{ prizeTypeId: THREE_TOD.id, number: numberValue, stake: d("10") }],
+      rules: RULES,
+      agent: { creditLimit: null, perNumberLimit: null },
+      draw: OPEN_DRAW,
+      existingStakeInDraw: d(0),
+      now: NOW,
+      restrictions,
+    });
+  }
+
+  test("ปฏิเสธเลขเต็ม รวมถึงเลขสลับหลักของรางวัลโต๊ด", () => {
+    expect(codes(runWith(restricted("CLOSED"), "123"))).toContain("NUMBER_CLOSED");
+    expect(codes(runWith(restricted("CLOSED"), "321"))).toContain("NUMBER_CLOSED");
+  });
+
+  test("เลขอั้นยังรับได้ อัตราจ่ายลดลงถูกจัดการตอน snapshot", () => {
+    expect(runWith(restricted("REDUCED_RATE"), "123")).toEqual([]);
+  });
+
+  test("เลขเต็มของประเภทหนึ่งไม่กระทบประเภทอื่น", () => {
+    expect(run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("10") }] })).toEqual([]);
+  });
+});

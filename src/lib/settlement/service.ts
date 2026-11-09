@@ -60,8 +60,13 @@ export async function previewSettlement(
   drawId: string,
 ): Promise<SettlementPreview[]> {
   const resultsByPrizeType = await approvedResults(tx, drawId);
+  const bills = await loadSettlementBills(tx, drawId);
+  return evaluateSettlement(bills, resultsByPrizeType).previews;
+}
 
-  const bills = await tx.bill.findMany({
+/** บิลที่มีผลผูกพันของรอบ พร้อมรายการเลข โหลดครั้งเดียวแล้วใช้ทั้งคำนวณยอดและเขียนผล */
+function loadSettlementBills(tx: TxClient, drawId: string) {
+  return tx.bill.findMany({
     where: { drawId, status: { in: ["LOCKED", "SETTLED"] } },
     select: {
       id: true,
@@ -79,7 +84,16 @@ export async function previewSettlement(
       },
     },
   });
+}
 
+type SettlementBill = Awaited<ReturnType<typeof loadSettlementBills>>[number];
+
+/**
+ * ตัดสินผลทุกรายการและสรุปยอดต่อ Agent ใน pass เดียว
+ *
+ * คืนทั้งยอดสรุปและรายการที่ถูกรางวัลพร้อมยอดจ่าย ให้ calculateSettlement เขียนลงฐานข้อมูลต่อ
+ */
+function evaluateSettlement(bills: SettlementBill[], resultsByPrizeType: Map<string, string[]>) {
   type Bucket = {
     agentCode: string;
     agentName: string;
@@ -91,6 +105,8 @@ export async function previewSettlement(
   };
 
   const byAgent = new Map<string, Bucket>();
+  const winningItems: { itemId: string; payout: Prisma.Decimal }[] = [];
+  const billPayouts = new Map<string, Prisma.Decimal>();
 
   for (const bill of bills) {
     let bucket = byAgent.get(bill.agentId);
@@ -107,6 +123,7 @@ export async function previewSettlement(
       byAgent.set(bill.agentId, bucket);
     }
 
+    const payoutsOfBill: Prisma.Decimal[] = [];
     for (const item of bill.items) {
       bucket.stakes.push(item.stake);
       bucket.totalItems += 1;
@@ -121,13 +138,17 @@ export async function previewSettlement(
       });
 
       if (won) {
-        bucket.payouts.push(itemPayout(item.stake, item.payoutRateSnapshot));
+        const payout = itemPayout(item.stake, item.payoutRateSnapshot);
+        bucket.payouts.push(payout);
         bucket.winningItems += 1;
+        payoutsOfBill.push(payout);
+        winningItems.push({ itemId: item.id, payout });
       }
     }
+    if (payoutsOfBill.length > 0) billPayouts.set(bill.id, sumMoney(payoutsOfBill));
   }
 
-  return [...byAgent.entries()]
+  const previews = [...byAgent.entries()]
     .map(([agentId, b]) => {
       const gross = sumMoney(b.stakes);
       const payout = sumMoney(b.payouts);
@@ -150,6 +171,21 @@ export async function previewSettlement(
       };
     })
     .sort((a, b) => a.agentCode.localeCompare(b.agentCode));
+
+  return { previews, winningItems, billPayouts };
+}
+
+/** จัดกลุ่ม id ตามยอดเงินเดียวกัน เพื่อเขียนด้วย updateMany ครั้งเดียวต่อยอด */
+function groupByAmount<T>(rows: T[], idOf: (row: T) => string, amountOf: (row: T) => Prisma.Decimal) {
+  const groups = new Map<string, { amount: Prisma.Decimal; ids: string[] }>();
+  for (const row of rows) {
+    const amount = amountOf(row);
+    const key = amount.toString();
+    const group = groups.get(key) ?? { amount, ids: [] };
+    group.ids.push(idOf(row));
+    groups.set(key, group);
+  }
+  return [...groups.values()];
 }
 
 /**
@@ -182,51 +218,24 @@ export async function calculateSettlement(
       throw new ConflictError("ยังไม่มีผลรางวัลที่อนุมัติแล้วในรอบนี้");
     }
 
-    const previews = await previewSettlement(tx, draw.id);
+    // โหลดบิลครั้งเดียว ตัดสินผลครั้งเดียว แล้วเขียนแบบเป็นชุด
+    // เดิมโหลดบิลสองรอบ และ UPDATE ทีละรายการทีละบิลภายใน transaction
+    // ซึ่งเป็นหลักร้อยถึงหลักพันคำสั่งต่องวด และเสี่ยงชน timeout ของ transaction เมื่อข้อมูลโต
+    const bills = await loadSettlementBills(tx, draw.id);
+    const { previews, winningItems, billPayouts } = evaluateSettlement(bills, resultsByPrizeType);
+    const billIds = bills.map((bill) => bill.id);
 
-    // เขียนผลว่ารายการไหนถูกรางวัลและจ่ายเท่าไร
-    const bills = await tx.bill.findMany({
-      where: { drawId: draw.id, status: { in: ["LOCKED", "SETTLED"] } },
-      select: {
-        id: true,
-        items: {
-          select: {
-            id: true,
-            prizeTypeId: true,
-            number: true,
-            stake: true,
-            payoutRateSnapshot: true,
-            prizeType: { select: { matchRule: true } },
-          },
-        },
-      },
-    });
-
-    for (const bill of bills) {
-      const billPayouts: Prisma.Decimal[] = [];
-
-      for (const item of bill.items) {
-        const resultValues = resultsByPrizeType.get(item.prizeTypeId);
-        const won =
-          resultValues !== undefined &&
-          isWinningAny({
-            number: item.number,
-            resultValues,
-            matchRule: item.prizeType.matchRule,
-          });
-        const payout = won ? itemPayout(item.stake, item.payoutRateSnapshot) : ZERO;
-        if (won) billPayouts.push(payout);
-
-        await tx.billItem.update({
-          where: { id: item.id },
-          data: { isWinner: won, payout },
-        });
+    if (billIds.length > 0) {
+      // ล้างผลเดิมของทุกรายการก่อน แล้วค่อยเขียนเฉพาะรายการที่ถูกรางวัล
+      await tx.billItem.updateMany({ where: { billId: { in: billIds } }, data: { isWinner: false, payout: ZERO } });
+      for (const group of groupByAmount(winningItems, (row) => row.itemId, (row) => row.payout)) {
+        await tx.billItem.updateMany({ where: { id: { in: group.ids } }, data: { isWinner: true, payout: group.amount } });
       }
 
-      await tx.bill.update({
-        where: { id: bill.id },
-        data: { status: "SETTLED", totalPayout: sumMoney(billPayouts) },
-      });
+      await tx.bill.updateMany({ where: { id: { in: billIds } }, data: { status: "SETTLED", totalPayout: ZERO } });
+      for (const group of groupByAmount([...billPayouts.entries()], ([billId]) => billId, ([, amount]) => amount)) {
+        await tx.bill.updateMany({ where: { id: { in: group.ids } }, data: { totalPayout: group.amount } });
+      }
     }
 
     for (const preview of previews) {
@@ -277,7 +286,7 @@ export async function calculateSettlement(
     });
 
     return previews;
-  });
+  }, { timeout: 60_000, maxWait: 10_000 });
 }
 
 export async function reconcileSettlement(actor: Actor, settlementId: string): Promise<void> {

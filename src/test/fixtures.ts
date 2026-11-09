@@ -42,6 +42,7 @@ export async function resetDatabase(): Promise<void> {
     "owner_chat_messages",
     "owner_chat_conversations",
     "audit_events",
+    "restricted_numbers",
     "bill_attachments",
     "bill_payments",
     "settlements",

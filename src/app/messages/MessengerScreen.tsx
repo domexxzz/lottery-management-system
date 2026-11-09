@@ -17,7 +17,7 @@ type Contact = {
   id: string;
   login: string;
   displayName: string;
-  role: "OWNER" | "ADMIN" | "AGENT";
+  role: "GODMODE" | "OWNER" | "ADMIN" | "AGENT";
   hasAvatar: boolean;
   online: boolean;
 };
@@ -50,6 +50,7 @@ type Message = {
 };
 
 const ROLE_LABEL: Record<Contact["role"], string> = {
+  GODMODE: "Godmode",
   OWNER: "เจ้าของกิจการ",
   ADMIN: "ผู้ดูแลระบบ",
   AGENT: "ตัวแทน",
@@ -63,6 +64,10 @@ const ROLE_LABEL: Record<Contact["role"], string> = {
  * พิมพ์ผิดหรือไม่มีสิทธิ์ ซึ่งเป็นคนละปัญหาและแก้คนละทาง
  */
 const SEARCH_HINT: Record<Contact["role"], { placeholder: string; hint: string }> = {
+  GODMODE: {
+    placeholder: "ค้นหาชื่อ หรือชื่อผู้ใช้...",
+    hint: "คุณคุยได้กับทุกคนในองค์กร",
+  },
   OWNER: {
     placeholder: "ค้นหาชื่อ หรือชื่อผู้ใช้...",
     hint: "คุณคุยได้กับทุกคนในองค์กร พิมพ์ชื่อที่แสดง เช่น ตัวแทน กรุงเทพ หรือชื่อผู้ใช้ เช่น agent2",
@@ -124,12 +129,22 @@ export function MessengerScreen({ myName, myRole, openWithUserId }: { myName: st
   const bodyRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // เก็บ JSON ล่าสุดไว้เทียบ ถ้าข้อมูลไม่เปลี่ยนก็ไม่ต้อง setState ทั้งรายการทุกรอบ poll
+  const roomsJson = useRef("");
+  const threadJson = useRef("");
+  /** ห้องที่ผู้ใช้เปิดล่าสุด ใช้ทิ้งคำตอบของห้องเก่าที่มาถึงช้ากว่า */
+  const requestedThread = useRef<string | null>(null);
+  /** ข้อความล่าสุดจากอีกฝ่ายที่แจ้งว่าอ่านแล้ว ส่ง read เฉพาะเมื่อมีข้อความใหม่ */
+  const lastMarkedRead = useRef<string | null>(null);
+
   const loadRooms = useCallback(async () => {
     try {
       const response = await fetch("/api/messages/conversations", { cache: "no-store" });
       if (!response.ok) return;
-      const payload = (await response.json()) as { data: Room[] };
-      setRooms(payload.data);
+      const text = await response.text();
+      if (text === roomsJson.current) return;
+      roomsJson.current = text;
+      setRooms((JSON.parse(text) as { data: Room[] }).data);
     } catch {
       // เน็ตสะดุดหรือเซิร์ฟเวอร์กำลังรีสตาร์ท รอบถัดไปของ poll จะดึงใหม่เอง
     }
@@ -148,21 +163,32 @@ export function MessengerScreen({ myName, myRole, openWithUserId }: { myName: st
   }, []);
 
   const loadThread = useCallback(async (conversationId: string) => {
+    requestedThread.current = conversationId;
     try {
       const response = await fetch(`/api/messages/conversations/${conversationId}`, { cache: "no-store" });
-      if (!response.ok) return;
-      const payload = (await response.json()) as { data: { other: Room["other"]; messages: Message[] } };
-      setThread(payload.data);
-      await fetch(`/api/messages/conversations/${conversationId}/read`, { method: "POST" });
+      if (!response.ok || requestedThread.current !== conversationId) return;
+      const text = await response.text();
+      if (requestedThread.current !== conversationId) return;
+      const payload = JSON.parse(text) as { data: { other: Room["other"]; messages: Message[] } };
+      if (text !== threadJson.current) {
+        threadJson.current = text;
+        setThread(payload.data);
+      }
+      const latestIncoming = [...payload.data.messages].reverse().find((message) => !message.mine);
+      const readKey = latestIncoming ? `${conversationId}:${latestIncoming.id}` : null;
+      if (readKey && readKey !== lastMarkedRead.current) {
+        lastMarkedRead.current = readKey;
+        await fetch(`/api/messages/conversations/${conversationId}/read`, { method: "POST" });
+      }
     } catch {
       // ข้อความที่แสดงอยู่ยังอ่านได้ รอบถัดไปค่อยซิงก์ใหม่
     }
   }, []);
 
+  // รายชื่อผู้ติดต่อโหลดจาก effect ของช่องค้นหาด้านล่างอยู่แล้ว ไม่ต้องโหลดซ้ำตอนเปิดหน้า
   useEffect(() => {
     void loadRooms();
-    void loadContacts("");
-  }, [loadRooms, loadContacts]);
+  }, [loadRooms]);
 
   /*
    * มาจากปุ่ม "ส่งข้อความ" ในหน้าโปรไฟล์ Agent
@@ -178,13 +204,20 @@ export function MessengerScreen({ myName, myRole, openWithUserId }: { myName: st
     void openWith(openWithUserId);
   }, [openWithUserId]);
 
-  // ดึงซ้ำเป็นช่วง ๆ แทน realtime
+  // ดึงซ้ำเป็นช่วง ๆ แทน realtime และหยุดเมื่อแท็บถูกซ่อน กลับมาเมื่อไรดึงทันที
   useEffect(() => {
-    const timer = setInterval(() => {
+    const poll = () => {
+      if (document.visibilityState !== "visible") return;
       void loadRooms();
       if (activeId) void loadThread(activeId);
-    }, POLL_MS);
-    return () => clearInterval(timer);
+    };
+    const timer = setInterval(poll, POLL_MS);
+    const onVisible = () => { if (document.visibilityState === "visible") poll(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [activeId, loadRooms, loadThread]);
 
   useEffect(() => {

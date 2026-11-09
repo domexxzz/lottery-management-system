@@ -9,7 +9,7 @@ import { getStorageConfig } from "@/lib/storage/config";
 import { getStorageProvider } from "@/lib/storage/provider";
 import type { PrivateObjectStorage } from "@/lib/storage/types";
 import { validateAndProcessEvidenceImage } from "./image";
-import { canManageDraftEvidence, canReplaceRejectedEvidence, canReviewEvidence } from "./policy";
+import { canAddEvidence, canManageDraftEvidence, canReplaceRejectedEvidence, canReviewEvidence } from "./policy";
 
 export type PaymentInput = {
   amount: string;
@@ -142,8 +142,8 @@ export async function uploadBillAttachment(
     if (!canReplaceRejectedEvidence({ role: actor.role, billStatus: bill.status, attachmentStatus: replacement.status })) {
       throw new ConflictError("เปลี่ยนได้เฉพาะหลักฐานที่ถูกตีกลับและบิลยังไม่ปิดบัญชี");
     }
-  } else if (!canManageDraftEvidence({ role: actor.role, billStatus: bill.status })) {
-    throw new ConflictError("เพิ่มหลักฐานใหม่ได้เฉพาะบิลร่าง");
+  } else if (!canAddEvidence({ role: actor.role, billStatus: bill.status })) {
+    throw new ConflictError("เพิ่มหลักฐานใหม่ได้เฉพาะบิลที่ยังไม่ปิดรับ");
   }
 
   const config = getStorageConfig();

@@ -29,16 +29,23 @@ export function MockDataToggle({ initialEnabled, canManage }: MockDataToggleProp
         if (data.enabled !== enabledRef.current) {
           enabledRef.current = data.enabled;
           setEnabled(data.enabled);
-          router.refresh();
+          // หน่วงแบบสุ่มเล็กน้อย ไม่ให้ทุกแท็บในองค์กรโหลดหน้าใหม่พร้อมกันในวินาทีเดียว
+          window.setTimeout(() => router.refresh(), Math.random() * 1500);
         }
       } catch {
         // การ polling เป็นเพียงการซิงก์หน้าที่เปิดค้างไว้ ไม่รบกวนผู้ใช้เมื่อเครือข่ายสะดุด
       }
     }
-    const interval = window.setInterval(() => void synchronize(), 8_000);
+    // ตรวจเฉพาะตอนแท็บแสดงอยู่ แท็บที่ซ่อนไว้ไม่ต้องยิงทุก 8 วินาที กลับมาเมื่อไรตรวจทันที
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void synchronize();
+    }, 8_000);
+    const onVisible = () => { if (document.visibilityState === "visible") void synchronize(); };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       controller.abort();
       window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [router]);
 

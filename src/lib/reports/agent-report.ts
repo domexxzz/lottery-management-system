@@ -1,7 +1,7 @@
 import { Prisma, type BillStatus, type SettlementStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/context";
 import { orgScope, requirePermission } from "@/lib/auth/context";
-import { prisma } from "@/lib/db";
+import { databaseSchema, prisma } from "@/lib/db";
 import { ForbiddenError } from "@/lib/errors";
 import { sumMoney, ZERO } from "@/lib/money";
 
@@ -85,12 +85,14 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
   const selectedSettlement = settlementFilter(filter.settlement);
   const selectedView = reportView(filter.view);
 
-  const agent = await prisma.agent.findFirst({
-    where: { ...scope, id: agentId },
-    select: { code: true, name: true },
-  });
-  if (!agent) throw new ForbiddenError("ไม่พบบัญชี Agent");
+  function table(name: "bills" | "bill_items") {
+    return Prisma.raw(`"${databaseSchema().replaceAll('"', '""')}"."${name}"`);
+  }
 
+  /**
+   * ยอดต่องวดของ Agent รายนี้ รวมในฐานข้อมูล
+   * เดิมดึงบิลทุกใบพร้อมรายการเลขทุกรายการมานับใน Node.js
+   */
   async function loadRows(where: Prisma.DrawWhereInput) {
     const draws = await prisma.draw.findMany({
       where,
@@ -101,42 +103,47 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
     const drawIds = draws.map((draw) => draw.id);
     if (drawIds.length === 0) return [] as AgentRoundReportRow[];
 
-    const [bills, settlements] = await Promise.all([
-      prisma.bill.findMany({
+    const [billTotals, itemTotals, settlements] = await Promise.all([
+      prisma.bill.groupBy({
+        by: ["drawId"],
         where: { ...scope, agentId, drawId: { in: drawIds }, status: { in: COUNTED_STATUSES } },
-        select: { drawId: true, totalStake: true, totalPayout: true, items: { select: { isWinner: true } } },
+        _count: { _all: true },
+        _sum: { totalStake: true, totalPayout: true },
       }),
+      prisma.$queryRaw<Array<{ drawId: string; items: number; winners: number }>>(Prisma.sql`
+        SELECT b."drawId", COUNT(i.id)::int AS items, COUNT(i.id) FILTER (WHERE i."isWinner")::int AS winners
+        FROM ${table("bill_items")} i
+        JOIN ${table("bills")} b ON b.id = i."billId"
+        WHERE b."organizationId" = ${actor.organizationId}
+          AND b."agentId" = ${agentId}
+          AND b."drawId" IN (${Prisma.join(drawIds)})
+          AND b.status::text IN (${Prisma.join(COUNTED_STATUSES)})
+        GROUP BY b."drawId"
+      `),
       prisma.settlement.findMany({
         where: { ...scope, agentId, drawId: { in: drawIds } },
         select: { drawId: true, commission: true, net: true, status: true },
       }),
     ]);
 
-    const billBuckets = new Map<string, { count: number; items: number; winners: number; gross: Prisma.Decimal[]; payout: Prisma.Decimal[] }>();
-    for (const bill of bills) {
-      const bucket = billBuckets.get(bill.drawId) ?? { count: 0, items: 0, winners: 0, gross: [], payout: [] };
-      bucket.count += 1;
-      bucket.items += bill.items.length;
-      bucket.winners += bill.items.filter((item) => item.isWinner).length;
-      bucket.gross.push(bill.totalStake);
-      bucket.payout.push(bill.totalPayout);
-      billBuckets.set(bill.drawId, bucket);
-    }
+    const billByDraw = new Map(billTotals.map((row) => [row.drawId, row]));
+    const itemsByDraw = new Map(itemTotals.map((row) => [row.drawId, row]));
     const settlementByDraw = new Map(settlements.map((settlement) => [settlement.drawId, settlement]));
 
     return draws.map((draw): AgentRoundReportRow => {
-      const billsForDraw = billBuckets.get(draw.id);
+      const billRow = billByDraw.get(draw.id);
+      const itemRow = itemsByDraw.get(draw.id);
       const settlement = settlementByDraw.get(draw.id);
       return {
         drawId: draw.id,
         drawName: draw.name,
         cutoffAt: draw.cutoffAt,
         drawStatus: draw.status,
-        billCount: billsForDraw?.count ?? 0,
-        itemCount: billsForDraw?.items ?? 0,
-        winnerCount: billsForDraw?.winners ?? 0,
-        gross: sumMoney(billsForDraw?.gross ?? []),
-        payout: sumMoney(billsForDraw?.payout ?? []),
+        billCount: billRow?._count._all ?? 0,
+        itemCount: itemRow?.items ?? 0,
+        winnerCount: itemRow?.winners ?? 0,
+        gross: billRow?._sum.totalStake ?? ZERO,
+        payout: billRow?._sum.totalPayout ?? ZERO,
         commission: settlement?.commission ?? null,
         net: settlement?.net ?? null,
         settlementStatus: settlement?.status ?? "PENDING",
@@ -149,29 +156,42 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
     ...(filter.drawId ? { id: filter.drawId } : {}),
     ...((dateFrom || dateTo) ? { cutoffAt: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lte: dateTo } : {}) } } : {}),
   };
-  const rows = applySettlementFilter(await loadRows(drawWhere), selectedSettlement);
-  const totals = totalRows(rows);
+  const hasPrevious = Boolean(dateFrom && dateTo && dateTo >= dateFrom && !filter.drawId);
+  const previousRange = hasPrevious && dateFrom && dateTo
+    ? (() => {
+        const duration = dateTo.getTime() - dateFrom.getTime() + 1;
+        const previousEnd = new Date(dateFrom.getTime() - 1);
+        return { gte: new Date(previousEnd.getTime() - duration + 1), lte: previousEnd };
+      })()
+    : null;
 
-  let previousTotals: ReturnType<typeof totalRows> | null = null;
-  if (dateFrom && dateTo && dateTo >= dateFrom && !filter.drawId) {
-    const duration = dateTo.getTime() - dateFrom.getTime() + 1;
-    const previousEnd = new Date(dateFrom.getTime() - 1);
-    const previousStart = new Date(previousEnd.getTime() - duration + 1);
-    const previousRows = applySettlementFilter(await loadRows({ ...scope, cutoffAt: { gte: previousStart, lte: previousEnd } }), selectedSettlement);
-    previousTotals = totalRows(previousRows);
-  }
+  // คิวรีที่ไม่ขึ้นต่อกันรันพร้อมกัน เดิมรอทีละตัว 5–7 รอบ
+  const [agent, currentRows, previousRows, allDraws] = await Promise.all([
+    prisma.agent.findFirst({ where: { ...scope, id: agentId }, select: { code: true, name: true } }),
+    loadRows(drawWhere),
+    previousRange ? loadRows({ ...scope, cutoffAt: previousRange }) : Promise.resolve(null),
+    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, take: 50, select: { id: true, name: true } }),
+  ]);
+  if (!agent) throw new ForbiddenError("ไม่พบบัญชี Agent");
+
+  const rows = applySettlementFilter(currentRows, selectedSettlement);
+  const totals = totalRows(rows);
+  const previousTotals = previousRows ? totalRows(applySettlementFilter(previousRows, selectedSettlement)) : null;
 
   const includedDrawIds = rows.map((row) => row.drawId);
-  const [prizeItems, bills] = await Promise.all([
-    selectedView === "prizes" && includedDrawIds.length
-      ? prisma.billItem.findMany({
-          where: { bill: { ...scope, agentId, drawId: { in: includedDrawIds }, status: { in: COUNTED_STATUSES } } },
-          select: { stake: true, payout: true, isWinner: true, prizeType: { select: { code: true, name: true } } },
-        })
+  const countedBillFilter = { ...scope, agentId, drawId: { in: includedDrawIds }, status: { in: COUNTED_STATUSES } };
+  const wantsPrizes = selectedView === "prizes" && includedDrawIds.length > 0;
+  const [prizeTotals, prizeWinners, prizeTypes, bills] = await Promise.all([
+    wantsPrizes
+      ? prisma.billItem.groupBy({ by: ["prizeTypeId"], where: { bill: countedBillFilter }, _count: { _all: true }, _sum: { stake: true, payout: true } })
       : Promise.resolve([]),
+    wantsPrizes
+      ? prisma.billItem.groupBy({ by: ["prizeTypeId"], where: { bill: countedBillFilter, isWinner: true }, _count: { _all: true } })
+      : Promise.resolve([]),
+    wantsPrizes ? prisma.prizeType.findMany({ where: scope, select: { id: true, code: true, name: true } }) : Promise.resolve([]),
     selectedView === "bills" && includedDrawIds.length
       ? prisma.bill.findMany({
-          where: { ...scope, agentId, drawId: { in: includedDrawIds }, status: { in: COUNTED_STATUSES } },
+          where: countedBillFilter,
           orderBy: { createdAt: "desc" },
           take: 200,
           select: { id: true, billNumber: true, title: true, status: true, totalStake: true, totalPayout: true, createdAt: true, draw: { select: { name: true } }, _count: { select: { items: true } } },
@@ -179,18 +199,22 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
       : Promise.resolve([]),
   ]);
 
-  const prizeBuckets = new Map<number, { code: number; name: string; count: number; winners: number; gross: Prisma.Decimal[]; payout: Prisma.Decimal[] }>();
-  for (const item of prizeItems) {
-    const bucket = prizeBuckets.get(item.prizeType.code) ?? { code: item.prizeType.code, name: item.prizeType.name, count: 0, winners: 0, gross: [], payout: [] };
-    bucket.count += 1;
-    if (item.isWinner) bucket.winners += 1;
-    bucket.gross.push(item.stake);
-    bucket.payout.push(item.payout);
-    prizeBuckets.set(item.prizeType.code, bucket);
-  }
-  const prizes = [...prizeBuckets.values()].map((bucket) => ({ ...bucket, gross: sumMoney(bucket.gross), payout: sumMoney(bucket.payout) })).sort((a, b) => a.code - b.code);
+  const prizeTypeById = new Map(prizeTypes.map((prizeType) => [prizeType.id, prizeType]));
+  const winnersByPrize = new Map(prizeWinners.map((row) => [row.prizeTypeId, row._count._all]));
+  const prizes = prizeTotals
+    .map((row) => {
+      const prizeType = prizeTypeById.get(row.prizeTypeId);
+      return {
+        code: prizeType?.code ?? 0,
+        name: prizeType?.name ?? "-",
+        count: row._count._all,
+        winners: winnersByPrize.get(row.prizeTypeId) ?? 0,
+        gross: row._sum.stake ?? ZERO,
+        payout: row._sum.payout ?? ZERO,
+      };
+    })
+    .sort((a, b) => a.code - b.code);
 
-  const allDraws = await prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, take: 50, select: { id: true, name: true } });
 
   return {
     agent,

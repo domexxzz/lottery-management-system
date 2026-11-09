@@ -21,6 +21,7 @@ datasource db {
 // ---------------------------------------------------------------- enums
 
 enum Role {
+  GODMODE
   OWNER
   ADMIN
   AGENT
@@ -43,6 +44,19 @@ enum DrawStatus {
   RESULT_PENDING // รอผลและการอนุมัติผล
   SETTLED // คำนวณแล้ว รอ Owner อนุมัติ
   CLOSED // ปิดบัญชีแล้ว แก้ไขไม่ได้
+}
+
+/// ประเภทหวยของงวด ตอนนี้มีเฉพาะหวยรัฐบาลไทย
+enum LotteryType {
+  THAI_GOVERNMENT
+}
+
+/// ข้อจำกัดของเลขในงวด
+enum RestrictionKind {
+  /// เลขเต็ม — ปิดรับเลขนี้แล้ว
+  CLOSED
+  /// เลขอั้น — ยังรับได้ แต่จ่ายตามอัตราที่ลดลง
+  REDUCED_RATE
 }
 
 enum BillStatus {
@@ -160,6 +174,7 @@ model Organization {
   conversations          Conversation[]
   directMessages         DirectMessage[]
   directMessageFiles     DirectMessageAttachment[]
+  restrictedNumbers      RestrictedNumber[]
 
   @@map("organizations")
 }
@@ -216,6 +231,7 @@ model User {
   conversationsAsA       Conversation[]          @relation("ConversationUserA")
   conversationsAsB       Conversation[]          @relation("ConversationUserB")
   sentMessages           DirectMessage[]         @relation("DirectMessageSender")
+  restrictedNumbers      RestrictedNumber[]      @relation("RestrictedNumberCreatedBy")
 
   @@unique([organizationId, login])
   @@index([organizationId, role])
@@ -309,8 +325,9 @@ model PrizeType {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  billItems BillItem[]
-  results   Result[]
+  billItems         BillItem[]
+  results           Result[]
+  restrictedNumbers RestrictedNumber[]
 
   @@unique([organizationId, code])
   @@map("prize_types")
@@ -323,7 +340,11 @@ model Draw {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  name     String
+  name        String
+  /// ประเภทหวยของงวดนี้
+  lotteryType LotteryType @default(THAI_GOVERNMENT)
+  /// วันที่ออกผลของงวด (วันที่ 1 หรือ 16) — null สำหรับงวดที่สร้างก่อนมีคอลัมน์นี้
+  drawDate    DateTime?   @db.Date
   /// เวลาเริ่มรับบิล
   opensAt  DateTime
   /// เวลาปิดรับบิล — ถึงเวลานี้ worker จะล็อกบิลทั้งรอบ
@@ -338,9 +359,10 @@ model Draw {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bills       Bill[]
-  results     Result[]
-  settlements Settlement[]
+  bills             Bill[]
+  results           Result[]
+  settlements       Settlement[]
+  restrictedNumbers RestrictedNumber[]
 
   @@index([organizationId, name])
   @@index([organizationId, status])
@@ -348,6 +370,33 @@ model Draw {
   @@index([organizationId, cutoffAt])
   @@index([status, cutoffAt])
   @@map("draws")
+}
+
+/// เลขเต็มและเลขอั้นของแต่ละงวด
+///
+/// รางวัลแบบโต๊ด (PERMUTATION) เก็บเลขที่เรียงหลักแล้ว เพื่อให้ 123 กับ 321 ถือเป็นเลขเดียวกัน
+model RestrictedNumber {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  drawId      String
+  draw        Draw      @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  prizeTypeId String
+  prizeType   PrizeType @relation(fields: [prizeTypeId], references: [id])
+
+  number String
+  kind   RestrictionKind
+  /// อัตราจ่ายที่ลดลง ใช้เฉพาะ REDUCED_RATE
+  payoutRate Decimal? @db.Decimal(12, 4)
+
+  createdById String
+  createdBy   User     @relation("RestrictedNumberCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([drawId, prizeTypeId, number])
+  @@index([organizationId, drawId])
+  @@map("restricted_numbers")
 }
 
 // ---------------------------------------------------------------- bills

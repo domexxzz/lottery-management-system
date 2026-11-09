@@ -7,6 +7,7 @@ import type { Role } from "@prisma/client";
  * ไฟล์นี้คือแหล่งความจริงเดียวของสิทธิ์ ทั้ง UI และ API อ่านจากที่นี่
  */
 export const PERMISSIONS = [
+  "system.override",
   "report.viewAllAgents",
   "bill.viewOwn",
   "bill.create",
@@ -46,6 +47,7 @@ export type Permission = (typeof PERMISSIONS)[number];
  *   (แก้ได้เฉพาะบิลของตนเองที่ยังเป็น DRAFT)
  */
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
+  GODMODE: PERMISSIONS,
   OWNER: [
     "report.viewAllAgents",
     "bill.viewOwn",
@@ -106,4 +108,9 @@ export function can(role: Role, permission: Permission): boolean {
 
 export function permissionsFor(role: Role): readonly Permission[] {
   return ROLE_PERMISSIONS[role];
+}
+
+/** Godmode เป็นผู้ดูแลระบบ ส่วน Owner ยังคงเป็นเจ้าของกิจการ */
+export function isOwnerOrGodmode(role: Role): boolean {
+  return role === "GODMODE" || role === "OWNER";
 }

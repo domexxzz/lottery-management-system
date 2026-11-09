@@ -46,7 +46,7 @@ export default async function HomePage({
   return (
     <Suspense fallback={<DashboardLoading />}>
       {actor.role === "ADMIN" && <AdminDashboard actor={actor} filters={filters} />}
-      {actor.role === "OWNER" && <ManagementDashboard actor={actor} filters={filters} />}
+      {(actor.role === "GODMODE" || actor.role === "OWNER") && <ManagementDashboard actor={actor} filters={filters} />}
       {actor.role === "AGENT" && <AgentDashboard actor={actor} drawId={first(query.drawId)} />}
     </Suspense>
   );
