@@ -85,3 +85,19 @@
   }
 }
 .restriction-manager{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)}.restriction-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));align-items:end;gap:.6rem;margin:.6rem 0 1rem;padding:.8rem;border:1px solid #dfe8ed;border-radius:11px;background:#f8fafb}.restriction-form label{margin:0}.restriction-auto-rate{display:flex;min-height:42px;flex-direction:column;justify-content:center;padding:.42rem .65rem;border:1px solid #bfded9;border-radius:9px;background:#edf9f6}.restriction-auto-rate span,.restriction-auto-rate small{color:#638078;font-size:.56rem}.restriction-auto-rate strong{color:#087b68;font-size:.82rem}.restriction-form .error,.restriction-form .success{grid-column:1/-1;margin:0}.restriction-manager td form{display:flex;align-items:center;gap:.4rem;margin:0}
+
+/* เลขที่ถูกรางวัลใต้แถว Agent ในสรุปการเงิน: ถูกเลขไหน ลงเท่าไหร่ คูณกี่เท่า */
+.settlement-row.has-wins td{border-bottom:0}
+.settlement-wins-row td{padding:0 .6rem .65rem!important;background:#fbfdfd}
+.settlement-wins{display:flex;flex-direction:column;gap:.35rem;padding:.55rem .65rem;border:1px solid #cfe7e2;border-left:4px solid #16a085;border-radius:9px;background:#f2fbf8}
+.settlement-wins-label{color:#0f7a66;font-size:.62rem;font-weight:800}
+.settlement-win-list{display:flex;flex-direction:column;gap:.3rem;margin:0;padding:0;list-style:none}
+.settlement-win-list li{display:grid;grid-template-columns:minmax(90px,auto) minmax(56px,auto) minmax(0,1fr) auto;align-items:center;gap:.6rem;padding:.32rem .5rem;border-radius:7px;background:#fff;font-size:.7rem}
+.settlement-win-prize{color:#5d7480}
+.settlement-win-number{color:#15364d;font-size:.86rem;font-variant-numeric:tabular-nums;letter-spacing:.06em}
+.settlement-win-calc{color:#3d5866;font-variant-numeric:tabular-nums}
+.settlement-win-calc b{color:#0f7a66}
+.settlement-win-bill{color:#168b99;font-size:.66rem;white-space:nowrap}
+.settlement-wins-more>summary{cursor:pointer;color:#168b99;font-size:.62rem;font-weight:700}
+.settlement-wins-more[open]>summary{margin-bottom:.3rem}
+@media(max-width:650px){.settlement-win-list li{grid-template-columns:auto 1fr;gap:.2rem .5rem}.settlement-win-calc,.settlement-win-bill{grid-column:1/-1}}

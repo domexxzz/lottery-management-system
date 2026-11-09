@@ -403,11 +403,36 @@ export async function listSettlements(actor: Actor, drawId: string) {
       net: true,
       commissionRateSnapshot: true,
       status: true,
+      agentId: true,
       agent: { select: { code: true, name: true } },
       reconciledBy: { select: { displayName: true } },
       approvedBy: { select: { displayName: true } },
     },
   });
 
-  return { draw, settlements };
+  // รายการที่ถูกรางวัล (เขียนไว้ตอนคำนวณ Settlement) ใช้บอกว่าถูกเลขไหน ลงเท่าไหร่ จ่ายกี่เท่า
+  // ใช้ชุดบิลเดียวกับที่ Settlement นับ (LOCKED/SETTLED) จึงรวมแล้วเท่ากับยอดจ่ายรางวัลของ Agent
+  const winningItems = settlements.length === 0 ? [] : await prisma.billItem.findMany({
+    where: {
+      ...orgScope(actor),
+      isWinner: true,
+      bill: {
+        drawId: draw.id,
+        status: { in: ["LOCKED", "SETTLED"] },
+        ...(actor.role === "AGENT" && { agentId: actor.agentId ?? "__no_agent__" }),
+      },
+    },
+    orderBy: [{ payout: "desc" }, { id: "asc" }],
+    select: {
+      id: true,
+      number: true,
+      stake: true,
+      payoutRateSnapshot: true,
+      payout: true,
+      prizeType: { select: { code: true, name: true } },
+      bill: { select: { id: true, billNumber: true, title: true, agentId: true } },
+    },
+  });
+
+  return { draw, settlements, winningItems };
 }

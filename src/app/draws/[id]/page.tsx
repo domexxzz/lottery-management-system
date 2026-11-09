@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { DashboardIcon } from "../../DashboardIcon";
 import { notFound, redirect } from "next/navigation";
 import { getActor, orgScope } from "@/lib/auth/context";
@@ -45,6 +46,35 @@ const MATCH_HINT: Record<string, string> = {
   CONTAINS_DIGIT: "เลขวิ่ง 1 หลัก",
 };
 
+type WinItem = Awaited<ReturnType<typeof listSettlements>>["winningItems"][number];
+
+/** แสดงรายการแรก ๆ ทันที ที่เหลือพับไว้ ไม่ให้ Agent ที่ถูกเยอะดันตารางยาว */
+const WINS_PREVIEW = 5;
+
+const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+function WinList({ items }: { items: WinItem[] }) {
+  return (
+    <ul className="settlement-win-list">
+      {items.map((item) => (
+        <li key={item.id}>
+          <span className="settlement-win-prize">{item.prizeType.name}</span>
+          <strong className="settlement-win-number">{item.number}</strong>
+          <span className="settlement-win-calc">
+            ลง {MONEY.format(Number(item.stake))} × {compactRate(item.payoutRateSnapshot)}
+            {" = "}
+            <b>{MONEY.format(Number(item.payout))}</b>
+          </span>
+          <Link className="settlement-win-bill" href={`/bills/${item.bill.id}`}>
+            บิล #{item.bill.billNumber}
+            {item.bill.title.trim() && ` · ${item.bill.title.trim()}`}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default async function DrawDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await getActor();
   if (!actor) redirect("/login");
@@ -81,6 +111,13 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
   const canProposeCorrection = can(actor.role, "result.proposeCorrection");
   const canCalculate = can(actor.role, "settlement.calculate");
   const canApproveSettlement = can(actor.role, "settlement.approve");
+
+  const winsByAgent = new Map<string, WinItem[]>();
+  for (const item of settlementData.winningItems) {
+    const list = winsByAgent.get(item.bill.agentId) ?? [];
+    list.push(item);
+    winsByAgent.set(item.bill.agentId, list);
+  }
 
   const approvedCount = approvedByPrizeType.size;
   const displayStatus = getDrawDisplayStatus(draw);
@@ -254,8 +291,11 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                 </tr>
               </thead>
               <tbody>
-                {settlementData.settlements.map((s) => (
-                  <tr key={s.id}>
+                {settlementData.settlements.map((s) => {
+                  const wins = winsByAgent.get(s.agentId) ?? [];
+                  return (
+                  <Fragment key={s.id}>
+                  <tr className={wins.length > 0 ? "settlement-row has-wins" : "settlement-row"}>
                     <td>
                       {s.agent.code} {s.agent.name}
                     </td>
@@ -270,7 +310,25 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                     </td>
                     <td>{SETTLEMENT_STATUS[s.status] ?? s.status}</td>
                   </tr>
-                ))}
+                  {wins.length > 0 && (
+                    <tr className="settlement-wins-row">
+                      <td colSpan={6}>
+                        <div className="settlement-wins">
+                          <span className="settlement-wins-label">ถูกรางวัล {wins.length} รายการ</span>
+                          <WinList items={wins.slice(0, WINS_PREVIEW)} />
+                          {wins.length > WINS_PREVIEW && (
+                            <details className="settlement-wins-more">
+                              <summary>ดูอีก {wins.length - WINS_PREVIEW} รายการ</summary>
+                              <WinList items={wins.slice(WINS_PREVIEW)} />
+                            </details>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  );
+                })}
               </tbody>
             </table></div>
 
