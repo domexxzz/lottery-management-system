@@ -86,7 +86,10 @@ export function OrganizationMap({
   const [layout, setLayout] = useState<LayoutMode>("horizontal");
   const [showConnectors, setShowConnectors] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const [selectedId, setSelectedId] = useState<string | null>(() => agents[0]?.id ?? null);
+  // Keep the map unobstructed when the page opens. The inspector is an
+  // intentional drill-down and should only appear after the user chooses an
+  // Agent.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(.8);
   const [pan, setPan] = useState({ x: 28, y: 18 });
   const [fullscreen, setFullscreen] = useState(false);
@@ -136,7 +139,7 @@ export function OrganizationMap({
       const readableZoom = .68;
       const selectedIndex = 0;
       const selectedCenter = 52 + selectedIndex * 248 + 110;
-      const visibleWidth = Math.max(viewport.clientWidth - 310, 320);
+      const visibleWidth = Math.max(viewport.clientWidth, 320);
       setZoom(readableZoom);
       setPan({ x: visibleWidth / 2 - selectedCenter * readableZoom, y: 22 });
     }, 0);
@@ -145,7 +148,7 @@ export function OrganizationMap({
 
   useEffect(() => {
     if (selectedId && !filteredAgents.some((agent) => agent.id === selectedId)) {
-      setSelectedId(filteredAgents[0]?.id ?? null);
+      setSelectedId(null);
     }
   }, [filteredAgents, selectedId]);
 

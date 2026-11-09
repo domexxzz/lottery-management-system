@@ -1,0 +1,519 @@
+/*
+ * Mobile application shell and readability layer.
+ * Everything in this file is scoped to phone breakpoints so the established
+ * desktop dashboard remains unchanged.
+ */
+.mobile-bottom-nav { display: none; }
+
+@media (max-width: 760px) {
+  :root { --mobile-nav-height: 68px; --mobile-gutter: 12px; }
+  html { background: #eaf3f8; }
+  html,body { max-width: 100%; overflow-x: clip; }
+  body { min-width: 320px; background: linear-gradient(165deg,#eef8fb 0,#f7fafc 45%,#eaf4fb 100%); }
+  .dashboard-shell { min-height: 100dvh; background: transparent; }
+  .dashboard-sidebar { display: none !important; }
+  .dashboard-content { min-width: 0; padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom)); }
+  /* The chat manages its own message scroller. Keep the document itself fixed
+     so the composer and bottom navigation never drift off the phone screen. */
+  .dashboard-content:has(.owner-chat-page-shell),
+  .dashboard-content:has(.agents-map-page) { height: 100dvh; overflow: hidden; padding-bottom: 0; }
+  .dashboard-topbar {
+    position: sticky;
+    z-index: 900;
+    top: 6px;
+    width: auto;
+    height: 56px !important;
+    margin: 6px 8px 0;
+    padding: 0 8px;
+    border: 1px solid rgb(124 179 203 / 36%);
+    border-radius: 15px;
+    background: rgb(8 45 70 / 96%);
+    box-shadow: 0 8px 24px rgb(10 48 73 / 18%);
+    /* A filtered ancestor becomes the containing block for fixed descendants
+       in several WebViews, which would pin the bottom navigation to the header. */
+    backdrop-filter: none;
+  }
+  .topbar-start,.topbar-end { gap: 5px; }
+  .dashboard-topbar .shell-icon-button,
+  .dashboard-topbar .account-menu summary {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
+    padding: 0;
+    justify-content: center;
+    border-color: rgb(255 255 255 / 14%);
+    color: #fff;
+    background: rgb(255 255 255 / 8%);
+  }
+  .dashboard-topbar .theme-toggle { display: none; }
+  .dashboard-topbar .topbar-avatar { width: 30px; height: 30px; color: #123d58; background: #f5fbff; }
+  .dashboard-topbar .account-menu summary strong,
+  .dashboard-topbar .account-menu summary .dash-icon { display: none; }
+  .dashboard-topbar .account-popover { position: fixed; top: 66px; right: 9px; color: #17364d; }
+  .system-state { min-width: 0; padding: 0; border: 0; color: #dffcf3; background: transparent; }
+  .system-state .online-dot { width: 8px; height: 8px; box-shadow: 0 0 0 3px rgb(75 220 172 / 16%); }
+  .mock-data-control {
+    min-width: 118px !important;
+    min-height: 38px !important;
+    padding: 4px 6px 4px 8px !important;
+    gap: 5px !important;
+    border-color: rgb(165 235 211 / 28%) !important;
+    color: #eafff8;
+    background: rgb(255 255 255 / 9%) !important;
+    box-shadow: none !important;
+  }
+  .mock-data-control > div { min-width: 0; }
+  .mock-data-control strong { overflow: hidden; color: #effff9; font-size: 10px !important; text-overflow: ellipsis; white-space: nowrap; }
+  .mock-data-control small { display: none; }
+  .mock-data-state { display: inline !important; color: #aaf3d5 !important; font-size: 9px !important; }
+  .mock-data-control button { width: 32px !important; min-width: 32px !important; height: 20px !important; min-height: 20px !important; }
+  .mock-data-control button > span { width: 14px !important; height: 14px !important; }
+  .mock-data-control button[aria-checked="true"] > span { transform: translateX(12px) !important; }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    z-index: 1200;
+    right: 8px;
+    bottom: calc(7px + env(safe-area-inset-bottom));
+    left: 8px;
+    display: grid;
+    grid-template-columns: repeat(4,minmax(0,1fr));
+    height: 58px;
+    padding: 4px;
+    border: 1px solid rgb(121 168 193 / 36%);
+    border-radius: 17px;
+    background: rgb(255 255 255 / 96%);
+    box-shadow: 0 12px 34px rgb(11 49 74 / 20%);
+    backdrop-filter: blur(18px);
+  }
+  .mobile-bottom-nav :is(a,button) {
+    display: flex;
+    min-width: 0;
+    min-height: 48px;
+    align-items: center;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    margin: 0;
+    padding: 3px;
+    border: 0;
+    border-radius: 12px;
+    color: #5d7182;
+    background: transparent;
+    box-shadow: none;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 750;
+    line-height: 1;
+    text-decoration: none;
+  }
+  .mobile-bottom-nav :is(a,button) .dash-icon { width: 20px; height: 20px; }
+  .mobile-bottom-nav :is(a,button).active { color: #087d8a; background: linear-gradient(145deg,#e2f8f4,#dff3fb); }
+  .mobile-bottom-nav :is(a,button):focus-visible { outline: 3px solid #1677ff; outline-offset: -2px; }
+  .mobile-drawer { width: min(326px,88vw); padding: 14px 12px calc(18px + env(safe-area-inset-bottom)); }
+  .mobile-drawer .side-nav { gap: 4px; }
+  .mobile-drawer .side-nav a { min-height: 46px; border-radius: 11px; font-size: 14px; }
+  .mobile-drawer .side-nav a .dash-icon { width: 21px; height: 21px; }
+  .mobile-drawer .side-nav-tooltip { display: none; }
+
+  .app-page { min-width: 0; }
+  .dashboard-shell .app-page main,
+  .dashboard-shell .dashboard-body,
+  .dashboard-shell .app-page .analytics-page,
+  .dashboard-shell .app-page .users-page,
+  .dashboard-shell .app-page .agents-page { padding: 12px 10px 18px !important; }
+  .dashboard-shell .app-page main > .card { padding: 12px !important; }
+  .dashboard-shell .app-page :is(.workspace-card,.dashboard-panel,.analytics-card,.users-card,.report-panel,.report-dashboard,.report-workspace) {
+    border-radius: 15px !important;
+    box-shadow: 0 7px 20px rgb(23 65 91 / 7%) !important;
+  }
+  .dashboard-shell .app-page :is(.page-hero,.welcome-row,.analytics-hero,.users-hero,.agents-map-header,.report-hero) {
+    margin-bottom: 10px;
+  }
+  .dashboard-shell .app-page :is(.page-hero-copy h1,.dashboard-intro h1,.analytics-hero h1,.users-hero h1,.agents-map-title h1,.report-hero h1) {
+    margin: 2px 0 !important;
+    font-size: 22px !important;
+    line-height: 1.25 !important;
+  }
+  .dashboard-shell .app-page :is(.page-hero-copy p,.dashboard-intro p:last-child,.analytics-hero p,.users-hero p,.agents-map-title small,.report-hero p) {
+    margin: 2px 0 !important;
+    font-size: 12px !important;
+    line-height: 1.5 !important;
+  }
+  .dashboard-shell .app-page :is(.page-eyebrow,.eyebrow,.report-kicker) { font-size: 10px !important; }
+  .dashboard-shell .app-page :is(h2,.panel-heading h2,.analytics-card h2,.report-panel h2) { font-size: 16px !important; line-height: 1.35; }
+  .dashboard-shell .app-page :is(p,li,td,th,label,input,select,textarea,button,a,small,span) { text-rendering: optimizeLegibility; }
+  .dashboard-shell .app-page :is(button,a,input,select,summary) { touch-action: manipulation; }
+  .dashboard-shell .app-page :is(button,.page-primary-action,.draw-view-all) { min-height: 44px; }
+  .dashboard-shell .app-page .workspace-card > p:first-child:has(>a[href="/"]) { display: none; }
+  .dashboard-shell .app-page :is(.kpi-grid,.report-kpi-grid,.analytics-kpis,.audit-kpis,.bill-summary-strip,.users-summary,.agents-map-kpis) {
+    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+    gap: 8px !important;
+  }
+  .dashboard-shell .app-page :is(.kpi-card,.report-kpi-grid>a,.analytics-kpis>article,.audit-kpis>article,.bill-summary-strip>div,.users-summary>span,.agents-map-kpis>article) {
+    min-width: 0;
+    min-height: 82px;
+    padding: 10px !important;
+    border-radius: 13px !important;
+  }
+  .dashboard-shell .app-page :is(.kpi-card,.report-kpi-grid>a,.analytics-kpis>article,.audit-kpis>article,.bill-summary-strip>div,.users-summary>span,.agents-map-kpis>article) strong {
+    font-size: clamp(14px,4.2vw,18px) !important;
+    line-height: 1.25;
+  }
+  .dashboard-shell .app-page :is(.kpi-card,.report-kpi-grid>a,.analytics-kpis>article,.audit-kpis>article,.bill-summary-strip>div,.users-summary>span,.agents-map-kpis>article) :is(span,small,p,em) {
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+  }
+  .dashboard-shell :is(.kpi-card strong,.report-kpi-grid strong,.analytics-kpis strong,.audit-kpis strong,.bill-summary-strip strong,.users-summary b,.agents-map-kpis strong,.num) {
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: normal;
+    white-space: nowrap;
+  }
+  .dashboard-shell .kpi-card {
+    position: relative;
+    display: block !important;
+    container-type: inline-size;
+  }
+  .dashboard-shell .kpi-card .kpi-icon {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 30px;
+    height: 30px;
+  }
+  .dashboard-shell .kpi-card .kpi-content { display: flex; min-width: 0; flex-direction: column; }
+  .dashboard-shell .kpi-card .kpi-content > p {
+    display: flex;
+    min-height: 30px;
+    align-items: center;
+    margin: 0;
+    padding-left: 38px;
+    font-size: 11px !important;
+  }
+  .dashboard-shell .kpi-card .kpi-content > strong {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    margin-top: 4px;
+    font-size: clamp(12px,11cqi,17px) !important;
+    letter-spacing: -.025em;
+    line-height: 1.2;
+  }
+  .dashboard-shell .kpi-card .kpi-content > small { margin-top: 3px; }
+  .dashboard-shell .app-page .table-wrap,
+  .dashboard-shell .app-page :is(.analytics-table-wrap,.users-table-wrap,.audit-table-wrap,.recent-table-wrap) {
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .dashboard-shell .app-page :is(.table-wrap,.analytics-table-wrap,.users-table-wrap,.audit-table-wrap,.recent-table-wrap)::after {
+    display: block;
+    min-width: max-content;
+    padding: 5px 2px 1px;
+    color: #6a7f8f;
+    content: "เลื่อนตารางซ้าย–ขวาเพื่อดูข้อมูลเพิ่มเติม";
+    font-size: 10px;
+  }
+
+  /* Overview */
+  .dashboard-intro { align-items: flex-start; }
+  .dashboard-intro-icon { width: 48px; border-radius: 13px; }
+  .welcome-actions { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dashboard-shell .welcome-actions a { min-height: 44px; justify-content: center; padding: 8px; font-size: 12px; }
+  .dashboard-shell .dashboard-filters { padding: 10px; }
+  .dashboard-shell .filter-fields { grid-template-columns: 1fr 1fr; }
+  .business-overview,.insight-grid,.operations-grid,.dashboard-grid { gap: 10px !important; }
+  .line-chart { height: 178px; }
+  .line-chart svg { height: 145px; }
+  .chart-days { font-size: 10px; }
+
+  /* Bills, draws, evidence, audit and rulebook */
+  .bills-page .page-primary-action { width: 100%; }
+  .bill-summary-strip > div:last-child { grid-column: 1/-1; }
+  .bills-page .table-wrap { overflow: visible !important; }
+  .bills-page .table-wrap::after { display: none !important; }
+  .bills-page .table-wrap table,
+  .bills-page .table-wrap tbody { display: block; width: 100%; min-width: 0 !important; }
+  .bills-page .table-wrap thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .bills-page .table-wrap tbody { display: grid; gap: 9px; }
+  .bills-page .table-wrap tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 10px;
+    padding: 11px;
+    border: 1px solid #d9e7ed;
+    border-radius: 13px;
+    background: #fff;
+    box-shadow: 0 5px 14px rgb(23 65 91 / 6%);
+  }
+  .bills-page .table-wrap td { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 0 !important; border: 0 !important; font-size: 12px; text-align: left !important; white-space: normal !important; }
+  .bills-page .table-wrap td::before { color: #6c8090; font-size: 10px; font-weight: 700; }
+  .bills-page .table-wrap td:nth-child(1)::before { content: "เลขบิล"; }
+  .bills-page .table-wrap td:nth-child(2)::before { content: "ลูกค้า / ชื่อบิล"; }
+  .bills-page .table-wrap td:nth-child(3)::before { content: "งวด"; }
+  .bills-page .table-wrap td:nth-child(4)::before { content: "Agent"; }
+  .bills-page .table-wrap td:nth-child(5)::before { content: "จำนวนรายการ"; }
+  .bills-page .table-wrap td:nth-child(6)::before { content: "ยอดขาย"; }
+  .bills-page .table-wrap td:nth-child(7)::before { content: "จ่ายรางวัล"; }
+  .bills-page .table-wrap td:nth-child(8)::before { content: "สถานะ"; }
+  .bills-page .table-wrap td:nth-child(1),
+  .bills-page .table-wrap td:nth-child(2) { grid-column: 1/-1; }
+  .bills-page .customer-profile-link { align-items: flex-start; }
+  .draw-section-heading,.inspection-heading,.report-panel-heading { align-items: flex-start !important; flex-direction: column; gap: 6px !important; }
+  .draw-form-note { font-size: 11px !important; line-height: 1.5 !important; }
+  .draw-status-overview { grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 7px; }
+  .review-bill-header,.review-attachment { border-radius: 12px; }
+  .review-bill-header nav { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .review-bill-header nav :is(a,button) { justify-content: center; }
+  .inspection-view-tabs { display: grid !important; grid-template-columns: 1fr 1fr; }
+  .inspection-view-tabs a { min-width: 0 !important; }
+  .audit-readonly { align-self: stretch; }
+  .inspection-page .audit-table-wrap { overflow: visible !important; }
+  .inspection-page .audit-table-wrap::after { display: none !important; }
+  .inspection-page .inspection-table,
+  .inspection-page .inspection-table tbody { display: block; width: 100%; min-width: 0 !important; }
+  .inspection-page .inspection-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .inspection-page .inspection-table tbody { display: grid; gap: 9px; }
+  .inspection-page .inspection-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 11px; border: 1px solid #d9e7ed; border-radius: 13px; background: #fff; }
+  .inspection-page .inspection-table td { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 0 !important; border: 0 !important; font-size: 12px; white-space: normal !important; }
+  .inspection-page .inspection-table td::before { color: #6c8090; font-size: 10px; font-weight: 700; }
+  .inspection-page .inspection-table td:nth-child(1)::before { content: "งวด"; }
+  .inspection-page .inspection-table td:nth-child(2)::before { content: "ประเภทรางวัล"; }
+  .inspection-page .inspection-table td:nth-child(3)::before { content: "ผลรางวัล"; }
+  .inspection-page .inspection-table td:nth-child(4)::before { content: "ผู้บันทึก"; }
+  .inspection-page .inspection-table td:nth-child(5)::before { content: "เวลาที่บันทึก"; }
+  .inspection-page .inspection-table td:nth-child(6)::before { content: "สถานะ"; }
+  .inspection-page .inspection-table td:nth-child(7)::before { content: "ผู้ยืนยัน / เวลา"; }
+  .inspection-page .inspection-table td:nth-child(1),
+  .inspection-page .inspection-table td:nth-child(2),
+  .inspection-page .inspection-table td:nth-child(3) { grid-column: 1/-1; }
+  .inspection-page .keyed-number { font-size: 18px; letter-spacing: .08em; }
+  /* Rulebook becomes a compact card form. It uses the phone width instead of
+     creating a second horizontal scrolling surface. */
+  .rulebook-page .workspace-card > .muted { margin: 6px 0; font-size: 10px !important; line-height: 1.4; }
+  .rulebook-page .notice { margin: 7px 0 9px !important; padding: 8px 9px !important; font-size: 10px !important; line-height: 1.45; }
+  .rulebook-page .table-wrap { overflow: visible !important; }
+  .rulebook-page .table-wrap::after { display: none !important; }
+  .rulebook-page .rulebook,
+  .rulebook-page .rulebook tbody { display: block; width: 100%; min-width: 0 !important; border: 0; background: transparent; }
+  .rulebook-page .rulebook thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .rulebook-page .rulebook tbody { display: grid; gap: 8px; }
+  .rulebook-page .rulebook tr { display: grid; position: relative; grid-template-columns: 26px minmax(0,1fr); gap: 6px; padding: 8px; border: 1px solid #d9e7ed; border-radius: 12px; background: #fff; }
+  .rulebook-page .rulebook td { display: block; min-width: 0; padding: 0 !important; border: 0 !important; }
+  .rulebook-page .rulebook td:first-child > strong { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 7px; color: #0a7888; background: #e6f6f6; font-size: 11px; }
+  .rulebook-page .rulebook-row { display: grid; min-width: 0; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; }
+  .rulebook-page .rulebook-row > input,
+  .rulebook-page .rulebook-row > .app-dropdown,
+  .rulebook-page .rulebook-row > label,
+  .rulebook-page .rulebook-row > button { width: 100% !important; min-width: 0 !important; max-width: 100%; margin: 0 !important; }
+  .rulebook-page .rulebook-row > input,
+  .rulebook-page .rulebook-row .app-dropdown-trigger { min-height: 34px !important; height: 34px; padding: 5px 8px !important; border-radius: 8px; font-size: 11px !important; }
+  .rulebook-page .rulebook-row > input[name="name"],
+  .rulebook-page .rulebook-row > input[name="reason"],
+  .rulebook-page .rulebook-row > .app-dropdown,
+  .rulebook-page .rulebook-row > button,
+  .rulebook-page .rulebook-row > :is(.error,[role="status"],.muted) { grid-column: 1/-1; }
+  .rulebook-page .rulebook-row > label.inline-check { min-height: 34px; align-items: center; justify-content: center; padding: 5px 7px; border: 1px solid #d9e4e9; border-radius: 8px; background: #fbfcfd; font-size: 11px; }
+  .rulebook-page .rulebook-row > label.inline-check input { width: 16px !important; height: 16px; min-height: 0; }
+  .rulebook-page .rulebook-row > button { min-height: 36px !important; font-size: 11px; }
+  .rulebook-page .rulebook-row > :is(.error,[role="status"],.muted) { font-size: 10px !important; }
+
+  /* Reports and customer analytics */
+  .report-back,.analytics-hero .back-link,.users-hero>a { display: none; }
+  .dashboard-shell .reports-page .report-hero--blue {
+    min-height: 0;
+    padding: 12px !important;
+    border-radius: 14px;
+    background: linear-gradient(135deg,#fafdff,#e8f4ff);
+    box-shadow: 0 6px 18px rgb(34 82 126 / 7%);
+  }
+  .dashboard-shell .reports-page .report-hero--blue::after { display: none; }
+  .dashboard-shell .reports-page .report-hero--blue h1 { font-size: 20px !important; }
+  .dashboard-shell .reports-page .report-hero--blue p:last-child { font-size: 11px !important; line-height: 1.45 !important; }
+  .report-hero-actions { align-items: stretch !important; flex-direction: column !important; }
+  .dashboard-shell .reports-page .report-hero-actions { width: 100%; gap: 7px; }
+  .dashboard-shell .reports-page .report-hero-actions :is(.draw-picker,.report-draw-status) { width: 100%; max-width: none; }
+  .dashboard-shell .reports-page .report-hero-actions .draw-picker :is(button,select) { width: 100%; min-height: 44px; }
+  .dashboard-shell .reports-page .report-kpi-grid--primary { grid-template-columns: minmax(0,1fr) !important; gap: 9px !important; }
+  .dashboard-shell .reports-page .report-kpi-grid--primary .report-kpi-card {
+    display: grid;
+    min-height: 92px !important;
+    grid-template-columns: 42px minmax(0,1fr);
+    align-items: center;
+    gap: 10px;
+    padding: 12px !important;
+    overflow: hidden;
+  }
+  .dashboard-shell .reports-page .report-kpi-grid--primary .report-kpi-icon { width: 42px; height: 42px; flex-basis: 42px; border-radius: 12px; }
+  .dashboard-shell .reports-page .report-kpi-grid--primary .report-kpi-card > span:last-child { display: flex; min-width: 0; flex-direction: column; }
+  .dashboard-shell .reports-page .report-kpi-grid--primary strong {
+    width: 100%;
+    max-width: 100%;
+    font-size: clamp(18px,5.4vw,23px) !important;
+    letter-spacing: -.035em;
+    white-space: nowrap;
+  }
+  .dashboard-shell .reports-page .report-kpi-grid--primary :is(small,em) { font-size: 11px !important; }
+  .report-health-panel,.report-snapshot-grid,.report-dashboard-share,.analytics-grid,.analytics-grid-bottom { grid-template-columns: 1fr !important; }
+  .report-dashboard { overflow: hidden; }
+  .report-dashboard-heading,.report-dashboard-chart-heading { gap: 8px; }
+  .report-dashboard-presets > div { padding-bottom: 5px; }
+  .report-dashboard-chart-scroll { margin-inline: -4px; }
+  .report-overview-content { grid-template-columns: 1fr !important; }
+  .report-overview-meta { grid-template-columns: repeat(3,minmax(0,1fr)) !important; }
+  .report-overview-note small { white-space: normal !important; }
+  .analytics-filters { grid-template-columns: 1fr !important; }
+  .analytics-kpis > article:last-child:nth-child(odd) { grid-column: 1/-1; }
+  .segment-row { grid-template-columns: auto minmax(0,1fr) auto; }
+  .number-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+
+  /* Agent map and users */
+  .agents-map-page {
+    height: calc(100dvh - 132px) !important;
+    min-height: 0 !important;
+    grid-template-rows: auto minmax(0,1fr) !important;
+    overflow: hidden !important;
+  }
+  .agents-map-header { align-items: stretch !important; flex-direction: column; }
+  .agents-map-title { align-items: flex-start; }
+  .agents-map-title > span { width: 44px; height: 44px; }
+  .agents-map-title small { display: block !important; font-size: 11px !important; }
+  .agents-map-kpis { display: grid !important; width: 100%; max-width: none !important; overflow: visible !important; grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .agents-map-kpis article { min-width: 0 !important; min-height: 56px !important; padding: 7px !important; }
+  .organization-map-controls { display: grid !important; overflow: visible !important; grid-template-columns: 1fr 1fr !important; gap: 5px !important; padding: 7px !important; }
+  .organization-map-controls > * { width: 100%; min-width: 0 !important; }
+  .organization-map-controls > :first-child { grid-column: 1/-1; }
+  .organization-search,
+  .organization-map-controls .app-dropdown-trigger,
+  .dashboard-shell .app-page .organization-connector-toggle { height: 36px !important; min-height: 36px !important; }
+  .organization-map-workbench { height: 100%; min-height: 0 !important; }
+  .organization-map-main { min-height: 0; }
+  .organization-map-canvas-shell { min-height: 0; }
+  .organization-map-viewport { min-height: 210px; }
+  .organization-minimap { display: none !important; }
+  .organization-map-actions {
+    display: grid !important;
+    min-height: 40px;
+    grid-template-columns: repeat(5,minmax(0,1fr));
+    gap: 3px !important;
+    padding: 4px 5px !important;
+    overflow: hidden !important;
+  }
+  .organization-map-actions > span { display: none !important; }
+  .dashboard-shell .app-page .organization-map-actions :is(button,a) {
+    width: 100%;
+    min-width: 0;
+    min-height: 32px !important;
+    justify-content: center;
+    overflow: hidden;
+    padding-inline: 2px;
+    font-size: 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .organization-agent-copy strong { font-size: 12px !important; }
+  .organization-agent-copy small,.organization-agent-stats small { font-size: 10px !important; }
+  .organization-agent-copy em { padding: 3px 6px; font-size: 10px !important; }
+  .organization-agent-stats b { font-size: 11px !important; }
+  .organization-customer-node { min-height: 50px; }
+  .organization-customer-node strong { font-size: 11px !important; }
+  .organization-customer-node small { font-size: 10px !important; }
+  .dashboard-shell .app-page .organization-map-zoom button { min-width: 40px; min-height: 40px; font-size: 12px; }
+  .organization-map-zoom span { min-width: 44px; font-size: 11px; }
+  .dashboard-shell .app-page .organization-agent-card > button { min-width: 32px; min-height: 32px; }
+  .users-hero { padding: 12px !important; }
+  .users-summary { width: 100%; }
+  .users-summary span { min-width: 0; min-height: 66px !important; }
+  .users-table-wrap { overflow: visible !important; }
+  .users-table-wrap::after { display: none !important; }
+  .users-table-wrap table,.users-table-wrap tbody { display: block; width: 100%; min-width: 0 !important; }
+  .users-table-wrap thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .users-table-wrap tbody { display: grid; gap: 9px; }
+  .users-table-wrap tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 11px; border: 1px solid #d9e7ed; border-radius: 13px; background: #fff; }
+  .users-table-wrap td { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 0 !important; border: 0 !important; font-size: 12px; white-space: normal !important; }
+  .users-table-wrap td::before { color: #6c8090; font-size: 10px; font-weight: 700; }
+  .users-table-wrap td:nth-child(1)::before { content: "ผู้ใช้งาน"; }
+  .users-table-wrap td:nth-child(2)::before { content: "บทบาท"; }
+  .users-table-wrap td:nth-child(3)::before { content: "Agent"; }
+  .users-table-wrap td:nth-child(4)::before { content: "เข้าสู่ระบบล่าสุด"; }
+  .users-table-wrap td:nth-child(5)::before { content: "สถานะ"; }
+  .users-table-wrap td:nth-child(6)::before { content: "การจัดการ"; }
+  .users-table-wrap td:nth-child(1),.users-table-wrap td:nth-child(6) { grid-column: 1/-1; }
+  .users-table-wrap .user-status-form { min-width: 0; grid-template-columns: 1fr; }
+  .user-create-form :is(input,select,button) { min-height: 44px; }
+
+  /* Chat and messages */
+  .owner-chat-page-shell {
+    height: calc(100dvh - 132px) !important;
+    min-height: 0 !important;
+    padding: 8px !important;
+    overflow: hidden;
+  }
+  .owner-chat-layout { min-height: 0 !important; border-radius: 15px !important; }
+  .owner-chat-panel { border-radius: 15px !important; }
+  .owner-chat-header { min-height: 58px !important; padding: 6px 9px !important; }
+  .owner-chat-logo { width: 34px !important; height: 34px !important; border-radius: 10px !important; }
+  .owner-chat-brand { gap: 8px !important; }
+  .owner-chat-brand h1 { font-size: 15px !important; }
+  .owner-chat-brand p { overflow: hidden; max-width: 210px; font-size: 10px !important; text-overflow: ellipsis; white-space: nowrap; }
+  .owner-chat-header button,.owner-chat-scope { min-width: 40px; min-height: 40px !important; }
+  .owner-chat-workspace { grid-template-rows: auto minmax(0,1fr) !important; }
+  .owner-chat-history {
+    display: grid !important;
+    grid-template-columns: auto minmax(0,1fr);
+    align-items: center;
+    gap: 7px;
+    padding: 5px 8px !important;
+  }
+  .owner-chat-history-heading { display: block !important; padding: 0 !important; }
+  .owner-chat-history-heading strong { display: none; }
+  .dashboard-shell .app-page .owner-chat-history-heading button { min-height: 34px !important; padding: 4px 8px; font-size: 11px; white-space: nowrap; }
+  .owner-chat-history-list { min-width: 0; overflow: hidden !important; }
+  .owner-chat-history-list > p { overflow: hidden; margin: 0 !important; text-overflow: ellipsis; white-space: nowrap; }
+  .dashboard-shell .app-page .owner-chat-history-list button { display: none; width: 100%; min-width: 0; max-width: none; min-height: 34px; padding: 4px 8px; font-size: 11px; }
+  .dashboard-shell .app-page .owner-chat-history-list button.active,
+  .dashboard-shell .app-page .owner-chat-history-list button:first-of-type { display: flex; }
+  .owner-chat-body { min-height: 0; padding: 9px 8px 12px !important; }
+  .owner-chat-day { margin-bottom: 10px; }
+  .owner-chat-message { align-items: flex-start; margin-bottom: 8px !important; }
+  .owner-chat-message > div { max-width: calc(100% - 34px) !important; padding: 7px 9px !important; font-size: 12px !important; line-height: 1.48 !important; }
+  .owner-chat-avatar { width: 27px !important; height: 27px !important; }
+  .owner-chat-quickbar { gap: 5px; padding: 4px 8px 2px !important; scrollbar-width: none; }
+  .owner-chat-quickbar::-webkit-scrollbar { display: none; }
+  .dashboard-shell .app-page .owner-chat-chip { min-height: 32px; padding: 4px 8px; font-size: 10px; }
+  .owner-chat-composer { padding: 4px 8px 6px !important; }
+  .owner-chat-composer > div { min-height: 42px !important; padding: 2px 3px 2px 9px !important; border-radius: 13px; }
+  .owner-chat-composer input { height: 36px !important; font-size: 13px !important; }
+  .dashboard-shell .app-page .owner-chat-composer button { width: 36px !important; height: 36px !important; border-radius: 10px; }
+  .owner-chat-composer > small { display: none; }
+  .messenger-page { min-height: calc(100dvh - 132px) !important; padding: 10px !important; }
+}
+
+@media (max-width: 380px) {
+  .mock-data-control { min-width: 104px !important; }
+  .dashboard-shell .app-page :is(.page-hero-copy h1,.dashboard-intro h1,.analytics-hero h1,.users-hero h1,.agents-map-title h1,.report-hero h1) { font-size: 20px !important; }
+  .welcome-actions { grid-template-columns: 1fr; }
+  .dashboard-shell .filter-fields { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  html[data-theme="dark"],html[data-theme="dark"] body { background: #0d1823; }
+  html[data-theme="dark"] body { background-image: linear-gradient(165deg,#102332 0,#0d1823 55%,#122637 100%); }
+  html[data-theme="dark"] .mobile-bottom-nav { border-color: #314b60; background: rgb(20 37 51 / 96%); box-shadow: 0 12px 34px rgb(0 0 0 / 34%); }
+  html[data-theme="dark"] .mobile-bottom-nav :is(a,button) { color: #a9bdcb; }
+  html[data-theme="dark"] .mobile-bottom-nav :is(a,button).active { color: #72dcd7; background: linear-gradient(145deg,#193f45,#19384c); }
+  html[data-theme="dark"] .dashboard-topbar { border-color: #31546d; background: rgb(8 35 53 / 97%); }
+  html[data-theme="dark"] .dashboard-topbar .account-popover { color: #edf6fb; background: #172936; }
+  html[data-theme="dark"] .dashboard-shell .reports-page .report-hero--blue { background: linear-gradient(135deg,#172a3b,#17344d); }
+  html[data-theme="dark"] .bills-page .table-wrap tr,
+  html[data-theme="dark"] .inspection-page .inspection-table tr,
+  html[data-theme="dark"] .users-table-wrap tr { border-color: #344d60; color: #dce9f1; background: #182b39; }
+  html[data-theme="dark"] :is(.bills-page .table-wrap td,.inspection-page .inspection-table td,.users-table-wrap td)::before { color: #a9bdcb; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-bottom-nav *, .mobile-drawer * { scroll-behavior: auto !important; transition: none !important; }
+}

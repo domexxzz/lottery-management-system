@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "predev": "prisma generate",
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "node scripts/build.mjs",
     "start": "next start",
     "lint": "eslint .",

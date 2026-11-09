@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Role } from "@prisma/client";
 import { DashboardIcon } from "./DashboardIcon";
@@ -45,13 +47,37 @@ export function ThemeToggle() {
 }
 
 export function MobileNavigation({ role }: { role: Role }) {
+  const pathname = usePathname();
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+
+  const bottomItems = [
+    { href: "/", label: "ภาพรวม", icon: "home" as const, active: pathname === "/" },
+    { href: "/bills", label: "บิล", icon: "bill" as const, active: pathname.startsWith("/bills") },
+    { href: "/reports", label: "วิเคราะห์", icon: "analytics" as const, active: pathname.startsWith("/reports") || pathname.startsWith("/analytics") },
+  ];
+
+  function openNavigation() {
+    const element = dialog.current;
+    if (!element) return;
+    if (typeof element.showModal === "function") element.showModal();
+    else element.setAttribute("open", "");
+  }
+
+  function closeNavigation() {
+    const element = dialog.current;
+    if (!element) return;
+    if (typeof element.close === "function") element.close();
+    else {
+      element.removeAttribute("open");
+      trigger.current?.focus();
+    }
+  }
 
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 761px)");
     function closeOnDesktop() {
-      if (desktop.matches) dialog.current?.close();
+      if (desktop.matches) closeNavigation();
     }
     desktop.addEventListener("change", closeOnDesktop);
     return () => desktop.removeEventListener("change", closeOnDesktop);
@@ -60,19 +86,27 @@ export function MobileNavigation({ role }: { role: Role }) {
   return (
     <div className="mobile-navigation">
       <button ref={trigger} type="button" className="shell-icon-button" aria-label="เปิดเมนูหลัก"
-        aria-haspopup="dialog" onClick={() => dialog.current?.showModal()}>
+        aria-haspopup="dialog" onClick={openNavigation}>
         <DashboardIcon name="menu" />
       </button>
+      <nav className="mobile-bottom-nav" aria-label="เมนูด่วนสำหรับมือถือ">
+        {bottomItems.map((item) => <Link key={item.href} href={item.href} className={item.active ? "active" : undefined} aria-current={item.active ? "page" : undefined}>
+          <DashboardIcon name={item.icon} /><span>{item.label}</span>
+        </Link>)}
+        <button type="button" className={bottomItems.some((item) => item.active) ? undefined : "active"} aria-label="เปิดเมนูเพิ่มเติม" aria-haspopup="dialog" onClick={openNavigation}>
+          <DashboardIcon name="menu" /><span>เพิ่มเติม</span>
+        </button>
+      </nav>
       <dialog ref={dialog} className="mobile-drawer" aria-labelledby="mobile-nav-title"
         onClose={() => trigger.current?.focus()}>
         <div className="mobile-drawer-header">
           <strong id="mobile-nav-title">เมนูหลัก</strong>
           <button type="button" className="shell-icon-button" aria-label="ปิดเมนู"
-            onClick={() => dialog.current?.close()}>
+            onClick={closeNavigation}>
             <DashboardIcon name="close" />
           </button>
         </div>
-        <SidebarNav role={role} onNavigate={() => dialog.current?.close()} />
+        <SidebarNav role={role} onNavigate={closeNavigation} />
       </dialog>
     </div>
   );

@@ -7,6 +7,7 @@ import "./globals.css";
 import "./home.css";
 import "./premium-theme.css";
 import "@/components/calendar/calendar.css";
+import "./mobile-ux.css";
 
 const sarabun = localFont({
   variable: "--font-sarabun",
