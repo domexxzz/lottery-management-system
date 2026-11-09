@@ -2,40 +2,32 @@ import "dotenv/config";
 import { prisma } from "../src/lib/db";
 import { hashPassword } from "../src/lib/auth/password";
 
-/**
- * ⚠️ ค่าอัตราจ่ายและนิยามรางวัลด้านล่างเป็น PLACEHOLDER สำหรับพัฒนาเท่านั้น
- *
- * ของจริงต้องรอผลการยืนยันจาก:
- *   LOT-28 (P0-1) นิยามรางวัล 16 ประเภทและรูปแบบเลขที่รับ
- *   LOT-31 (P0-2) อัตราจ่าย อัตราคอมมิชชัน และกฎการปัดเศษ
- *
- * ห้ามนำค่าชุดนี้ขึ้น staging หรือ production ก่อนสองใบนั้นปิด
- */
+/** Rulebook ที่ยืนยันแล้ว: เปิดรับเฉพาะ 2 ตัวและ 3 ตัวรวม 6 ประเภท */
 const PRIZE_TYPES = [
-  { code: 1, name: "3 ตัวบน", digits: 3, matchRule: "EXACT", payoutRate: "900.0000" },
-  { code: 2, name: "3 ตัวโต๊ด", digits: 3, matchRule: "PERMUTATION", payoutRate: "150.0000" },
-  { code: 3, name: "3 ตัวหน้า", digits: 3, matchRule: "EXACT", payoutRate: "450.0000" },
-  { code: 4, name: "3 ตัวท้าย", digits: 3, matchRule: "EXACT", payoutRate: "450.0000" },
-  { code: 5, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", payoutRate: "90.0000" },
-  { code: 6, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", payoutRate: "90.0000" },
-  { code: 7, name: "2 ตัวโต๊ด", digits: 2, matchRule: "PERMUTATION", payoutRate: "45.0000" },
+  { code: 1, name: "3 ตัวบนตรง", digits: 3, matchRule: "EXACT", payoutRate: "650.0000", isActive: true },
+  { code: 2, name: "3 ตัวบนโต๊ด", digits: 3, matchRule: "PERMUTATION", payoutRate: "100.0000", isActive: true },
+  { code: 3, name: "3 ตัวหน้า", digits: 3, matchRule: "EXACT", payoutRate: "450.0000", isActive: false },
+  { code: 4, name: "3 ตัวท้าย", digits: 3, matchRule: "EXACT", payoutRate: "450.0000", isActive: false },
+  { code: 5, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", payoutRate: "75.0000", isActive: true },
+  { code: 6, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", payoutRate: "75.0000", isActive: true },
+  { code: 7, name: "2 ตัวโต๊ด", digits: 2, matchRule: "PERMUTATION", payoutRate: "45.0000", isActive: false },
   // รางวัลวิ่ง: แทงหลักเดียว แต่เทียบกับผลที่ยาวกว่า จึงต้องระบุ resultDigits
   // วิ่งบนเทียบกับเลข 3 ตัวบน · วิ่งล่างเทียบกับเลข 2 ตัวล่าง
-  { code: 8, name: "วิ่งบน", digits: 1, resultDigits: 3, matchRule: "CONTAINS_DIGIT", payoutRate: "3.2000" },
-  { code: 9, name: "วิ่งล่าง", digits: 1, resultDigits: 2, matchRule: "CONTAINS_DIGIT", payoutRate: "4.2000" },
-  { code: 10, name: "3 ตัวบนกลับ", digits: 3, matchRule: "PERMUTATION", payoutRate: "150.0000" },
-  { code: 11, name: "2 ตัวบนกลับ", digits: 2, matchRule: "PERMUTATION", payoutRate: "45.0000" },
-  { code: 12, name: "4 ตัวบน", digits: 4, matchRule: "EXACT", payoutRate: "6000.0000" },
-  { code: 13, name: "4 ตัวโต๊ด", digits: 4, matchRule: "PERMUTATION", payoutRate: "900.0000" },
-  { code: 14, name: "5 ตัวบน", digits: 5, matchRule: "EXACT", payoutRate: "30000.0000" },
-  { code: 15, name: "6 ตัวบน", digits: 6, matchRule: "EXACT", payoutRate: "100000.0000" },
-  { code: 16, name: "เลขท้าย 2 ตัว", digits: 2, matchRule: "EXACT", payoutRate: "90.0000" },
+  { code: 8, name: "วิ่งบน", digits: 1, resultDigits: 3, matchRule: "CONTAINS_DIGIT", payoutRate: "3.2000", isActive: false },
+  { code: 9, name: "วิ่งล่าง", digits: 1, resultDigits: 2, matchRule: "CONTAINS_DIGIT", payoutRate: "4.2000", isActive: false },
+  { code: 10, name: "3 ตัวสลับ", digits: 3, matchRule: "EXACT", payoutRate: "100.0000", isActive: true },
+  { code: 11, name: "2 ตัวสลับ", digits: 2, matchRule: "EXACT", payoutRate: "75.0000", isActive: true },
+  { code: 12, name: "4 ตัวบน", digits: 4, matchRule: "EXACT", payoutRate: "6000.0000", isActive: false },
+  { code: 13, name: "4 ตัวโต๊ด", digits: 4, matchRule: "PERMUTATION", payoutRate: "900.0000", isActive: false },
+  { code: 14, name: "5 ตัวบน", digits: 5, matchRule: "EXACT", payoutRate: "30000.0000", isActive: false },
+  { code: 15, name: "6 ตัวบน", digits: 6, matchRule: "EXACT", payoutRate: "100000.0000", isActive: false },
+  { code: 16, name: "เลขท้าย 2 ตัว", digits: 2, matchRule: "EXACT", payoutRate: "90.0000", isActive: false },
 ] as const;
 
 const AGENTS = [
-  { code: "A001", name: "ตัวแทน กรุงเทพ", commissionRate: "25.0000", creditLimit: "500000.00" },
-  { code: "A002", name: "ตัวแทน เชียงใหม่", commissionRate: "22.5000", creditLimit: "300000.00" },
-  { code: "A003", name: "ตัวแทน หาดใหญ่", commissionRate: "20.0000", creditLimit: null },
+  { code: "A001", name: "ตัวแทน กรุงเทพ", commissionRate: "30.0000", creditLimit: "500000.00" },
+  { code: "A002", name: "ตัวแทน เชียงใหม่", commissionRate: "30.0000", creditLimit: "300000.00" },
+  { code: "A003", name: "ตัวแทน หาดใหญ่", commissionRate: "30.0000", creditLimit: null },
 ] as const;
 
 async function main() {
@@ -100,6 +92,7 @@ async function main() {
         resultDigits: "resultDigits" in pt ? pt.resultDigits : null,
         matchRule: pt.matchRule,
         payoutRate: pt.payoutRate,
+        isActive: pt.isActive,
       },
       create: {
         organizationId: org.id,
@@ -109,6 +102,7 @@ async function main() {
         resultDigits: "resultDigits" in pt ? pt.resultDigits : null,
         matchRule: pt.matchRule,
         payoutRate: pt.payoutRate,
+        isActive: pt.isActive,
       },
     });
   }
@@ -125,7 +119,7 @@ async function main() {
 
     await prisma.agent.upsert({
       where: { organizationId_code: { organizationId: org.id, code: a.code } },
-      update: {},
+      update: { commissionRate: a.commissionRate },
       create: {
         organizationId: org.id,
         code: a.code,
@@ -164,7 +158,7 @@ async function main() {
     draws: await prisma.draw.count(),
   };
   console.log("seed เสร็จแล้ว:", counts);
-  console.log("⚠️ อัตราจ่ายในชุดนี้เป็น placeholder รอผลจาก LOT-28 และ LOT-31");
+  console.log("Rulebook พร้อมใช้งาน: เปิด 6 ประเภท · คอมมิชชัน Agent 30%");
 }
 
 main()

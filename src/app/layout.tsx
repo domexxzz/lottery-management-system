@@ -34,10 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     : false;
 
   return (
-    <html lang="th" className={sarabun.variable} suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('lottery-theme');var r=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.dataset.theme=r}catch(e){}})()` }} />
-      </head>
+    <html lang="th" className={sarabun.variable} data-theme="light">
       <body>
         {actor !== null && !actor.mustChangePassword ? (
           <AppShell displayName={actor.displayName} role={actor.role} mockDataEnabled={mockDataEnabled}>

@@ -16,6 +16,12 @@ export type RestrictionRow = {
 
 export type RestrictionPrizeOption = { id: string; name: string; digits: number; payoutRate: string };
 
+function halfRate(rate: string | undefined): string {
+  if (!rate) return "-";
+  const value = Number(rate) / 2;
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)));
+}
+
 function RemoveButton({ id }: { id: string }) {
   const [state, action, pending] = useActionState(removeRestrictionAction, INITIAL);
   return (
@@ -47,7 +53,7 @@ export function RestrictionManager({
   return (
     <section className="restriction-manager" aria-labelledby="restriction-heading">
       <h2 id="restriction-heading">เลขเต็ม / เลขอั้น</h2>
-      <p className="muted">เลขเต็มจะปิดรับทันที ส่วนเลขอั้นยังรับได้แต่จ่ายตามอัตราที่ลดลง มีผลเฉพาะโพยที่ยืนยันหลังจากนี้</p>
+      <p className="muted">เลขเต็มจะปิดรับทันที ส่วนเลขอั้นยังรับได้และจ่ายครึ่งหนึ่งของอัตราปกติ มีผลเฉพาะโพยที่ยืนยันหลังจากนี้</p>
 
       {editable ? (
         <form action={action} className="restriction-form">
@@ -70,10 +76,11 @@ export function RestrictionManager({
             <input name="number" inputMode="numeric" pattern="\d*" maxLength={selected?.digits ?? 6} placeholder={"0".repeat(selected?.digits ?? 3)} required />
           </label>
           {kind === "REDUCED_RATE" && (
-            <label>
-              จ่าย (ปกติ {selected?.payoutRate ?? "-"})
-              <input name="payoutRate" inputMode="decimal" required placeholder="เช่น 450" />
-            </label>
+            <div className="restriction-auto-rate" role="status">
+              <span>อัตราเลขอั้น</span>
+              <strong>{halfRate(selected?.payoutRate)}</strong>
+              <small>ครึ่งหนึ่งจากอัตราปกติ {selected?.payoutRate ?? "-"}</small>
+            </div>
           )}
           <button type="submit" disabled={pending}>{pending ? "กำลังบันทึก…" : "บันทึก"}</button>
           {state.error && <p className="error" role="alert">{state.error}</p>}

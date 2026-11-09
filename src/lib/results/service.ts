@@ -28,7 +28,16 @@ export async function listResults(actor: Actor, drawId: string) {
 
   const [prizeTypes, results] = await Promise.all([
     prisma.prizeType.findMany({
-      where: { ...orgScope(actor), isActive: true },
+      where: {
+        ...orgScope(actor),
+        OR: [
+          { isActive: true },
+          // ประเภทที่ปิดรับใหม่แล้วยังต้องแสดง หากงวดนี้มีบิลหรือผลเดิมอยู่
+          // เพื่อให้ตรวจผลบิลค้างและเปิดดูประวัติย้อนหลังได้ครบ
+          { billItems: { some: { bill: { drawId: draw.id, status: { notIn: ["DRAFT", "CANCELLED"] } } } } },
+          { results: { some: { drawId: draw.id } } },
+        ],
+      },
       orderBy: { code: "asc" },
       select: {
         id: true,

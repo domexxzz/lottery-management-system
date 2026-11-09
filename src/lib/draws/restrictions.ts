@@ -1,16 +1,16 @@
-import { Prisma } from "@prisma/client";
 import type { RestrictionKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { normalizedNumber } from "@/lib/bills/betting";
+import { reducedPayoutRate } from "@/lib/money";
 
 /**
  * เลขเต็มและเลขอั้นของงวด
  *
  * - เลขเต็ม (CLOSED): ปิดรับ ระบบปฏิเสธรายการตอนยืนยันบิล
- * - เลขอั้น (REDUCED_RATE): ยังรับได้ แต่ snapshot อัตราจ่ายที่ลดลงตอนยืนยันบิล
+ * - เลขอั้น (REDUCED_RATE): ยังรับได้ แต่ snapshot ครึ่งหนึ่งของอัตราปกติตอนยืนยันบิล
  *
  * การเปลี่ยนแปลงมีผลเฉพาะบิลที่ยืนยันหลังจากนี้ บิลเดิมใช้อัตราที่ snapshot ไว้แล้ว
  */
@@ -34,7 +34,6 @@ export type RestrictionInput = {
   prizeTypeId: string;
   number: string;
   kind: RestrictionKind;
-  payoutRate?: string;
 };
 
 export async function addRestriction(actor: Actor, input: RestrictionInput): Promise<void> {
@@ -56,18 +55,9 @@ export async function addRestriction(actor: Actor, input: RestrictionInput): Pro
     throw new ValidationError(`${prizeType.name} ต้องเป็นตัวเลข ${prizeType.digits} หลัก`);
   }
 
-  let payoutRate: Prisma.Decimal | null = null;
-  if (input.kind === "REDUCED_RATE") {
-    try {
-      payoutRate = new Prisma.Decimal(input.payoutRate?.trim() || "x");
-    } catch {
-      throw new ValidationError("กรุณาระบุอัตราจ่ายของเลขอั้น");
-    }
-    if (payoutRate.lessThanOrEqualTo(0)) throw new ValidationError("อัตราจ่ายของเลขอั้นต้องมากกว่า 0");
-    if (payoutRate.greaterThanOrEqualTo(prizeType.payoutRate)) {
-      throw new ValidationError(`อัตราจ่ายเลขอั้นต้องต่ำกว่าอัตราปกติ (${prizeType.payoutRate.toFixed(2)})`);
-    }
-  }
+  const payoutRate = input.kind === "REDUCED_RATE"
+    ? reducedPayoutRate(prizeType.payoutRate)
+    : null;
 
   const number = normalizedNumber(raw, prizeType.matchRule);
 

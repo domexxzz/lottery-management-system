@@ -51,9 +51,9 @@ describe("หน้าแทงเลข: placeBill", () => {
 });
 
 describe("เลขเต็มและเลขอั้น", () => {
-  test("เลขเต็มปิดรับ ส่วนเลขอั้น snapshot อัตราที่ลดลง", async () => {
+  test("เลขเต็มปิดรับ ส่วนเลขอั้น snapshot ครึ่งหนึ่งของอัตราปกติ", async () => {
     await addRestriction(f.actors.ADMIN, { drawId: f.draw.id, prizeTypeId: f.prizeTypes.threeTop.id, number: "999", kind: "CLOSED" });
-    await addRestriction(f.actors.ADMIN, { drawId: f.draw.id, prizeTypeId: f.prizeTypes.threeTop.id, number: "123", kind: "REDUCED_RATE", payoutRate: "100" });
+    await addRestriction(f.actors.ADMIN, { drawId: f.draw.id, prizeTypeId: f.prizeTypes.threeTop.id, number: "123", kind: "REDUCED_RATE" });
 
     await expect(placeBill(f.actors.AGENT1, {
       drawId: f.draw.id,
@@ -70,7 +70,7 @@ describe("เลขเต็มและเลขอั้น", () => {
       ],
     });
     const items = await prisma.billItem.findMany({ where: { billId: placed.billId }, orderBy: { number: "asc" } });
-    expect(items[0]?.payoutRateSnapshot.toFixed(0)).toBe("100");
+    expect(items[0]?.payoutRateSnapshot.toFixed(0)).toBe("450");
     expect(items[1]?.payoutRateSnapshot.equals(f.prizeTypes.threeTop.payoutRate)).toBe(true);
   });
 
@@ -83,16 +83,11 @@ describe("เลขเต็มและเลขอั้น", () => {
     })).rejects.toThrow(/เลขเต็ม/);
   });
 
-  test("Agent ตั้งเลขอั้นไม่ได้ และอัตราเลขอั้นต้องต่ำกว่าปกติ", async () => {
+  test("Agent ตั้งเลขเต็มหรือเลขอั้นไม่ได้", async () => {
     await expect(addRestriction(f.actors.AGENT1, { drawId: f.draw.id, prizeTypeId: f.prizeTypes.threeTop.id, number: "111", kind: "CLOSED" }))
       .rejects.toThrow();
-    await expect(addRestriction(f.actors.ADMIN, {
-      drawId: f.draw.id,
-      prizeTypeId: f.prizeTypes.threeTop.id,
-      number: "111",
-      kind: "REDUCED_RATE",
-      payoutRate: f.prizeTypes.threeTop.payoutRate.plus(1).toString(),
-    })).rejects.toThrow(/ต่ำกว่าอัตราปกติ/);
+    await expect(addRestriction(f.actors.AGENT1, { drawId: f.draw.id, prizeTypeId: f.prizeTypes.threeTop.id, number: "111", kind: "REDUCED_RATE" }))
+      .rejects.toThrow();
   });
 
   test("ยกเลิกเลขเต็มแล้วแทงได้อีก", async () => {

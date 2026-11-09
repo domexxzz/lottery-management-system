@@ -50,12 +50,6 @@ function money(value: number): string {
   return value.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function reverseLabel(digits: number): string {
-  if (digits === 2) return "สลับเลข (x2)";
-  if (digits === 3) return "สลับเลข (x3 x6)";
-  return "สลับเลข";
-}
-
 /** ป้ายสีของประเภทในรายการ ใช้กลุ่มเดียวกับแท็บ */
 function badgeKey(rule: BetPrizeType | undefined): string {
   if (!rule) return "x";
@@ -133,9 +127,7 @@ export function BetSlip({
   const [selectedByGroup, setSelectedByGroup] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(groups.map((item) => [item.key, item.prizeTypes[0] ? [item.prizeTypes[0].id] : []])),
   );
-  const [reverseByGroup, setReverseByGroup] = useState<Record<string, boolean>>({});
   const selectedIds = group ? selectedByGroup[group.key] ?? [] : [];
-  const reverse = group ? reverseByGroup[group.key] ?? false : false;
 
   const [amount, setAmount] = useState(10);
   const [digits, setDigits] = useState("");
@@ -192,7 +184,7 @@ export function BetSlip({
       setNotice({ tone: "error", text: "ระบุจำนวนเงินก่อนกดเลข" });
       return;
     }
-    const built = buildEntries({ numberValue, stake: amount, selected, reverse });
+    const built = buildEntries({ numberValue, stake: amount, selected, reverse: false });
     const blocked = built.filter((entry) => restrictionOf(entry)?.kind === "CLOSED");
     const accepted = built.filter((entry) => restrictionOf(entry)?.kind !== "CLOSED");
     setEntries((current) => addEntries(current, accepted, rules));
@@ -208,7 +200,7 @@ export function BetSlip({
           : `เพิ่มเลข ${numberValue} แล้ว ${accepted.length} รายการ`,
       });
     }
-  }, [group, selectedIds, amount, reverse, restrictionOf, rules]);
+  }, [group, selectedIds, amount, restrictionOf, rules]);
 
   // เก็บค่าล่าสุดใน ref ด้วย เพราะการกดเลขครบหลักต้องเพิ่มรายการทันทีครั้งเดียว
   // ห้ามทำ side effect ใน state updater ซึ่ง React อาจเรียกซ้ำใน Strict Mode
@@ -421,11 +413,6 @@ export function BetSlip({
                   {prizeType.name}
                 </button>
               ))}
-              {group.digits >= 2 && (
-                <button type="button" aria-pressed={reverse} className="bs-option bs-option-reverse" onClick={() => setReverseByGroup((current) => ({ ...current, [group.key]: !reverse }))} disabled={!isOpen}>
-                  ⇄ {reverseLabel(group.digits)}
-                </button>
-              )}
             </div>
           </div>
 

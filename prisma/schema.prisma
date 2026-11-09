@@ -265,7 +265,7 @@ model Agent {
   code String
   name String
 
-  /// อัตราคอมมิชชันเป็นเปอร์เซ็นต์ของยอดขาย เช่น 25.0000 = 25%
+  /// อัตราคอมมิชชันเป็นเปอร์เซ็นต์ของยอดขาย เช่น 30.0000 = 30%
   commissionRate Decimal  @db.Decimal(7, 4)
   /// วงเงินรวมต่อรอบ null = ไม่จำกัด
   creditLimit    Decimal? @db.Decimal(18, 2)

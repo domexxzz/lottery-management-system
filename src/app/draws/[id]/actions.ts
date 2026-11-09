@@ -199,7 +199,6 @@ export async function addRestrictionAction(_prev: ActionState, formData: FormDat
       prizeTypeId: String(formData.get("prizeTypeId") ?? ""),
       number: String(formData.get("number") ?? ""),
       kind,
-      payoutRate: String(formData.get("payoutRate") ?? ""),
     });
   } catch (error) {
     return fail(error);

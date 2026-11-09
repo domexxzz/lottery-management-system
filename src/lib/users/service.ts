@@ -26,6 +26,8 @@ export type UpdateManagedUserIdentityInput = {
   reason: string;
 };
 
+const AGENT_COMMISSION_RATE = new Prisma.Decimal(30);
+
 function decimal(raw: string | undefined, label: string, optional = false): Prisma.Decimal | null {
   const value = raw?.trim() ?? "";
   if (optional && value === "") return null;
@@ -82,7 +84,8 @@ export async function createManagedUser(actor: Actor, input: CreateManagedUserIn
 
   const passwordHash = await hashPassword(input.password);
   const agentCode = input.agentCode?.trim().toUpperCase() ?? "";
-  const commissionRate = input.role === "AGENT" ? decimal(input.commissionRate, "อัตราคอมมิชชัน")! : null;
+  // อัตราธุรกิจคงที่ 30% จากยอดเดิมพันรวม ไม่เชื่อค่าที่แก้จากฝั่ง client
+  const commissionRate = input.role === "AGENT" ? AGENT_COMMISSION_RATE : null;
   const creditLimit = input.role === "AGENT" ? decimal(input.creditLimit, "วงเงินรวมต่องวด", true) : null;
   const perNumberLimit = input.role === "AGENT" ? decimal(input.perNumberLimit, "วงเงินต่อเลข", true) : null;
 

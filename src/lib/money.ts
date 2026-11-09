@@ -47,6 +47,11 @@ export function itemPayout(stake: Prisma.Decimal, payoutRateSnapshot: Prisma.Dec
   return toMoney(stake.times(payoutRateSnapshot));
 }
 
+/** อัตราจ่ายเลขอั้นเท่ากับครึ่งหนึ่งของอัตราปกติ เก็บได้สูงสุด 4 ตำแหน่งตาม schema */
+export function reducedPayoutRate(payoutRate: Prisma.Decimal): Prisma.Decimal {
+  return payoutRate.dividedBy(2).toDecimalPlaces(4, ROUNDING);
+}
+
 /** คอมมิชชันของ Agent ตามฐานที่กำหนดใน COMMISSION_BASE */
 export function commissionOf(input: {
   gross: Prisma.Decimal;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { Prisma } from "@prisma/client";
-import { commissionOf, itemPayout, netOf, sumMoney, toMoney } from "./money";
+import { commissionOf, itemPayout, netOf, reducedPayoutRate, sumMoney, toMoney } from "./money";
 
 const d = (v: string | number) => new Prisma.Decimal(v);
 
@@ -44,7 +44,23 @@ describe("itemPayout — ยอดจ่ายรายรายการ", () =
   });
 });
 
+describe("reducedPayoutRate — เลขอั้นจ่ายครึ่งหนึ่ง", () => {
+  test.each([
+    ["650", "325.0000"],
+    ["100", "50.0000"],
+    ["75", "37.5000"],
+  ])("อัตราปกติ %s เหลือ %s", (normal, reduced) => {
+    expect(reducedPayoutRate(d(normal)).toFixed(4)).toBe(reduced);
+  });
+});
+
 describe("commissionOf — คิดจากยอดขายรวม", () => {
+  test("อัตราธุรกิจ 30% จากยอดเดิมพันรวม", () => {
+    expect(
+      commissionOf({ gross: d("1000"), payout: d("90000"), commissionRatePercent: d("30") }).toFixed(2),
+    ).toBe("300.00");
+  });
+
   test("คำนวณตามเปอร์เซ็นต์", () => {
     expect(
       commissionOf({ gross: d("1000"), payout: d("0"), commissionRatePercent: d("25") }).toFixed(2),

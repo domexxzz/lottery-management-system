@@ -29,6 +29,9 @@ export type BetGroup = {
   prizeTypes: BetPrizeType[];
 };
 
+/** รหัสธุรกิจของประเภทที่ต้องแตกเลขสลับทุกชุดเป็นคนละรายการ */
+const SWAP_PRIZE_CODES = new Set([10, 11]);
+
 /** เลขที่ใช้เทียบความซ้ำ — รางวัลโต๊ดถือว่าสลับหลักแล้วเป็นเลขเดียวกัน */
 export function normalizedNumber(numberValue: string, matchRule: MatchRuleName): string {
   return matchRule === "PERMUTATION" ? [...numberValue].sort().join("") : numberValue;
@@ -74,6 +77,28 @@ export function addEntries(
   for (const addition of additions) {
     const rule = prizeTypes.get(addition.prizeTypeId);
     if (!rule) continue;
+
+    // รายการ "สลับ" เป็นตัวช่วยแตกเลข จึงไม่สร้างเลขเดิมซ้ำกับรายการตรงตัว
+    // หากผู้ใช้เพิ่มรายการตรงตัวภายหลัง ให้รายการตรงตัวเป็นตัวหลักแทนรายการสลับ
+    if (SWAP_PRIZE_CODES.has(rule.code)) {
+      const hasPreferredExactEntry = next.some((entry) => {
+        const existingRule = prizeTypes.get(entry.prizeTypeId);
+        return (
+          entry.number === addition.number &&
+          existingRule?.matchRule === "EXACT" &&
+          !SWAP_PRIZE_CODES.has(existingRule.code)
+        );
+      });
+      if (hasPreferredExactEntry) continue;
+    } else if (rule.matchRule === "EXACT") {
+      for (let index = next.length - 1; index >= 0; index -= 1) {
+        const existing = next[index];
+        if (!existing || existing.number !== addition.number) continue;
+        const existingRule = prizeTypes.get(existing.prizeTypeId);
+        if (existingRule && SWAP_PRIZE_CODES.has(existingRule.code)) next.splice(index, 1);
+      }
+    }
+
     const key = entryKey(addition.prizeTypeId, addition.number, rule.matchRule);
     const existing = next.find((entry) => entryKey(entry.prizeTypeId, entry.number, rule.matchRule) === key);
     if (existing) existing.stake += addition.stake;
@@ -90,13 +115,27 @@ export function buildEntries(input: {
   reverse: boolean;
 }): BetEntry[] {
   const entries: BetEntry[] = [];
+  const preferredExactNumbers = new Set(
+    input.selected
+      .filter(
+        (prizeType) =>
+          prizeType.matchRule === "EXACT" &&
+          !SWAP_PRIZE_CODES.has(prizeType.code) &&
+          input.numberValue.length === prizeType.digits,
+      )
+      .map(() => input.numberValue),
+  );
   for (const prizeType of input.selected) {
     if (input.numberValue.length !== prizeType.digits) continue;
-    // รางวัลโต๊ดครอบคลุมทุกการสลับอยู่แล้ว จึงไม่ต้องแตกเลข
-    const numbers = input.reverse && prizeType.matchRule !== "PERMUTATION"
+    // ประเภท "สลับ" ต้องแสดงและคิดยอดทุก permutation เป็นคนละรายการ
+    // ส่วนรางวัลโต๊ดครอบคลุมทุกการสลับในรายการเดียว จึงไม่แตกเลข
+    const numbers = SWAP_PRIZE_CODES.has(prizeType.code)
+      ? permutations(input.numberValue)
+      : input.reverse && prizeType.matchRule !== "PERMUTATION"
       ? permutations(input.numberValue)
       : [input.numberValue];
     for (const numberValue of numbers) {
+      if (SWAP_PRIZE_CODES.has(prizeType.code) && preferredExactNumbers.has(numberValue)) continue;
       entries.push({ prizeTypeId: prizeType.id, number: numberValue, stake: input.stake });
     }
   }

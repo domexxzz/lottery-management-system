@@ -8,44 +8,6 @@ import { DashboardIcon } from "./DashboardIcon";
 import { SidebarNav } from "./SidebarNav";
 import { logoutAction } from "./logout-action";
 
-type Theme = "light" | "dark";
-
-function resolvedTheme(): Theme {
-  if (typeof window === "undefined") return "light";
-  const saved = window.localStorage.getItem("lottery-theme");
-  if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("light");
-
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      const next = resolvedTheme();
-      document.documentElement.dataset.theme = next;
-      setTheme(next);
-    };
-    apply();
-    media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, []);
-
-  function toggleTheme() {
-    const next: Theme = theme === "dark" ? "light" : "dark";
-    window.localStorage.setItem("lottery-theme", next);
-    document.documentElement.dataset.theme = next;
-    setTheme(next);
-  }
-
-  return <button type="button" className="theme-toggle shell-icon-button" onClick={toggleTheme}
-    aria-label={theme === "dark" ? "เปลี่ยนเป็นธีมสว่าง" : "เปลี่ยนเป็นธีมมืด"}
-    title={theme === "dark" ? "ธีมสว่าง" : "ธีมมืด"}>
-    <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
-  </button>;
-}
-
 export function MobileNavigation({ role }: { role: Role }) {
   const pathname = usePathname();
   const dialog = useRef<HTMLDialogElement>(null);

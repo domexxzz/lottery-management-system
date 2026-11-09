@@ -2,7 +2,7 @@ import type { Role } from "@prisma/client";
 import { SidebarNav } from "./SidebarNav";
 import { logoutAction } from "./logout-action";
 import { DashboardIcon } from "./DashboardIcon";
-import { AccountMenu, MobileNavigation, SystemStatus, ThemeToggle } from "./ShellControls";
+import { AccountMenu, MobileNavigation, SystemStatus } from "./ShellControls";
 import { MockDataToggle } from "./MockDataToggle";
 import "./owner-chatbot.css";
 
@@ -49,7 +49,6 @@ export function AppShell({
             <SystemStatus />
           </div>
           <div className="topbar-end">
-            <ThemeToggle />
             <MockDataToggle initialEnabled={mockDataEnabled} canManage={role === "GODMODE" || role === "OWNER"} />
             <AccountMenu displayName={displayName} roleLabel={ROLE_LABEL[role]} />
           </div>
