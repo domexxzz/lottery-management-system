@@ -14,6 +14,7 @@ import {
   type NumberRestriction,
   type PrizeTypeRule,
 } from "./validation";
+import { loadNumberUsage, lockDrawNumberCap } from "@/lib/draws/number-cap";
 import { assertBillEvidenceReady } from "@/lib/evidence/service";
 import { billSequencePeriod, buildInternalBillNumber } from "./numbering";
 import { getStorageProvider } from "@/lib/storage/provider";
@@ -24,6 +25,24 @@ export type ItemInput = {
   number: string;
   stake: string;
 };
+
+const SOFT_DELETE_REASON = "ลบบิลก่อนปิดรับ";
+
+function itemSnapshot(item: { id?: string; prizeTypeId: string; number: string; stake: Prisma.Decimal; prizeType?: { name: string } }) {
+  return {
+    ...(item.id !== undefined && { id: item.id }),
+    prizeTypeId: item.prizeTypeId,
+    prizeTypeName: item.prizeType?.name,
+    number: item.number,
+    stake: item.stake.toFixed(2),
+  };
+}
+
+function assertDrawStillOpen(draw: { status: string; cutoffAt: Date }): void {
+  if (draw.status !== "OPEN" || Date.now() >= draw.cutoffAt.getTime()) {
+    throw new ConflictError("แก้ไขหรือลบบิลได้เฉพาะงวดที่ยังเปิดรับ");
+  }
+}
 
 /**
  * Agent สร้างบิลให้ตัวเองเท่านั้น ส่วน Owner/Admin เลือกบัญชีผู้รับบิลได้
@@ -247,6 +266,157 @@ export async function replaceDraftItems(
   });
 }
 
+/**
+ * แก้เลขและยอดเดิมพันของบิลที่ยืนยันแล้วก่อนปิดรับ
+ * มีผลทันทีโดยไม่ต้องรออนุมัติ และเก็บภาพก่อน/หลังทั้งชุดไว้ใน Audit
+ */
+export async function updateBillBeforeCutoff(
+  actor: Actor,
+  billId: string,
+  input: { title: string; items: readonly ItemInput[] },
+): Promise<void> {
+  requirePermission(actor, "bill.editBeforeCutoff");
+  const title = input.title.trim();
+  if (!title) throw new ValidationError("กรุณากรอกชื่อลูกค้า");
+  if (input.items.length === 0) throw new ValidationError("บิลต้องมีอย่างน้อยหนึ่งรายการ");
+
+  await prisma.$transaction(async (tx) => {
+    const bill = await tx.bill.findFirst({
+      where: { id: billId, ...billScope(actor) },
+      include: {
+        draw: { select: { status: true, cutoffAt: true, numberCap: true } },
+        agent: { select: { creditLimit: true, perNumberLimit: true } },
+        items: {
+          orderBy: { createdAt: "asc" },
+          include: { prizeType: { select: { name: true } } },
+        },
+      },
+    });
+    if (!bill) throw new NotFoundError("ไม่พบบิล");
+    if (bill.status !== "CONFIRMED" && bill.status !== "DRAFT") {
+      throw new ConflictError("บิลนี้แก้ไขไม่ได้แล้ว");
+    }
+    assertDrawStillOpen(bill.draw);
+
+    const rules = await loadPrizeRules(tx, bill.organizationId);
+    const restrictions = await loadRestrictions(tx, bill.drawId);
+    const numberCap = await loadNumberCapInTx(tx, bill.drawId, bill.draw.numberCap, bill.id, input.items.map((item) => item.prizeTypeId));
+    const parsed: DraftItem[] = input.items.map((item) => ({
+      prizeTypeId: item.prizeTypeId,
+      number: item.number.trim(),
+      stake: toDecimal(item.stake),
+    }));
+    const committed = await tx.bill.aggregate({
+      where: {
+        organizationId: bill.organizationId,
+        agentId: bill.agentId,
+        drawId: bill.drawId,
+        id: { not: bill.id },
+        status: { in: ["CONFIRMED", "LOCKED", "SETTLED"] },
+      },
+      _sum: { totalStake: true },
+    });
+    const issues = validateBill({
+      items: parsed,
+      rules,
+      agent: bill.agent,
+      draw: bill.draw,
+      existingStakeInDraw: committed._sum.totalStake ?? new Prisma.Decimal(0),
+      now: new Date(),
+      restrictions,
+      numberCap,
+    });
+    if (issues.length > 0) throw new ValidationError(issues.map((issue) => issue.message).join(" · "));
+
+    const before = {
+      title: bill.title,
+      totalStake: bill.totalStake.toFixed(2),
+      items: bill.items.map(itemSnapshot),
+    };
+    await tx.billItem.deleteMany({ where: { billId: bill.id } });
+    await tx.billItem.createMany({
+      data: parsed.map((item) => {
+        const rule = rules.get(item.prizeTypeId);
+        if (!rule) throw new ValidationError("ไม่พบประเภทรางวัลที่เลือก");
+        const restriction = restrictions.get(dedupeKey(item.prizeTypeId, item.number, rule.matchRule));
+        return {
+          organizationId: bill.organizationId,
+          billId: bill.id,
+          prizeTypeId: item.prizeTypeId,
+          number: item.number,
+          stake: item.stake,
+          payoutRateSnapshot: restriction?.kind === "REDUCED_RATE" && restriction.payoutRate !== null
+            ? restriction.payoutRate
+            : rule.payoutRate,
+        };
+      }),
+    });
+    const total = totalStake(parsed);
+    await tx.bill.update({ where: { id: bill.id }, data: { title, totalStake: total } });
+    const after = {
+      title,
+      totalStake: total.toFixed(2),
+      items: parsed.map(itemSnapshot),
+    };
+    await writeAudit(tx, {
+      organizationId: bill.organizationId,
+      actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
+      action: "UPDATE",
+      entityType: "Bill",
+      entityId: bill.id,
+      before,
+      after,
+      reason: "แก้ไขบิลก่อนปิดรับ",
+    });
+  });
+}
+
+/** ลบเชิงระบบ: เก็บบิล รายการเลข และหลักฐานไว้ แต่ตัดออกจากการคำนวณทันที */
+export async function softDeleteBillBeforeCutoff(actor: Actor, billId: string): Promise<void> {
+  requirePermission(actor, "bill.delete");
+  await prisma.$transaction(async (tx) => {
+    const bill = await tx.bill.findFirst({
+      where: { id: billId, ...billScope(actor) },
+      include: {
+        draw: { select: { status: true, cutoffAt: true } },
+        items: { orderBy: { createdAt: "asc" }, include: { prizeType: { select: { name: true } } } },
+      },
+    });
+    if (!bill) throw new NotFoundError("ไม่พบบิล");
+    if (bill.status !== "CONFIRMED" && bill.status !== "DRAFT") throw new ConflictError("บิลนี้ลบไม่ได้แล้ว");
+    assertDrawStillOpen(bill.draw);
+    const deletedAt = new Date();
+    await tx.bill.update({
+      where: { id: bill.id },
+      data: {
+        status: "CANCELLED",
+        cancelledById: actor.userId,
+        cancelledAt: deletedAt,
+        cancelReason: SOFT_DELETE_REASON,
+      },
+    });
+    await writeAudit(tx, {
+      organizationId: bill.organizationId,
+      actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
+      action: "DELETE",
+      entityType: "Bill",
+      entityId: bill.id,
+      before: {
+        status: bill.status,
+        title: bill.title,
+        totalStake: bill.totalStake.toFixed(2),
+        items: bill.items.map(itemSnapshot),
+      },
+      after: { status: "CANCELLED", deletedAt: deletedAt.toISOString(), excludedFromCalculation: true },
+      reason: SOFT_DELETE_REASON,
+    });
+  });
+}
+
 function toDecimal(raw: string): Prisma.Decimal {
   try {
     return new Prisma.Decimal(raw);
@@ -268,6 +438,23 @@ export async function confirmBill(
 ): Promise<{ billNumber: string; drawSequence: number; totalStake: string }> {
   requirePermission(actor, "bill.confirm");
   return prisma.$transaction((tx) => confirmInTx(tx, actor, billId, { requireEvidence: true }));
+}
+
+/**
+ * เพดานรับต่อเลขของงวด พร้อมยอดที่บิลใบอื่นแทงไปแล้ว
+ *
+ * ล็อกงวดก่อนอ่านยอด บิลที่ยืนยันพร้อมกันจึงไม่รวมกันเกินเพดาน
+ */
+async function loadNumberCapInTx(
+  tx: Prisma.TransactionClient,
+  drawId: string,
+  cap: Prisma.Decimal | null,
+  billId: string,
+  prizeTypeIds: readonly string[],
+): Promise<{ cap: Prisma.Decimal | null; used: Map<string, Prisma.Decimal> }> {
+  if (cap === null) return { cap, used: new Map() };
+  await lockDrawNumberCap(tx, drawId);
+  return { cap, used: await loadNumberUsage(tx, drawId, { excludeBillId: billId, prizeTypeIds: [...new Set(prizeTypeIds)] }) };
 }
 
 /** เลขเต็ม/เลขอั้นของงวด คีย์ตาม dedupeKey */
@@ -299,7 +486,7 @@ async function confirmInTx(
     where: { id: billId, ...billScope(actor) },
     include: {
       items: { select: { id: true, prizeTypeId: true, number: true, stake: true } },
-      draw: { select: { id: true, status: true, cutoffAt: true, drawDate: true, lotteryType: true } },
+      draw: { select: { id: true, status: true, cutoffAt: true, drawDate: true, lotteryType: true, numberCap: true } },
       agent: { select: { id: true, code: true, status: true, creditLimit: true, perNumberLimit: true } },
     },
   });
@@ -318,6 +505,7 @@ async function confirmInTx(
 
   const rules = await loadPrizeRules(tx, bill.organizationId);
   const restrictions = await loadRestrictions(tx, bill.drawId);
+  const numberCap = await loadNumberCapInTx(tx, bill.drawId, bill.draw.numberCap, bill.id, bill.items.map((item) => item.prizeTypeId));
 
   // ยอดที่ Agent ใช้ไปแล้วในรอบนี้ นับเฉพาะบิลที่มีผลผูกพัน ไม่รวมร่างและที่ยกเลิก
   const committed = await tx.bill.aggregate({
@@ -345,6 +533,7 @@ async function confirmInTx(
     existingStakeInDraw: committed._sum.totalStake ?? new Prisma.Decimal(0),
     now: new Date(),
     restrictions,
+    numberCap,
   });
 
   if (issues.length > 0) {
@@ -621,6 +810,7 @@ export async function listBills(actor: Actor, filter: { drawId?: string; status?
       drawSequence: true,
       title: true,
       status: true,
+      cancelReason: true,
       totalStake: true,
       createdAt: true,
       agent: { select: { code: true, name: true } },
@@ -690,6 +880,9 @@ export async function deleteBillPermanently(
   storage: PrivateObjectStorage = getStorageProvider(),
 ): Promise<DeleteBillOutcome> {
   requirePermission(actor, "bill.delete");
+  if (actor.role !== "OWNER" && actor.role !== "GODMODE") {
+    throw new ForbiddenError("เฉพาะ Owner หรือ Godmode เท่านั้นที่ลบข้อมูลถาวรได้");
+  }
 
   const outcome = await prisma.$transaction(async (tx) => {
     const bill = await tx.bill.findFirst({
@@ -883,6 +1076,7 @@ export async function listBetBills(actor: Actor, filter: BetBillFilter & { page?
       drawSequence: true,
       title: true,
       status: true,
+      cancelReason: true,
       totalStake: true,
       totalPayout: true,
       createdAt: true,

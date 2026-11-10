@@ -21,6 +21,7 @@ import {
   addRestriction,
   addScopedRestriction,
   removeRestriction,
+  updateNumberCap,
   type RestrictionScope,
 } from "@/lib/draws/restrictions";
 
@@ -182,15 +183,24 @@ export async function proposeResultCorrectionAction(
   const actor = await requireActor();
   const drawId = String(formData.get("drawId") ?? "");
 
+  let autoApproved = false;
   try {
-    await proposeResultCorrection(actor, {
+    const outcome = await proposeResultCorrection(actor, {
       drawId,
       prizeTypeId: String(formData.get("prizeTypeId") ?? ""),
       values: formData.getAll("value").map(String),
       reason: String(formData.get("reason") ?? ""),
     });
+    autoApproved = outcome.autoApproved;
   } catch (error) {
     return fail(error);
+  }
+
+  if (autoApproved) {
+    const settle = await settleWhenResultsComplete(actor, drawId);
+    revalidatePath(`/draws/${drawId}`);
+    revalidatePath("/reports");
+    return savedState("แก้ผลและยืนยันผลใหม่แล้ว", settle);
   }
 
   revalidatePath(`/draws/${drawId}`);
@@ -284,4 +294,19 @@ export async function removeRestrictionAction(_prev: ActionState, formData: Form
     return fail(error);
   }
   return { error: null, message: "ยกเลิกแล้ว" };
+}
+
+export async function updateNumberCapAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const drawId = String(formData.get("drawId") ?? "");
+  try {
+    await updateNumberCap(actor, drawId, String(formData.get("numberCap") ?? ""));
+  } catch (error) {
+    return fail(error);
+  }
+  revalidatePath(`/draws/${drawId}`);
+  revalidatePath("/bills");
+  revalidatePath("/bills/new");
+  revalidatePath("/prize-types");
+  return { error: null, message: "บันทึกเพดานต่อเลขแล้ว" };
 }

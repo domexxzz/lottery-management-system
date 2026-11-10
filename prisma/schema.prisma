@@ -356,6 +356,9 @@ model Draw {
   cutoffAt DateTime
 
   status   DrawStatus @default(OPEN)
+  /// เพดานยอดแทงรวมต่อเลขต่อประเภทรางวัลของทั้งงวด (ทุก Agent รวมกัน)
+  /// ยอดครบเพดานแล้วเลขนั้นเป็น "เลขเต็ม" ปิดรับอัตโนมัติ · null = ไม่จำกัด
+  numberCap Decimal? @default(2000) @db.Decimal(18, 2)
   /// ตัวนับเลขบิลเดิมระดับงวด (legacy) — เก็บไว้เพื่อรองรับฐานข้อมูลรุ่นก่อน
   billSequence Int @default(0)
   lockedAt DateTime?

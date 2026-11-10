@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
+import type { ReactNode } from "react";
 import {
   BET_STATUS_LABEL,
   betStatusOf,
@@ -65,7 +66,7 @@ function profitOf(status: BetStatus, item: SlipItem): number | null {
   return null;
 }
 
-export function SlipDetail({ bill, settledAt, showDrawLink }: { bill: SlipBill; settledAt: Date | null; showDrawLink: boolean }) {
+export function SlipDetail({ bill, settledAt, showDrawLink, beforeItems }: { bill: SlipBill; settledAt: Date | null; showDrawLink: boolean; beforeItems?: ReactNode }) {
   const rows: SlipItemRow[] = bill.items.map((item, index) => {
     const status = itemBetStatus(bill.status, item.isWinner);
     return {
@@ -152,6 +153,8 @@ export function SlipDetail({ bill, settledAt, showDrawLink }: { bill: SlipBill; 
         <div className="is-lost"><span>ไม่ถูกรางวัล</span><strong>{lost.count} รายการ</strong><small>{baht(lost.amount)} บาท</small></div>
         <div className="is-cancelled"><span>ยกเลิก</span><strong>{cancelled.count} รายการ</strong><small>{baht(cancelled.amount)} บาท</small></div>
       </div>
+
+      {beforeItems}
 
       <div className="slip-detail-content">
         <SlipItems rows={rows} totalStake={stakeTotal} prizeTotal={prizeTotal} />

@@ -44,10 +44,10 @@ export type Permission = (typeof PERMISSIONS)[number];
  * - Admin เป็นผู้ปฏิบัติงานและตรวจสอบ ผลที่กรอกถูกยืนยันในขั้นตอนเดียว
  * - "แก้หรือยกเลิกหลัง Cutoff: Admin เสนอหรือดำเนินการ / Owner อนุมัติ" จึงแยกเป็น
  *   propose กับ approve
- * - การแก้ผลรางวัลที่ประกาศไปแล้วใช้ด่านเดียวกัน: Admin เสนอ Owner อนุมัติ
- *   และผู้อนุมัติต้องไม่ใช่ผู้เสนอ เพราะผลที่ประกาศแล้วคือตัวเลขที่กลายเป็นเงินไปแล้ว
- * - "แก้บิลก่อน Cutoff: Agent ตามนโยบาย" — ให้สิทธิ์ไว้ แล้วบังคับนโยบายเพิ่มในชั้น service
- *   (แก้ได้เฉพาะบิลของตนเองที่ยังเป็น DRAFT)
+ * - การแก้ผลรางวัลที่ประกาศไปแล้ว: Admin เสนอ Owner อนุมัติ
+ *   แต่ Owner/Godmode แก้เองแล้วมีผลทันที พร้อมบันทึก Audit และคำนวณยอดใหม่
+ * - แก้/ลบบิลก่อน Cutoff: Agent ทำได้เฉพาะบิลของตนเอง ส่วน Admin/Owner ทำได้ทั้งองค์กร
+ *   ทุกการเปลี่ยนแปลงมีผลทันทีและต้องมี Audit ก่อน/หลัง ไม่ใช้ขั้นตอนอนุมัติซ้ำ
  */
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   GODMODE: PERMISSIONS,
@@ -83,6 +83,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "bill.viewOwn",
     "bill.create",
     "bill.confirm",
+    "bill.delete",
     "bill.editBeforeCutoff",
     "bill.proposeChangeAfterCutoff",
     "result.enter",
@@ -101,6 +102,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "bill.viewOwn",
     "bill.create",
     "bill.confirm",
+    "bill.delete",
     "bill.editBeforeCutoff",
     "audit.viewOwn",
     "evidence.view",

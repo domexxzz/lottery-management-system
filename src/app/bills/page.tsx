@@ -5,7 +5,8 @@ import { prisma } from "@/lib/db";
 import { compactRate } from "@/lib/bills/betting";
 import { parseHistoryFilter, type HistoryParams } from "@/lib/bills/history-filter";
 import { resolveHistoryScope } from "@/lib/bills/history-scope";
-import { AgentBillBoard } from "./AgentBillBoard";
+import { capLabel, capStatusByDraw, type CapStatus } from "@/lib/draws/number-cap";
+import { AgentBillBoard, type RestrictionAnnouncement } from "./AgentBillBoard";
 import "./slip-board.css";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
   const canSeeAllAgents = can(actor.role, "report.viewAllAgents");
 
   // ขอบเขตงวด (ค่าเริ่มต้นคืองวดปัจจุบันที่ต้องทำ) และ Agent ที่ยังใช้งานสำหรับตัวกรอง
-  const [scope, agents, restrictedNumbers] = await Promise.all([
+  const [scope, agents, openDraws] = await Promise.all([
     resolveHistoryScope(actor, filter),
     canSeeAllAgents
       ? prisma.agent.findMany({
@@ -28,49 +29,78 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
           select: { id: true, code: true, name: true },
         })
       : Promise.resolve(null),
-    prisma.restrictedNumber.findMany({
-      where: {
-        ...orgScope(actor),
-        draw: { status: "OPEN", cutoffAt: { gt: new Date() } },
-      },
-      orderBy: [{ draw: { cutoffAt: "asc" } }, { prizeType: { code: "asc" } }, { number: "asc" }],
-      select: {
-        id: true,
-        number: true,
-        kind: true,
-        payoutRate: true,
-        draw: { select: { id: true, name: true, drawDate: true, opensAt: true, cutoffAt: true } },
-        prizeType: { select: { name: true } },
-      },
+    prisma.draw.findMany({
+      where: { ...orgScope(actor), status: "OPEN", cutoffAt: { gt: new Date() } },
+      orderBy: { cutoffAt: "asc" },
+      select: { id: true, name: true, drawDate: true, opensAt: true, cutoffAt: true, numberCap: true },
     }),
   ]);
 
-  const announcements = new Map<string, {
-    drawId: string;
-    drawName: string;
-    drawDate: Date | null;
-    opensAt: Date;
-    cutoffAt: Date;
-    entries: { id: string; number: string; kind: "CLOSED" | "REDUCED_RATE"; payoutRate: string | null; prizeTypeName: string }[];
-  }>();
-  for (const row of restrictedNumbers) {
-    const group = announcements.get(row.draw.id) ?? {
-      drawId: row.draw.id,
-      drawName: row.draw.name,
-      drawDate: row.draw.drawDate,
-      opensAt: row.draw.opensAt,
-      cutoffAt: row.draw.cutoffAt,
-      entries: [],
+  const drawIds = openDraws.map((draw) => draw.id);
+  const [restrictedNumbers, capByDraw] = drawIds.length === 0
+    ? [[], new Map<string, CapStatus>()]
+    : await Promise.all([
+        prisma.restrictedNumber.findMany({
+          where: { ...orgScope(actor), drawId: { in: drawIds } },
+          orderBy: [{ prizeType: { code: "asc" } }, { number: "asc" }],
+          select: {
+            id: true,
+            drawId: true,
+            number: true,
+            kind: true,
+            payoutRate: true,
+            prizeType: { select: { name: true, payoutRate: true } },
+          },
+        }),
+        capStatusByDraw(prisma, actor.organizationId, openDraws),
+      ]);
+
+  // เลขอั้นและเลขเต็มแยกกล่อง เลขเต็มรวมทั้งเลขที่ยอดครบเพดานและเลขที่ตั้งปิดไว้เอง
+  const announcements: RestrictionAnnouncement[] = openDraws.map((draw) => {
+    const rows = restrictedNumbers.filter((row) => row.drawId === draw.id);
+    const cap = draw.numberCap ? capLabel(draw.numberCap) : null;
+    const capStatus = capByDraw.get(draw.id);
+    const autoFull = [...(capStatus?.full ?? [])]
+      .sort((a, b) => a.prizeTypeCode - b.prizeTypeCode || a.number.localeCompare(b.number))
+      .map((row) => ({
+        id: `cap:${row.prizeTypeId}:${row.number}`,
+        number: row.number,
+        prizeTypeName: row.prizeTypeName,
+        note: `ยอดครบ ${cap} บาท`,
+      }));
+    return {
+      drawId: draw.id,
+      drawName: draw.name,
+      drawDate: draw.drawDate,
+      opensAt: draw.opensAt,
+      cutoffAt: draw.cutoffAt,
+      capLabel: cap,
+      reduced: rows
+        .filter((row) => row.kind === "REDUCED_RATE")
+        .map((row) => ({
+          id: row.id,
+          number: row.number,
+          prizeTypeName: row.prizeType.name,
+          payoutRate: row.payoutRate ? compactRate(row.payoutRate) : "-",
+          normalRate: compactRate(row.prizeType.payoutRate),
+        })),
+      full: [
+        ...rows
+          .filter((row) => row.kind === "CLOSED")
+          .map((row) => ({ id: row.id, number: row.number, prizeTypeName: row.prizeType.name, note: "ปิดรับเลขนี้" })),
+        ...autoFull,
+      ],
+      fullTotal: (capStatus?.summary.full ?? 0) + rows.filter((row) => row.kind === "CLOSED").length,
+      nearTotal: capStatus?.summary.near ?? 0,
+      near: (capStatus?.near ?? []).map((row) => ({
+        id: `near:${row.prizeTypeId}:${row.number}`,
+        number: row.number,
+        prizeTypeName: row.prizeTypeName,
+        remaining: Number(row.remaining ?? 0).toLocaleString("th-TH", { maximumFractionDigits: 2 }),
+        percent: row.percent ?? 0,
+      })),
     };
-    group.entries.push({
-      id: row.id,
-      number: row.number,
-      kind: row.kind,
-      payoutRate: row.payoutRate ? compactRate(row.payoutRate) : null,
-      prizeTypeName: row.prizeType.name,
-    });
-    announcements.set(row.draw.id, group);
-  }
+  }).filter((announcement) => announcement.reduced.length + announcement.full.length + announcement.near.length > 0);
 
   return (
     <main className="workspace-page bills-page slip-board-page">
@@ -79,7 +109,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
         filter={filter}
         scope={scope}
         agents={agents?.map((agent) => ({ value: agent.id, label: `${agent.code} ${agent.name}` })) ?? null}
-        announcements={[...announcements.values()]}
+        announcements={announcements}
       />
     </main>
   );

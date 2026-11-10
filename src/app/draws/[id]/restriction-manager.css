@@ -1,0 +1,29 @@
+/* เพดานต่อเลข + กล่องเลขอั้น/เลขเต็ม ใช้ทั้งหน้ารายละเอียดงวดและหน้า Rulebook */
+.number-cap-form { display: grid; grid-template-columns: minmax(180px, 260px) auto 1fr; align-items: end; gap: .45rem .7rem; margin: .6rem 0 .8rem; padding: .8rem; border: 1px solid #f5c2c9; border-radius: 11px; background: #fff7f8; }
+.number-cap-form label { margin: 0; color: #8c2335; font-weight: 750; }
+.number-cap-form small { align-self: center; color: #8a5b63; font-size: .72rem; line-height: 1.45; }
+.number-cap-form .error, .number-cap-form .success { grid-column: 1 / -1; margin: 0; }
+.restriction-boards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin-top: 1rem; }
+.restriction-board { min-width: 0; overflow: hidden; border: 1px solid; border-radius: 12px; }
+.restriction-board.is-reduced { border-color: #f0d08a; background: #fffbf0; }
+.restriction-board.is-full { border-color: #f5c2c9; background: #fff5f6; }
+.restriction-board > header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .2rem .6rem; padding: .55rem .8rem; }
+.restriction-board.is-reduced > header { background: #fff1cc; }
+.restriction-board.is-full > header { background: #ffe3e7; }
+.restriction-board > header h3 { margin: 0; font-size: 1.08rem; font-weight: 900; }
+.restriction-board.is-reduced > header h3 { color: #7a4d00; }
+.restriction-board.is-full > header h3 { color: #a3293c; }
+.restriction-board > header span { color: #3f4c59; font-size: .84rem; font-weight: 800; }
+.restriction-board-empty { margin: 0; padding: .8rem; color: #4d5b69; font-size: .9rem; font-weight: 600; }
+.restriction-board table { width: 100%; min-width: 0; margin: 0; border-collapse: collapse; background: transparent; }
+.restriction-board th { padding: .45rem .8rem; color: #33414f; font-size: .82rem; font-weight: 800; text-align: left; background: transparent; }
+.restriction-board td { padding: .45rem .8rem; border-top: 1px solid rgb(0 0 0 / 6%); vertical-align: middle; background: transparent; }
+.restriction-board .num { text-align: right; }
+.restriction-board td strong { display: block; font-size: 1.25rem; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.restriction-board td small { display: block; color: #3f4c59; font-size: .82rem; font-weight: 650; }
+.restriction-board.is-reduced td strong { color: #805000; }
+.restriction-board.is-full td strong { color: #b4233a; }
+.restriction-board td:last-child form { display: flex; justify-content: flex-end; margin: 0; }
+@media (max-width: 760px) {
+  .number-cap-form, .restriction-boards { grid-template-columns: 1fr; }
+}

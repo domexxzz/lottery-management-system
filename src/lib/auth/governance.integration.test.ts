@@ -360,7 +360,7 @@ describe("แก้ผลรางวัลที่ประกาศแล้�
         prizeTypeId: f.prizeTypes.threeTop.id,
         value: "456",
       }),
-    ).rejects.toThrow(/เสนอแก้ผล/);
+    ).rejects.toThrow(/แก้ผลที่ประกาศแล้ว/);
   });
 
   test("Admin เสนอแก้ได้ แต่ผลเดิมยังมีผลบังคับจนกว่าจะอนุมัติ", async () => {
@@ -400,36 +400,27 @@ describe("แก้ผลรางวัลที่ประกาศแล้�
     ).toBe(1);
   });
 
-  test("Owner อนุมัติคำขอที่ตัวเองเสนอไม่ได้ ต้องเป็นคนละคน", async () => {
+  test("Owner แก้ผลแล้วมีผลทันทีโดยไม่ต้องมีผู้ยืนยันคนที่สอง", async () => {
     await approvedResult();
-    await proposeResultCorrection(f.actors.OWNER, {
+    const outcome = await proposeResultCorrection(f.actors.OWNER, {
       drawId: f.draw.id,
       prizeTypeId: f.prizeTypes.threeTop.id,
       value: "456",
-      reason: "แก้เลข",
+      reason: "Owner ตรวจพบว่าเลขประกาศผิด",
     });
-    const draft = await prisma.result.findFirstOrThrow({
-      where: { drawId: f.draw.id, status: "DRAFT" },
+    const corrected = await prisma.result.findUniqueOrThrow({
+      where: { id: outcome.resultId },
     });
 
-    // ด่านเดียวกับการยกเลิกบิลหลัง Cutoff: ผู้เสนอกับผู้อนุมัติต้องคนละคน
-    await expect(approveResult(f.actors.OWNER, draft.id)).rejects.toThrow(/คนเดียวกัน/);
-    expect(
-      await prisma.result.count({ where: { drawId: f.draw.id, status: "APPROVED" } }),
-    ).toBe(1);
-  });
-
-  test("Owner เสนอแก้ก็ยังต้องรออนุมัติ ไม่อนุมัติทันทีเหมือนการลงผลครั้งแรก", async () => {
-    await approvedResult();
-    const { resultId } = await proposeResultCorrection(f.actors.OWNER, {
-      drawId: f.draw.id,
-      prizeTypeId: f.prizeTypes.threeTop.id,
-      value: "456",
-      reason: "แก้เลข",
-    });
-    const created = await prisma.result.findUniqueOrThrow({ where: { id: resultId } });
-    expect(created.status).toBe("DRAFT");
-    expect(created.checkerId).toBeNull();
+    expect(outcome.autoApproved).toBe(true);
+    expect(corrected.status).toBe("APPROVED");
+    expect(corrected.makerId).toBe(f.users.owner.id);
+    expect(corrected.checkerId).toBe(f.users.owner.id);
+    expect(corrected.checkedAt).not.toBeNull();
+    expect(await prisma.result.count({ where: { drawId: f.draw.id, status: "DRAFT" } })).toBe(0);
+    expect(await prisma.auditEvent.count({
+      where: { entityType: "Result", entityId: corrected.id, action: "APPROVE" },
+    })).toBe(1);
   });
 
   test("Owner อนุมัติแล้วผลใหม่มีผลบังคับแทนผลเดิม และเก็บผลเดิมไว้ดูย้อนหลัง", async () => {

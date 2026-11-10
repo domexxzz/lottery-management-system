@@ -85,7 +85,8 @@ export function EnterResultForm({
  * เสนอแก้ผลที่ประกาศไปแล้ว
  *
  * แยกจากช่องกรอกผลปกติโดยตั้งใจ เพราะเป็นคนละการกระทำ:
- * การกรอกผลจบในขั้นตอนเดียว ส่วนการแก้ต้องมีเหตุผลและรอคนที่สองอนุมัติ
+ * การกรอกผลจบในขั้นตอนเดียว ส่วนการแก้ต้องมีเหตุผล
+ * Admin รอ Owner อนุมัติ แต่ Owner/Godmode บันทึกแล้วใช้ผลใหม่ทันที
  */
 export function ProposeCorrectionForm({
   drawId,
@@ -94,6 +95,7 @@ export function ProposeCorrectionForm({
   currentValues,
   resultLength,
   valueCount,
+  appliesImmediately,
 }: {
   drawId: string;
   prizeTypeId: string;
@@ -101,17 +103,20 @@ export function ProposeCorrectionForm({
   currentValues: string[];
   resultLength: number;
   valueCount: number;
+  appliesImmediately: boolean;
 }) {
   const [state, formAction, pending] = useActionState(proposeResultCorrectionAction, INITIAL);
 
   return (
     <details className="result-correction">
-      <summary>แก้ผลที่ประกาศแล้ว</summary>
+      <summary>{appliesImmediately ? "แก้ผลทันที" : "แก้ผลที่ประกาศแล้ว"}</summary>
       <form action={formAction} className="inline-form">
         <input type="hidden" name="drawId" value={drawId} />
         <input type="hidden" name="prizeTypeId" value={prizeTypeId} />
         <p className="muted">
-          ผลปัจจุบันคือ {currentValues.join(" · ")} · ผลเดิมยังมีผลบังคับจนกว่า Owner จะอนุมัติการแก้
+          ผลปัจจุบันคือ {currentValues.join(" · ")} · {appliesImmediately
+            ? "เมื่อบันทึก ผลใหม่จะมีผลทันทีและระบบจะคำนวณยอดใหม่"
+            : "ผลเดิมยังมีผลบังคับจนกว่า Owner จะอนุมัติการแก้"}
         </p>
         {Array.from({ length: valueCount }, (_, valueIndex) => (
           <input
@@ -133,7 +138,7 @@ export function ProposeCorrectionForm({
           required
         />
         <button type="submit" disabled={pending}>
-          {pending ? "กำลังส่ง..." : "ส่งคำขอแก้ผล"}
+          {pending ? "กำลังบันทึก..." : appliesImmediately ? "บันทึกและใช้ผลใหม่" : "ส่งคำขอแก้ผล"}
         </button>
         <Feedback state={state} />
       </form>

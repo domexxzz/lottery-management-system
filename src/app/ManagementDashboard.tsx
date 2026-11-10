@@ -7,6 +7,7 @@ import { DashboardIcon as Icon } from "./DashboardIcon";
 import { DashboardFilters } from "./DashboardFilters";
 import { OwnerBusinessCharts } from "./OwnerBusinessCharts";
 import { DashboardHeading } from "./DashboardHeading";
+import { NumberCapPanel } from "./NumberCapPanel";
 
 const STEPS = [
   { key: "OPEN", label: "เปิดรับ", detail: "กำลังรับบิล" },
@@ -62,6 +63,7 @@ export async function ManagementDashboard({ actor, filters }: { actor: Actor; fi
     </div>
     <DashboardFilters draws={drawOptions.map((draw) => ({ id: draw.id, label: draw.name }))} />
     <section className="kpi-grid" aria-label="ตัวเลขสรุป">{kpis.map((kpi) => <article key={kpi.label} className={`kpi-card tone-${kpi.tone}`}><span className="kpi-icon"><Icon name={kpi.icon} /></span><div className="kpi-content"><p>{kpi.label}</p><strong>{MONEY.format(Number(kpi.value ?? 0))}</strong><small>บาท · {filters.drawId || filters.agentId || filters.status || filters.dateFrom || filters.dateTo ? "ตามตัวกรอง" : "ข้อมูลทั้งหมด"}</small></div></article>)}</section>
+    <NumberCapPanel actor={actor} />
     <OwnerBusinessCharts draws={drawFinance} agents={agentFinance} volume={summary.billCount ? volumeTrend : []} />
     <section className="insight-grid" aria-label="แนวโน้มและสรุปจำนวนข้อมูล">
       <article className="dashboard-panel trend-panel"><div className="panel-heading"><div><p className="eyebrow">แนวโน้มธุรกิจ</p><h2>ยอดขาย 7 วันล่าสุด</h2></div><Link href="/reports">ดูรายงาน <Icon name="arrow" /></Link></div><div className="trend-summary"><strong>{MONEY.format(salesTrend.reduce((sum, point) => sum + point.value, 0))}</strong><span>บาท · ยอดรวม 7 วัน</span></div><div className="line-chart" role="img" aria-label="กราฟเส้นยอดขายย้อนหลัง 7 วัน"><svg viewBox="0 0 700 190" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="salesArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#1697a6" stopOpacity=".3"/><stop offset="100%" stopColor="#1697a6" stopOpacity=".02"/></linearGradient></defs>{[40, 82, 124, 166].map((y) => <line key={y} x1="20" x2="680" y1={y} y2={y} className="chart-gridline" />)}<path d={areaPath} fill="url(#salesArea)"/><polyline points={linePoints} className="sales-line"/>{chartPoints.map((point) => <circle key={point.key} cx={point.x} cy={point.y} r="4.5" />)}</svg><div className="chart-days">{salesTrend.map((point) => <span key={point.key}>{point.label}</span>)}</div></div></article>

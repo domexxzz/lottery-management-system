@@ -3,6 +3,7 @@ import {
   canCorrectInDrawStatus,
   correctionInvalidatesSettlement,
   isCorrection,
+  shouldApproveCorrectionOnProposal,
   shouldApproveResultOnEntry,
 } from "./policy";
 
@@ -17,6 +18,14 @@ describe("ยืนยันผลในขั้นตอนเดียว", (
 });
 
 describe("แก้ผลที่ประกาศแล้ว", () => {
+  test.each(["GODMODE", "OWNER"] as const)("%s แก้ผลแล้วอนุมัติทันที", (role) => {
+    expect(shouldApproveCorrectionOnProposal(role)).toBe(true);
+  });
+
+  test.each(["ADMIN", "AGENT"] as const)("%s ไม่อนุมัติการแก้ผลอัตโนมัติ", (role) => {
+    expect(shouldApproveCorrectionOnProposal(role)).toBe(false);
+  });
+
   test("ผลที่อนุมัติแล้วเท่านั้นที่นับเป็นการแก้", () => {
     expect(isCorrection("APPROVED")).toBe(true);
     expect(isCorrection("DRAFT")).toBe(false);

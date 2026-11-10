@@ -90,6 +90,7 @@
 
 /* เลขที่ถูกรางวัลใต้แถว Agent ในสรุปการเงิน: ถูกเลขไหน ลงเท่าไหร่ คูณกี่เท่า */
 .settlement-row.has-wins td{border-bottom:0}
+.settlement-agent-link{display:grid;gap:.05rem;color:#0b7184;text-decoration:none}.settlement-agent-link strong{color:#123a56;font-size:.76rem}.settlement-agent-link span{font-size:.68rem}.settlement-agent-link small{color:#6f8793;font-size:.56rem;font-weight:700}.settlement-agent-link:hover small,.settlement-agent-link:focus-visible small{color:#087d91;text-decoration:underline}
 .settlement-wins-row td{padding:0 .6rem .65rem!important;background:#fbfdfd}
 .settlement-wins{display:flex;flex-direction:column;gap:.35rem;padding:.55rem .65rem;border:1px solid #cfe7e2;border-left:4px solid #16a085;border-radius:9px;background:#f2fbf8}
 .settlement-wins-label{color:#0f7a66;font-size:.62rem;font-weight:800}

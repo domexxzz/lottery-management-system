@@ -1,0 +1,28 @@
+.number-cap-panel { display: grid; gap: .7rem; }
+.number-cap-panel-note { margin: -.2rem 0 0; color: #3f4c59; font-size: .86rem; }
+.number-cap-panel-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem; }
+.number-cap-panel-cards a { display: grid; gap: .1rem; padding: .6rem .75rem; border: 1px solid #e3eaf0; border-left: 4px solid; border-radius: 11px; color: inherit; background: #fff; text-decoration: none; }
+.number-cap-panel-cards span { color: #3f4c59; font-size: .8rem; font-weight: 750; }
+.number-cap-panel-cards strong { font-size: 1.45rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.number-cap-panel-cards .is-all { border-left-color: #2d6fa3; }
+.number-cap-panel-cards .is-near { border-left-color: #e8901c; }
+.number-cap-panel-cards .is-near strong { color: #b86200; }
+.number-cap-panel-cards .is-full { border-left-color: #d6334d; background: #fff7f8; }
+.number-cap-panel-cards .is-full strong { color: #b4233a; }
+.app-page .number-cap-panel h3 { margin: .2rem 0 0; color: #33414f; font-size: .92rem; font-weight: 850; }
+.number-cap-panel-empty { margin: 0; color: #4d5b69; font-size: .88rem; }
+.number-cap-panel-list { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.number-cap-panel-list li { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(80px, 2fr) auto; align-items: center; gap: .75rem; padding: .45rem .6rem; border: 1px solid #f3e1c6; border-radius: 10px; background: #fffaf2; }
+.number-cap-panel-list li > div:first-child { display: grid; min-width: 0; }
+.number-cap-panel-list strong { color: #b86200; font-size: 1.15rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.number-cap-panel-list small { overflow: hidden; color: #5b6976; font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }
+.number-cap-panel-bar { height: 8px; overflow: hidden; border-radius: 99px; background: #f1e3cf; }
+.number-cap-panel-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f0b24a, #d9472b); }
+.number-cap-panel-value { display: grid; text-align: right; }
+.number-cap-panel-value b { color: #8f3a00; font-size: .92rem; font-variant-numeric: tabular-nums; }
+.number-cap-panel-more { justify-self: end; color: #1f4d73; font-size: .86rem; font-weight: 800; text-decoration: none; }
+@media (max-width: 640px) {
+  .number-cap-panel-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .number-cap-panel-list li { grid-template-columns: 1fr auto; }
+  .number-cap-panel-bar { grid-column: 1 / -1; grid-row: 2; }
+}

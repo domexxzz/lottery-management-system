@@ -6,6 +6,7 @@ import {
   confirmBillAction,
   deleteBillAction,
   requestCancelAction,
+  updateBillAction,
   type ActionState,
 } from "../actions";
 
@@ -82,15 +83,41 @@ export function DeleteBillForm({ billId, billLabel, attachmentCount }: { billId:
 
   return (
     <form className="delete-bill-form" action={formAction} onSubmit={(event) => {
-      const evidence = attachmentCount > 0 ? ` และลบหลักฐาน ${attachmentCount} ไฟล์` : "";
-      if (!window.confirm(`ลบ${billLabel}ถาวร${evidence}ใช่ไหม? หากงวดนี้เคยคำนวณแล้ว ระบบจะยกเลิกยอดสรุปเพื่อให้คำนวณใหม่`)) event.preventDefault();
+      const evidence = attachmentCount > 0 ? ` (หลักฐาน ${attachmentCount} ไฟล์จะยังเก็บในประวัติ)` : "";
+      if (!window.confirm(`ยืนยันลบ${billLabel}ใช่ไหม?${evidence} บิลจะไม่ถูกนำไปคำนวณ แต่ยังตรวจสอบประวัติได้`)) event.preventDefault();
     }}>
       <input type="hidden" name="billId" value={billId} />
       {state.error !== null && <p className="error" role="alert">{state.error}</p>}
-      <p className="notice">การลบจะนำรายการเลขและหลักฐานออกถาวร แต่ยังเก็บ Audit Log ไว้ตรวจสอบย้อนหลัง</p>
+      <p className="notice">บิลจะหายจากรายการที่ใช้งานและไม่ถูกนำไปคำนวณ แต่เลขเดิมพัน หลักฐาน และประวัติยังคงอยู่</p>
       <button type="submit" className="danger-button" disabled={pending}>
-        {pending ? "กำลังลบบิล..." : "ลบบิลถาวร"}
+        {pending ? "กำลังลบบิล..." : "ลบบิล"}
       </button>
+    </form>
+  );
+}
+
+type EditableItem = { id: string; prizeTypeId: string; prizeTypeName: string; number: string; stake: string; digits: number };
+
+export function EditBillForm({ billId, title, items }: { billId: string; title: string; items: EditableItem[] }) {
+  const [state, formAction, pending] = useActionState(updateBillAction, INITIAL);
+  return (
+    <form className="bill-edit-form" action={formAction}>
+      <input type="hidden" name="billId" value={billId} />
+      <label className="bill-edit-title">ชื่อลูกค้า<input name="title" defaultValue={title} required maxLength={120} /></label>
+      <div className="bill-edit-rows">
+        {items.map((item, index) => (
+          <fieldset key={item.id}>
+            <legend>รายการ {index + 1} · {item.prizeTypeName}</legend>
+            <input type="hidden" name="prizeTypeId" value={item.prizeTypeId} />
+            <label>เลขที่แทง<input name="number" defaultValue={item.number} inputMode="numeric" pattern={`\\d{${item.digits}}`} maxLength={item.digits} required /></label>
+            <label>ยอดเดิมพัน (บาท)<input name="stake" type="number" defaultValue={item.stake} min="5" max="1000" step="1" required /></label>
+          </fieldset>
+        ))}
+      </div>
+      <p className="notice">บันทึกแล้วมีผลทันที ระบบจะเก็บเลขและยอดเดิมพันก่อน–หลัง พร้อมชื่อผู้แก้และเวลาโดยอัตโนมัติ</p>
+      {state.error !== null && <p className="error" role="alert">{state.error}</p>}
+      {state.error === null && !pending && <p className="bill-edit-success" aria-live="polite">แก้เลขหรือยอดเดิมพัน แล้วกดบันทึกการแก้ไข</p>}
+      <button type="submit" disabled={pending}>{pending ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}</button>
     </form>
   );
 }

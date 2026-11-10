@@ -5,6 +5,7 @@ import { orgScope } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { listRestrictions } from "@/lib/draws/restrictions";
+import { capLabel, fullNumbersByDraw } from "@/lib/draws/number-cap";
 import { compactRate, drawDateLabel } from "@/lib/bills/betting";
 import { listPrizeTypes } from "@/lib/prizeTypes/service";
 import { RestrictionManager } from "../draws/[id]/RestrictionManager";
@@ -35,7 +36,7 @@ export default async function PrizeTypesPage({
     prisma.draw.findMany({
       where: { ...orgScope(actor), status: "OPEN" },
       orderBy: [{ cutoffAt: "asc" }, { createdAt: "desc" }],
-      select: { id: true, name: true, drawDate: true, cutoffAt: true },
+      select: { id: true, name: true, drawDate: true, cutoffAt: true, numberCap: true },
     }),
   ]);
   const visiblePrizeTypes = prizeTypes.filter((prizeType) => ![10, 11].includes(prizeType.code));
@@ -44,6 +45,10 @@ export default async function PrizeTypesPage({
   const selectedDraw = openDraws.find((draw) => draw.id === query.drawId) ?? openDraws[0];
   const restrictionRows = selectedDraw ? await listRestrictions(actor, selectedDraw.id) : [];
   const restrictionPrizeTypes = visiblePrizeTypes.filter((prizeType) => prizeType.isActive);
+  const fullNumberRows = selectedDraw
+    ? (await fullNumbersByDraw(prisma, actor.organizationId, [selectedDraw])).get(selectedDraw.id) ?? []
+    : [];
+  const prizeNameById = new Map(prizeTypes.map((prizeType) => [prizeType.id, prizeType.name]));
 
   return (
     <main className="workspace-page rulebook-page">
@@ -147,6 +152,14 @@ export default async function PrizeTypesPage({
                 payoutRate: row.payoutRate ? compactRate(row.payoutRate) : null,
                 prizeTypeName: row.prizeType.name,
                 normalRate: compactRate(row.prizeType.payoutRate),
+              }))}
+              numberCap={selectedDraw.numberCap ? String(Number(selectedDraw.numberCap)) : ""}
+              capLabel={capLabel(selectedDraw.numberCap)}
+              fullNumbers={fullNumberRows.map((row) => ({
+                key: `${row.prizeTypeId}:${row.number}`,
+                prizeTypeName: prizeNameById.get(row.prizeTypeId) ?? "-",
+                number: row.number,
+                used: Number(row.used).toLocaleString("th-TH", { maximumFractionDigits: 2 }),
               }))}
             />
           </>

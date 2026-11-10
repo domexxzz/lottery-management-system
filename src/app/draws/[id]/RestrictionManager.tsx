@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { addRestrictionAction, removeRestrictionAction, type ActionState } from "./actions";
+import "./restriction-manager.css";
+import { addRestrictionAction, removeRestrictionAction, updateNumberCapAction, type ActionState } from "./actions";
 
 const INITIAL: ActionState = { error: null, message: null };
 
@@ -13,6 +14,8 @@ export type RestrictionRow = {
   prizeTypeName: string;
   normalRate: string;
 };
+
+export type FullNumberRow = { key: string; prizeTypeName: string; number: string; used: string };
 
 export type RestrictionPrizeOption = { id: string; code: number; name: string; digits: number; payoutRate: string };
 
@@ -36,18 +39,45 @@ function RemoveButton({ id }: { id: string }) {
   );
 }
 
-/** ตั้งเลขอั้น (จ่ายลด) ของงวดที่ยังเปิดรับ */
+function NumberCapForm({ drawId, numberCap, editable }: { drawId: string; numberCap: string; editable: boolean }) {
+  const [state, action, pending] = useActionState(updateNumberCapAction, INITIAL);
+  return (
+    <form action={action} className="number-cap-form">
+      <input type="hidden" name="drawId" value={drawId} />
+      <label>
+        เพดานรับต่อเลข (บาท)
+        <input name="numberCap" inputMode="decimal" defaultValue={numberCap} placeholder="ไม่จำกัด" disabled={!editable} aria-describedby="number-cap-help" />
+      </label>
+      {editable && <button type="submit" disabled={pending}>{pending ? "กำลังบันทึก…" : "บันทึกเพดาน"}</button>}
+      <small id="number-cap-help">
+        ยอดแทงของเลขเดียวกันในประเภทเดียวกัน รวมทุก Agent ทั้งงวด ครบเพดานแล้วเป็นเลขเต็ม ระบบปิดรับเอง · ค่าเริ่มต้น 2,000 · เว้นว่าง = ไม่จำกัด
+      </small>
+      {state.error && <p className="error" role="alert">{state.error}</p>}
+      {state.message && <p className="success" role="status">{state.message}</p>}
+    </form>
+  );
+}
+
+/** ตั้งเลขอั้น (จ่ายลด) และเพดานต่อเลขของงวดที่ยังเปิดรับ */
 export function RestrictionManager({
   drawId,
   editable,
   prizeTypes,
   rows,
+  numberCap,
+  capLabel,
+  fullNumbers,
 }: {
   drawId: string;
   editable: boolean;
   prizeTypes: RestrictionPrizeOption[];
   rows: RestrictionRow[];
+  numberCap: string;
+  capLabel: string;
+  fullNumbers: FullNumberRow[];
 }) {
+  const reducedRows = rows.filter((row) => row.kind === "REDUCED_RATE");
+  const closedRows = rows.filter((row) => row.kind === "CLOSED");
   const [state, action, pending] = useActionState(addRestrictionAction, INITIAL);
   const threeTop = prizeTypes.find((prizeType) => prizeType.code === 1);
   const threeTod = prizeTypes.find((prizeType) => prizeType.code === 2);
@@ -84,7 +114,8 @@ export function RestrictionManager({
   ];
 
   return (
-    <section className="restriction-manager" aria-label="กำหนดเลขอั้น">
+    <section className="restriction-manager" aria-label="กำหนดเลขอั้นและเลขเต็ม">
+      <NumberCapForm drawId={drawId} numberCap={numberCap} editable={editable} />
       {editable ? (
         <form action={action} className="restriction-form">
           <input type="hidden" name="drawId" value={drawId} />
@@ -126,34 +157,72 @@ export function RestrictionManager({
         </details>
       ) : null}
 
-      {rows.length === 0 ? (
-        <p className="muted">ยังไม่มีเลขอั้น</p>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">ประเภท</th>
-                <th scope="col">รางวัล</th>
-                <th scope="col">เลข</th>
-                <th scope="col" className="num">อัตราจ่าย</th>
-                {editable && <th scope="col"><span className="sr-only">จัดการ</span></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td><span className={`status-pill ${row.kind === "CLOSED" ? "danger" : "warning"}`}>{row.kind === "CLOSED" ? "ปิดรับ (รายการเดิม)" : "เลขอั้น"}</span></td>
-                  <td>{row.prizeTypeName}</td>
-                  <td><strong>{row.number}</strong></td>
-                  <td className="num">{row.kind === "CLOSED" ? "ปิดรับ" : `${row.payoutRate} (ปกติ ${row.normalRate})`}</td>
-                  {editable && <td><RemoveButton id={row.id} /></td>}
+      <div className="restriction-boards">
+        <section className="restriction-board is-reduced" aria-labelledby="restriction-reduced-heading">
+          <header>
+            <h3 id="restriction-reduced-heading">เลขอั้น</h3>
+            <span>{reducedRows.length} เลข · รับแต่จ่ายลด</span>
+          </header>
+          {reducedRows.length === 0 ? (
+            <p className="restriction-board-empty">ยังไม่มีเลขอั้น</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">เลข</th>
+                  <th scope="col" className="num">อัตราจ่าย</th>
+                  {editable && <th scope="col"><span className="sr-only">จัดการ</span></th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {reducedRows.map((row) => (
+                  <tr key={row.id}>
+                    <td><strong>{row.number}</strong><small>{row.prizeTypeName}</small></td>
+                    <td className="num"><strong>{row.payoutRate ?? "-"}</strong><small>ปกติ {row.normalRate}</small></td>
+                    {editable && <td><RemoveButton id={row.id} /></td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+
+        <section className="restriction-board is-full" aria-labelledby="restriction-full-heading">
+          <header>
+            <h3 id="restriction-full-heading">เลขเต็ม</h3>
+            <span>{fullNumbers.length + closedRows.length} เลข · ปิดรับ · เพดานเลขละ {capLabel}{capLabel === "ไม่จำกัด" ? "" : " บาท"}</span>
+          </header>
+          {fullNumbers.length + closedRows.length === 0 ? (
+            <p className="restriction-board-empty">ยังไม่มีเลขเต็ม</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">เลข</th>
+                  <th scope="col" className="num">สถานะ</th>
+                  {editable && closedRows.length > 0 && <th scope="col"><span className="sr-only">จัดการ</span></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {fullNumbers.map((row) => (
+                  <tr key={row.key}>
+                    <td><strong>{row.number}</strong><small>{row.prizeTypeName}</small></td>
+                    <td className="num"><strong>ปิดรับ</strong><small>ยอดรวม {row.used} บาท</small></td>
+                    {editable && closedRows.length > 0 && <td />}
+                  </tr>
+                ))}
+                {closedRows.map((row) => (
+                  <tr key={row.id}>
+                    <td><strong>{row.number}</strong><small>{row.prizeTypeName}</small></td>
+                    <td className="num"><strong>ปิดรับ</strong><small>ตั้งปิดไว้เอง</small></td>
+                    {editable && <td><RemoveButton id={row.id} /></td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </div>
     </section>
   );
 }

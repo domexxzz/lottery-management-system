@@ -23,8 +23,14 @@ describe("Admin เป็นผู้ปฏิบัติงานและผ�
     expect(can("OWNER", "system.override")).toBe(false);
   });
 
-  test("Owner ลบงวด บิล และหลักฐานได้ แต่ Admin กับ Agent ลบไม่ได้", () => {
-    for (const permission of ["draw.delete", "bill.delete", "evidence.delete"] as const) {
+  test("Agent, Admin และ Owner ลบบิลก่อนปิดรับได้ตามขอบเขตของตน", () => {
+    for (const role of ["AGENT", "ADMIN", "OWNER"] as const) {
+      expect(can(role, "bill.delete")).toBe(true);
+    }
+  });
+
+  test("สิทธิ์ลบงวดและหลักฐานยังเป็นของ Owner", () => {
+    for (const permission of ["draw.delete", "evidence.delete"] as const) {
       expect(can("OWNER", permission)).toBe(true);
       expect(can("ADMIN", permission)).toBe(false);
       expect(can("AGENT", permission)).toBe(false);
@@ -32,13 +38,13 @@ describe("Admin เป็นผู้ปฏิบัติงานและผ�
   });
 });
 
-describe("การแก้ผลที่ประกาศแล้วต้องใช้สองคน", () => {
+describe("สิทธิ์การแก้ผลที่ประกาศแล้ว", () => {
   test("Admin เสนอแก้ได้ แต่อนุมัติการแก้เองไม่ได้", () => {
     expect(can("ADMIN", "result.proposeCorrection")).toBe(true);
     expect(can("ADMIN", "result.approveCorrection")).toBe(false);
   });
 
-  test("Owner เป็นผู้อนุมัติการแก้ผล", () => {
+  test("Owner มีสิทธิ์อนุมัติการแก้ผล รวมถึงการแก้เองแบบมีผลทันที", () => {
     expect(can("OWNER", "result.approveCorrection")).toBe(true);
   });
 

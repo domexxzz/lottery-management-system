@@ -223,3 +223,44 @@ export async function removeRestriction(actor: Actor, restrictionId: string): Pr
     return { drawId: row.drawId };
   });
 }
+
+/**
+ * เปลี่ยนเพดานรับต่อเลขของงวด (ค่าเริ่มต้น 2,000 บาท)
+ *
+ * มีผลกับบิลที่ยืนยันหลังจากนี้ บิลที่ยืนยันไปแล้วไม่ถูกย้อนแก้
+ * เว้นว่าง = ไม่จำกัด
+ */
+export async function updateNumberCap(actor: Actor, drawId: string, rawValue: string): Promise<void> {
+  requirePermission(actor, "draw.manage");
+  const raw = rawValue.replace(/,/g, "").trim();
+  let cap: Prisma.Decimal | null = null;
+  if (raw !== "") {
+    if (!/^\d+(\.\d{1,2})?$/.test(raw) || Number(raw) <= 0) {
+      throw new ValidationError("เพดานต่อเลขต้องเป็นจำนวนเงินมากกว่า 0 หรือเว้นว่างถ้าไม่จำกัด");
+    }
+    if (Number(raw) > 100_000_000) throw new ValidationError("เพดานต่อเลขสูงเกินไป");
+    cap = new Prisma.Decimal(raw);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const draw = await tx.draw.findFirst({
+      where: { ...orgScope(actor), id: drawId },
+      select: { id: true, status: true, numberCap: true },
+    });
+    if (!draw) throw new NotFoundError("ไม่พบงวด");
+    if (draw.status !== "OPEN") throw new ConflictError("แก้เพดานต่อเลขได้เฉพาะงวดที่ยังเปิดรับ");
+    await tx.draw.update({ where: { id: draw.id }, data: { numberCap: cap } });
+    await writeAudit(tx, {
+      organizationId: actor.organizationId,
+      actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
+      action: "UPDATE",
+      entityType: "Draw",
+      entityId: draw.id,
+      before: { numberCap: draw.numberCap?.toFixed(2) ?? null },
+      after: { numberCap: cap?.toFixed(2) ?? null },
+      reason: "เปลี่ยนเพดานรับต่อเลข",
+    });
+  });
+}

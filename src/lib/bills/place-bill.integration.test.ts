@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
-import { listBetBills, placeBill, recentCustomerNames } from "./service";
+import { listBetBills, placeBill, recentCustomerNames, softDeleteBillBeforeCutoff, updateBillBeforeCutoff } from "./service";
 import { addRestriction, removeRestriction } from "@/lib/draws/restrictions";
 
 let f: Fixtures;
@@ -71,6 +71,80 @@ describe("หน้าแทงเลข: placeBill", () => {
       title: "ลูกค้า",
       items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }],
     })).rejects.toThrow(/หมดเวลาการเดิมพัน/);
+  });
+});
+
+describe("แก้ไขและลบบิลก่อนปิดรับ", () => {
+  test("Agent แก้เลขและยอดเดิมพันของบิลตนเองได้ทันที พร้อม Audit ก่อนและหลัง", async () => {
+    const placed = await placeBill(f.actors.AGENT1, {
+      drawId: f.draw.id,
+      title: "ลูกค้าเดิม",
+      items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }],
+    });
+
+    await updateBillBeforeCutoff(f.actors.AGENT1, placed.billId, {
+      title: "ลูกค้าแก้แล้ว",
+      items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "456", stake: "25" }],
+    });
+
+    const bill = await prisma.bill.findUniqueOrThrow({ where: { id: placed.billId }, include: { items: true } });
+    expect(bill.title).toBe("ลูกค้าแก้แล้ว");
+    expect(bill.totalStake.toFixed(2)).toBe("25.00");
+    expect(bill.items).toHaveLength(1);
+    expect(bill.items[0]?.number).toBe("456");
+    expect(bill.items[0]?.stake.toFixed(2)).toBe("25.00");
+    const audit = await prisma.auditEvent.findFirstOrThrow({ where: { entityId: placed.billId, action: "UPDATE" }, orderBy: { createdAt: "desc" } });
+    expect(audit.actorId).toBe(f.actors.AGENT1.userId);
+    expect(audit.before).toMatchObject({ title: "ลูกค้าเดิม", items: [{ number: "123", stake: "10.00" }] });
+    expect(audit.after).toMatchObject({ title: "ลูกค้าแก้แล้ว", items: [{ number: "456", stake: "25.00" }] });
+  });
+
+  test("Agent แก้หรือลบบิลของ Agent อื่นไม่ได้", async () => {
+    const placed = await placeBill(f.actors.AGENT2, {
+      drawId: f.draw.id,
+      title: "ของ Agent 2",
+      items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }],
+    });
+    await expect(updateBillBeforeCutoff(f.actors.AGENT1, placed.billId, {
+      title: "แอบแก้",
+      items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "456", stake: "10" }],
+    })).rejects.toThrow(/ไม่พบบิล/);
+    await expect(softDeleteBillBeforeCutoff(f.actors.AGENT1, placed.billId)).rejects.toThrow(/ไม่พบบิล/);
+  });
+
+  test("ลบบิลแบบเก็บประวัติ: รายการเลขยังอยู่ แต่สถานะ CANCELLED และไม่รวมยอด", async () => {
+    const placed = await placeBill(f.actors.AGENT1, {
+      drawId: f.draw.id,
+      title: "บิลที่จะลบ",
+      items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }],
+    });
+    await softDeleteBillBeforeCutoff(f.actors.ADMIN, placed.billId);
+
+    const bill = await prisma.bill.findUniqueOrThrow({ where: { id: placed.billId }, include: { items: true } });
+    expect(bill.status).toBe("CANCELLED");
+    expect(bill.cancelReason).toBe("ลบบิลก่อนปิดรับ");
+    expect(bill.cancelledById).toBe(f.actors.ADMIN.userId);
+    expect(bill.items).toHaveLength(1);
+    const audit = await prisma.auditEvent.findFirstOrThrow({ where: { entityId: placed.billId, action: "DELETE" } });
+    expect(audit.after).toMatchObject({ status: "CANCELLED", excludedFromCalculation: true });
+    const pending = await listBetBills(f.actors.ADMIN, { tab: "PENDING" });
+    expect(pending.bills).toHaveLength(0);
+  });
+
+  test("หลังปิดรับแล้ว Agent/Admin/Owner แก้หรือลบบิลไม่ได้", async () => {
+    const placed = await placeBill(f.actors.AGENT1, {
+      drawId: f.draw.id,
+      title: "ปิดรับแล้ว",
+      items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }],
+    });
+    await prisma.draw.update({ where: { id: f.draw.id }, data: { cutoffAt: new Date(Date.now() - 1000) } });
+    for (const actor of [f.actors.AGENT1, f.actors.ADMIN, f.actors.OWNER]) {
+      await expect(updateBillBeforeCutoff(actor, placed.billId, {
+        title: "แก้ไม่ได้",
+        items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "456", stake: "10" }],
+      })).rejects.toThrow(/ยังเปิดรับ/);
+      await expect(softDeleteBillBeforeCutoff(actor, placed.billId)).rejects.toThrow(/ยังเปิดรับ/);
+    }
   });
 });
 

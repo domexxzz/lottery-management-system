@@ -5,12 +5,17 @@ export function shouldApproveResultOnEntry(role: Role): boolean {
   return role === "GODMODE" || role === "OWNER" || role === "ADMIN";
 }
 
+/** Owner/Godmode แก้ผลที่ประกาศแล้วได้ทันที โดยไม่ต้องรอผู้ตรวจคนที่สอง */
+export function shouldApproveCorrectionOnProposal(role: Role): boolean {
+  return role === "GODMODE" || role === "OWNER";
+}
+
 /**
  * การแก้ผลที่ประกาศไปแล้ว ต่างจากการกรอกผลครั้งแรก
  *
  * การกรอกครั้งแรกจบในขั้นตอนเดียวเพราะยังไม่มีใครอ้างอิงตัวเลขนั้น
  * แต่เมื่อผลถูกอนุมัติแล้ว ตัวเลขนั้นถูกใช้คำนวณเงินและอาจจ่ายออกไปแล้ว
- * การแก้จึงต้องผ่านสองคน: Admin เสนอ Owner อนุมัติ เหมือนการยกเลิกบิลหลัง Cutoff
+ * Admin จึงเสนอให้ Owner อนุมัติ ส่วน Owner/Godmode แก้แล้วมีผลทันทีตามสิทธิ์สูงสุด
  *
  * ผลเดิมไม่ถูกลบหรือเขียนทับ แต่ถูกแทนที่ด้วย version ถัดไป
  * เพื่อให้ย้อนดูได้ว่าเคยประกาศอะไรไว้ก่อนหน้า

@@ -300,3 +300,55 @@ describe("เลขเต็มและเลขอั้น", () => {
     expect(run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("10") }] })).toEqual([]);
   });
 });
+
+describe("เพดานรับต่อเลข (เลขเต็มอัตโนมัติ)", () => {
+  const CAP = d(2000);
+
+  function runCap(stake: string, used: [string, string][], numberValue = "123", prizeType = THREE_TOP) {
+    return validateBill({
+      items: [{ prizeTypeId: prizeType.id, number: numberValue, stake: d(stake) }],
+      rules: RULES,
+      agent: { creditLimit: null, perNumberLimit: null },
+      draw: OPEN_DRAW,
+      existingStakeInDraw: d(0),
+      now: NOW,
+      numberCap: { cap: CAP, used: new Map(used.map(([key, value]) => [key, d(value)])) },
+    });
+  }
+
+  test("รับได้พอดีเพดาน 2,000", () => {
+    expect(runCap("1000", [[dedupeKey(THREE_TOP.id, "123", "EXACT"), "1000"]])).toEqual([]);
+    expect(runCap("500", [[dedupeKey(THREE_TOP.id, "123", "EXACT"), "1500"]])).toEqual([]);
+  });
+
+  test("เกินเพดานบอกยอดที่ยังรับได้", () => {
+    const issues = runCap("600", [[dedupeKey(THREE_TOP.id, "123", "EXACT"), "1500"]]);
+    expect(codes(issues)).toEqual(["NUMBER_FULL"]);
+    expect(issues[0]?.message).toContain("รับได้อีก 500 บาท");
+  });
+
+  test("ยอดครบแล้วเป็นเลขเต็ม", () => {
+    const issues = runCap("10", [[dedupeKey(THREE_TOP.id, "123", "EXACT"), "2000"]]);
+    expect(codes(issues)).toEqual(["NUMBER_FULL"]);
+    expect(issues[0]?.message).toContain("เป็นเลขเต็ม");
+  });
+
+  test("โต๊ดนับเลขสลับหลักเป็นเลขเดียวกัน แต่ไม่ปนกับประเภทอื่น", () => {
+    const used: [string, string][] = [[dedupeKey(THREE_TOD.id, "321", "PERMUTATION"), "2000"]];
+    expect(codes(runCap("10", used, "213", THREE_TOD))).toEqual(["NUMBER_FULL"]);
+    expect(runCap("10", used, "123", THREE_TOP)).toEqual([]);
+  });
+
+  test("ไม่จำกัดเมื่อเพดานเป็น null", () => {
+    const issues = validateBill({
+      items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("1000") }],
+      rules: RULES,
+      agent: { creditLimit: null, perNumberLimit: null },
+      draw: OPEN_DRAW,
+      existingStakeInDraw: d(0),
+      now: NOW,
+      numberCap: { cap: null, used: new Map([[dedupeKey(THREE_TOP.id, "123", "EXACT"), d(9000)]]) },
+    });
+    expect(issues).toEqual([]);
+  });
+});

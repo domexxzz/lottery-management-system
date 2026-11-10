@@ -13,8 +13,8 @@ const PRIZE_TYPES = [
   { code: 7, name: "2 ตัวโต๊ด", digits: 2, matchRule: "PERMUTATION", payoutRate: "45.0000", isActive: false },
   // รางวัลวิ่ง: แทงหลักเดียว แต่เทียบกับผลที่ยาวกว่า จึงต้องระบุ resultDigits
   // วิ่งบนเทียบกับเลข 3 ตัวบน · วิ่งล่างเทียบกับเลข 2 ตัวล่าง
-  { code: 8, name: "วิ่งบน", digits: 1, resultDigits: 3, matchRule: "CONTAINS_DIGIT", payoutRate: "3.2000", isActive: false },
-  { code: 9, name: "วิ่งล่าง", digits: 1, resultDigits: 2, matchRule: "CONTAINS_DIGIT", payoutRate: "4.2000", isActive: false },
+  { code: 8, name: "วิ่งบน", digits: 1, resultDigits: 3, matchRule: "CONTAINS_DIGIT", payoutRate: "2.5000", isActive: false },
+  { code: 9, name: "วิ่งล่าง", digits: 1, resultDigits: 2, matchRule: "CONTAINS_DIGIT", payoutRate: "2.5000", isActive: false },
   // เลขสลับเป็นปุ่มช่วยแตกเลขของตัวบน ไม่ใช่ประเภทรางวัลที่ต้องลงผลแยก
   { code: 10, name: "3 ตัวสลับ (เดิม)", digits: 3, matchRule: "EXACT", payoutRate: "650.0000", isActive: false },
   { code: 11, name: "2 ตัวสลับ (เดิม)", digits: 2, matchRule: "EXACT", payoutRate: "75.0000", isActive: false },

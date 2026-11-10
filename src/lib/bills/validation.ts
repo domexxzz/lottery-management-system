@@ -45,6 +45,7 @@ export type ValidationIssue = {
     | "STAKE_OVER_ITEM_LIMIT"
     | "DUPLICATE_ITEM"
     | "NUMBER_CLOSED"
+    | "NUMBER_FULL"
     | "OVER_PER_NUMBER_LIMIT"
     | "OVER_CREDIT_LIMIT"
     | "DRAW_NOT_OPEN"
@@ -105,12 +106,21 @@ export type ValidateInput = {
   now: Date;
   /** เลขเต็ม/เลขอั้นของงวด คีย์เดียวกับ dedupeKey */
   restrictions?: ReadonlyMap<string, NumberRestriction>;
+  /**
+   * เพดานรับต่อเลขของทั้งงวด และยอดที่บิลใบอื่นแทงเลขนั้นไปแล้ว (คีย์เดียวกับ dedupeKey)
+   * ไม่ส่งหรือ cap = null คือไม่จำกัด
+   */
+  numberCap?: { cap: Prisma.Decimal | null; used: ReadonlyMap<string, Prisma.Decimal> };
 };
 
 export type NumberRestriction = {
   kind: "CLOSED" | "REDUCED_RATE";
   payoutRate: Prisma.Decimal | null;
 };
+
+function formatBaht(value: Prisma.Decimal): string {
+  return Number(value).toLocaleString("th-TH", { maximumFractionDigits: 2 });
+}
 
 export function validateBill(input: ValidateInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -195,6 +205,24 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
         code: "NUMBER_CLOSED",
         message: `รายการที่ ${index + 1}: ${rule.name} เลข ${item.number} เป็นเลขเต็ม ปิดรับแล้ว`,
       });
+    }
+    const cap = input.numberCap?.cap ?? null;
+    if (cap !== null && input.restrictions?.get(key)?.kind !== "CLOSED") {
+      const used = input.numberCap?.used.get(key) ?? ZERO;
+      const remaining = cap.minus(used);
+      if (remaining.lessThanOrEqualTo(0)) {
+        issues.push({
+          itemIndex: index,
+          code: "NUMBER_FULL",
+          message: `รายการที่ ${index + 1}: ${rule.name} เลข ${item.number} เป็นเลขเต็ม ยอดครบ ${formatBaht(cap)} บาทแล้ว ปิดรับ`,
+        });
+      } else if (item.stake.greaterThan(remaining)) {
+        issues.push({
+          itemIndex: index,
+          code: "NUMBER_FULL",
+          message: `รายการที่ ${index + 1}: ${rule.name} เลข ${item.number} รับได้อีก ${formatBaht(remaining)} บาท (เพดานเลขละ ${formatBaht(cap)} บาท)`,
+        });
+      }
     }
     if (seen.has(key)) {
       issues.push({

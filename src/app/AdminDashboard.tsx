@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { DashboardIcon as Icon } from "./DashboardIcon";
 import { DashboardFilters } from "./DashboardFilters";
 import { AdminOperationsChart } from "./AdminOperationsChart";
+import { NumberCapPanel } from "./NumberCapPanel";
 import "./admin-dashboard.css";
 
 type DashboardFilter = { drawId?: string; agentId?: string; status?: string; dateFrom?: string; dateTo?: string };
@@ -106,6 +107,8 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
       <article className="success"><span><Icon name="audit"/></span><div><small>ตรวจผ่านวันนี้</small><strong>{reviewedToday}</strong><p>โดยบัญชีของคุณ</p></div></article>
       <article className={rejectedToday ? "danger" : "success"}><span><Icon name="alert"/></span><div><small>ตีกลับวันนี้</small><strong>{rejectedToday}</strong><p>โดยบัญชีของคุณ</p></div></article>
     </section>
+
+    <NumberCapPanel actor={actor} />
 
     <AdminOperationsChart daily={daily} backlog={{ evidence: pendingEvidence.length, settlement: pendingSettlements, cancellation: pendingCancellations, rejected: rejectedOutstanding }} />
 

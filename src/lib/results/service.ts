@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { writeAudit } from "@/lib/audit";
+import { writeAudit, type TxClient } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateResultValue } from "./matching";
@@ -7,8 +7,46 @@ import { resultValueCount, storedResultValues } from "./values";
 import {
   canCorrectInDrawStatus,
   correctionInvalidatesSettlement,
+  shouldApproveCorrectionOnProposal,
   shouldApproveResultOnEntry,
 } from "./policy";
+
+async function invalidateSettlementAfterCorrection(
+  tx: TxClient,
+  actor: Actor,
+  draw: { id: string; status: string },
+): Promise<void> {
+  if (!correctionInvalidatesSettlement(draw.status)) return;
+
+  const reset = await tx.settlement.updateMany({
+    where: { drawId: draw.id },
+    data: {
+      status: "DRAFT",
+      reconciledById: null,
+      reconciledAt: null,
+      approvedById: null,
+      approvedAt: null,
+    },
+  });
+
+  await tx.draw.update({
+    where: { id: draw.id },
+    data: { status: "RESULT_PENDING" },
+  });
+
+  await writeAudit(tx, {
+    organizationId: actor.organizationId,
+    actorId: actor.userId,
+    requestId: actor.requestId,
+    ipAddress: actor.ipAddress,
+    action: "UPDATE",
+    entityType: "Draw",
+    entityId: draw.id,
+    before: { status: "SETTLED" },
+    after: { status: "RESULT_PENDING", settlementsReset: reset.count },
+    reason: "ผลรางวัลถูกแก้หลังคำนวณ ต้องคำนวณและตรวจสอบยอดใหม่",
+  });
+}
 
 /**
  * ลงผลรางวัลแบบ One-step review
@@ -169,16 +207,16 @@ export async function enterResultsBatch(
         select: { version: true, status: true, value: true, values: true },
       });
       // ตรวจทุก version ไม่ใช่เฉพาะตัวล่าสุด มิฉะนั้นคำขอแก้ผลที่ยังเป็น DRAFT
-      // จะกลายเป็นช่องให้กรอกผลทับแบบอนุมัติทันที ข้ามด่านสองคนไปเลย
+      // จะกลายเป็นช่องให้กรอกผลทับโดยไม่ผ่านเส้นทางแก้ผลและไม่บันทึกเหตุผล
       const approvedAlready = await tx.result.findFirst({
         where: { drawId: draw.id, prizeTypeId: result.prizeTypeId, status: "APPROVED" },
         select: { id: true },
       });
       if (approvedAlready) {
         // การกรอกผลใช้สำหรับผลที่ยังไม่ประกาศเท่านั้น
-        // ผลที่อนุมัติแล้วถูกใช้คำนวณเงินไปแล้ว ต้องแก้ผ่านด่านสองคน
+        // ผลที่อนุมัติแล้วถูกใช้คำนวณเงินไปแล้ว ต้องแก้ผ่านเส้นทางเฉพาะ
         throw new ConflictError(
-          "มีผลบางรางวัลได้รับการอนุมัติแล้ว การแก้ผลที่ประกาศแล้วต้องใช้การเสนอแก้ผลซึ่ง Owner เป็นผู้อนุมัติ",
+          "มีผลบางรางวัลได้รับการอนุมัติแล้ว กรุณาใช้เมนูแก้ผลที่ประกาศแล้ว",
         );
       }
       const created = await tx.result.create({
@@ -244,16 +282,16 @@ export async function enterResult(
 /**
  * เสนอแก้ผลรางวัลที่ประกาศไปแล้ว (LOT-36)
  *
- * ไม่เขียนทับผลเดิมและไม่ลบทิ้ง แต่สร้าง version ถัดไปในสถานะ DRAFT
- * ผลเดิมยังเป็นผลที่มีผลบังคับจนกว่า Owner จะอนุมัติตัวใหม่
- * ดังนั้นการเสนอแก้เพียงอย่างเดียวไม่กระทบตัวเลขการเงินใด ๆ
+ * ไม่เขียนทับผลเดิมและไม่ลบทิ้ง แต่สร้าง version ถัดไปเพื่อเก็บประวัติ
+ * Admin สร้าง DRAFT โดยผลเดิมยังมีผลจนกว่า Owner จะอนุมัติ
+ * Owner/Godmode สร้างผล APPROVED และใช้ผลใหม่ทันที
  *
- * ผู้เสนอกับผู้อนุมัติต้องเป็นคนละคน ด่านนี้บังคับตอนอนุมัติใน approveResult
+ * Admin สร้างคำขอ DRAFT เพื่อรอ Owner อนุมัติ ส่วน Owner/Godmode อนุมัติทันที
  */
 export async function proposeResultCorrection(
   actor: Actor,
   input: { drawId: string; prizeTypeId: string; value?: string; values?: string[]; reason: string },
-): Promise<{ resultId: string; version: number }> {
+): Promise<{ resultId: string; version: number; autoApproved: boolean }> {
   requirePermission(actor, "result.proposeCorrection");
 
   const reason = input.reason.trim();
@@ -327,6 +365,8 @@ export async function proposeResultCorrection(
     }
     const previous = { version: newest.version, values: approvedValues };
 
+    const autoApproved = shouldApproveCorrectionOnProposal(actor.role);
+    const now = new Date();
     const created = await tx.result.create({
       data: {
         organizationId: actor.organizationId,
@@ -335,11 +375,12 @@ export async function proposeResultCorrection(
         value,
         values,
         version: previous.version + 1,
-        // DRAFT เสมอ แม้ผู้เสนอจะเป็น Owner — การแก้ผลไม่มีทางลัดขั้นตอนเดียว
-        status: "DRAFT",
+        status: autoApproved ? "APPROVED" : "DRAFT",
         makerId: actor.userId,
+        checkerId: autoApproved ? actor.userId : null,
+        checkedAt: autoApproved ? now : null,
       },
-      select: { id: true, version: true },
+      select: { id: true, version: true, value: true, values: true },
     });
 
     await writeAudit(tx, {
@@ -351,11 +392,29 @@ export async function proposeResultCorrection(
       entityType: "Result",
       entityId: created.id,
       before: { values: previous.values, version: previous.version, status: "APPROVED" },
-      after: { values, version: created.version, status: "DRAFT" },
-      reason: `เสนอแก้ผลที่ประกาศแล้ว: ${reason}`,
+      after: { values, version: created.version, status: autoApproved ? "APPROVED" : "DRAFT" },
+      reason: autoApproved
+        ? `Owner แก้ผลที่ประกาศแล้วและให้มีผลทันที: ${reason}`
+        : `เสนอแก้ผลที่ประกาศแล้ว: ${reason}`,
     });
 
-    return { resultId: created.id, version: created.version };
+    if (autoApproved) {
+      await invalidateSettlementAfterCorrection(tx, actor, draw);
+      await writeAudit(tx, {
+        organizationId: actor.organizationId,
+        actorId: actor.userId,
+        requestId: actor.requestId,
+        ipAddress: actor.ipAddress,
+        action: "APPROVE",
+        entityType: "Result",
+        entityId: created.id,
+        before: { status: "DRAFT", supersedes: { values: previous.values, version: approved.version } },
+        after: { status: "APPROVED", values: created.values, version: created.version },
+        reason: `Owner แก้ผลและอนุมัติทันที: ${reason}`,
+      });
+    }
+
+    return { resultId: created.id, version: created.version, autoApproved };
   });
 }
 
@@ -383,7 +442,7 @@ export async function approveResult(actor: Actor, resultId: string): Promise<voi
     if (result.status !== "DRAFT") throw new ConflictError("ผลนี้ถูกตรวจไปแล้ว");
 
     // version แรกคือการลงผลครั้งแรก ซึ่งจบในขั้นตอนเดียวได้
-    // version ที่สูงกว่าคือการแก้ผลที่ประกาศไปแล้ว ต้องผ่านด่านสองคน
+    // version ที่สูงกว่าและยังเป็น DRAFT คือคำขอแก้ของ Admin หรือข้อมูลค้างจากรุ่นก่อน
     const superseded =
       result.version > 1
         ? await tx.result.findFirst({
@@ -400,7 +459,7 @@ export async function approveResult(actor: Actor, resultId: string): Promise<voi
 
     if (superseded) {
       requirePermission(actor, "result.approveCorrection");
-      if (result.makerId === actor.userId) {
+      if (result.makerId === actor.userId && !shouldApproveCorrectionOnProposal(actor.role)) {
         throw new ForbiddenError("ผู้เสนอแก้ผลกับผู้อนุมัติต้องไม่ใช่คนเดียวกัน");
       }
 
@@ -414,36 +473,7 @@ export async function approveResult(actor: Actor, resultId: string): Promise<voi
 
       // ตัวเลขการเงินที่คำนวณไว้อ้างอิงผลเก่า จึงใช้ไม่ได้อีกตั้งแต่วินาทีนี้
       // ล้างสถานะการตรวจสอบยอดและดึงรอบกลับไปรอคำนวณใหม่ในทรานแซกชันเดียวกัน
-      if (correctionInvalidatesSettlement(draw.status)) {
-        const reset = await tx.settlement.updateMany({
-          where: { drawId: draw.id },
-          data: {
-            status: "DRAFT",
-            reconciledById: null,
-            reconciledAt: null,
-            approvedById: null,
-            approvedAt: null,
-          },
-        });
-
-        await tx.draw.update({
-          where: { id: draw.id },
-          data: { status: "RESULT_PENDING" },
-        });
-
-        await writeAudit(tx, {
-          organizationId: actor.organizationId,
-          actorId: actor.userId,
-          requestId: actor.requestId,
-          ipAddress: actor.ipAddress,
-          action: "UPDATE",
-          entityType: "Draw",
-          entityId: draw.id,
-          before: { status: "SETTLED" },
-          after: { status: "RESULT_PENDING", settlementsReset: reset.count },
-          reason: "ผลรางวัลถูกแก้หลังคำนวณ ต้องคำนวณและตรวจสอบยอดใหม่",
-        });
-      }
+      await invalidateSettlementAfterCorrection(tx, actor, draw);
     }
 
     await tx.result.update({

@@ -8,10 +8,11 @@ import {
   cancelBill,
   confirmBill,
   createDraftBill,
-  deleteBillPermanently,
   placeBill,
   replaceDraftItems,
   requestCancelAfterCutoff,
+  softDeleteBillBeforeCutoff,
+  updateBillBeforeCutoff,
 } from "@/lib/bills/service";
 import { AppError } from "@/lib/errors";
 import { MAX_STAKE_PER_ITEM } from "@/lib/bills/betting";
@@ -149,7 +150,7 @@ export async function deleteBillAction(
   const billId = String(formData.get("billId") ?? "");
 
   try {
-    await deleteBillPermanently(actor, billId);
+    await softDeleteBillBeforeCutoff(actor, billId);
   } catch (error) {
     if (error instanceof AppError) return { error: error.message };
     throw error;
@@ -159,6 +160,31 @@ export async function deleteBillAction(
   revalidatePath("/draws");
   revalidatePath("/reports");
   redirect("/bills");
+}
+
+export async function updateBillAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireActor();
+  const billId = String(formData.get("billId") ?? "");
+  const parsed = z.object({
+    title: z.string().trim().min(1, "กรุณากรอกชื่อลูกค้า").max(120),
+    items: z.array(ItemSchema).min(1, "บิลต้องมีอย่างน้อยหนึ่งรายการ"),
+  }).safeParse({ title: formData.get("title"), items: readItems(formData) });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง" };
+
+  try {
+    await updateBillBeforeCutoff(actor, billId, parsed.data);
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(`/bills/${billId}`);
+  revalidatePath("/bills");
+  revalidatePath("/reports");
+  return { error: null };
 }
 
 const PlaceSchema = z.object({

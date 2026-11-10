@@ -52,6 +52,24 @@ async function approveResults(values: { prizeTypeId: string; value: string }[]) 
 }
 
 describe("เส้นทางเงินเต็มเส้น", () => {
+  test("เลขวิ่งที่ออกซ้ำหลายหลักจ่ายเพียงครั้งเดียว", async () => {
+    const { runTop } = f.prizeTypes;
+    const { billId } = await confirmedBill(f.actors.AGENT1, [
+      { prizeTypeId: runTop.id, number: "2", stake: "10" },
+    ], "วิ่ง 2 ผลออก 224");
+
+    await lockDrawManually(f.actors.ADMIN, f.draw.id);
+    await approveResults([{ prizeTypeId: runTop.id, value: "224" }]);
+
+    const [preview] = await calculateSettlement(f.actors.ADMIN, f.draw.id);
+    expect(preview?.winningItems).toBe(1);
+    expect(preview?.payout.toFixed(2)).toBe("25.00"); // 10 × 2.5 เพียงครั้งเดียว ไม่ใช่ 50
+
+    const item = await prisma.billItem.findFirstOrThrow({ where: { billId } });
+    expect(item.isWinner).toBe(true);
+    expect(item.payout.toFixed(2)).toBe("25.00");
+  });
+
   test("คำนวณถูกต้องตั้งแต่สร้างบิลจนปิดบัญชี", async () => {
     const { threeTop, threeTod, runTop } = f.prizeTypes;
 
@@ -59,8 +77,8 @@ describe("เส้นทางเงินเต็มเส้น", () => {
       { prizeTypeId: threeTop.id, number: "123", stake: "100" }, // ถูก 100×900 = 90,000
       { prizeTypeId: threeTop.id, number: "999", stake: "50" }, // ไม่ถูก
       { prizeTypeId: threeTod.id, number: "321", stake: "20" }, // โต๊ดของ 123 ถูก 20×150 = 3,000
-      { prizeTypeId: runTop.id, number: "2", stake: "10" }, // 2 อยู่ใน 123 ถูก 10×3.2 = 32
-      { prizeTypeId: runTop.id, number: "3", stake: "10" }, // 3 ก็อยู่ใน 123 ถูก 10×3.2 = 32
+      { prizeTypeId: runTop.id, number: "2", stake: "10" }, // 2 อยู่ใน 123 ถูก 10×2.5 = 25
+      { prizeTypeId: runTop.id, number: "3", stake: "10" }, // 3 ก็อยู่ใน 123 ถูก 10×2.5 = 25
       { prizeTypeId: runTop.id, number: "4", stake: "10" }, // 4 ไม่อยู่ใน 123 ไม่ถูก
     ]);
 
@@ -78,9 +96,9 @@ describe("เส้นทางเงินเต็มเส้น", () => {
     expect(previews).toHaveLength(1);
     const a1 = previews[0]!;
     expect(a1.gross.toFixed(2)).toBe("200.00");
-    expect(a1.payout.toFixed(2)).toBe("93064.00"); // 90,000 + 3,000 + 32 + 32
+    expect(a1.payout.toFixed(2)).toBe("93050.00"); // 90,000 + 3,000 + 25 + 25
     expect(a1.commission.toFixed(2)).toBe("50.00"); // 200 × 25%
-    expect(a1.net.toFixed(2)).toBe("-92914.00");
+    expect(a1.net.toFixed(2)).toBe("-92900.00");
     expect(a1.winningItems).toBe(4);
     expect(a1.totalItems).toBe(6);
 
@@ -91,8 +109,8 @@ describe("เส้นทางเงินเต็มเส้น", () => {
       orderBy: { number: "asc" },
     });
     expect(runItems.map((i) => [i.number, i.isWinner, i.payout.toFixed(2)])).toEqual([
-      ["2", true, "32.00"],
-      ["3", true, "32.00"],
+      ["2", true, "25.00"],
+      ["3", true, "25.00"],
       ["4", false, "0.00"],
     ]);
   });
@@ -348,6 +366,26 @@ describe("แก้ผลหลังคำนวณแล้ว", () => {
     expect(settlement.reconciledAt).toBeNull();
 
     const draw = await prisma.draw.findUniqueOrThrow({ where: { id: f.draw.id } });
+    expect(draw.status).toBe("RESULT_PENDING");
+  });
+
+  test("Owner แก้ผลเองแล้วผลใหม่มีผลทันทีและยอดเดิมถูกล้าง", async () => {
+    const settlementId = await settledDraw();
+    const outcome = await proposeResultCorrection(f.actors.OWNER, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      value: "999",
+      reason: "Owner ตรวจพบผลเดิมคลาดเคลื่อน",
+    });
+
+    const corrected = await prisma.result.findUniqueOrThrow({ where: { id: outcome.resultId } });
+    const settlement = await prisma.settlement.findUniqueOrThrow({ where: { id: settlementId } });
+    const draw = await prisma.draw.findUniqueOrThrow({ where: { id: f.draw.id } });
+
+    expect(outcome.autoApproved).toBe(true);
+    expect(corrected.status).toBe("APPROVED");
+    expect(corrected.checkerId).toBe(f.users.owner.id);
+    expect(settlement.status).toBe("DRAFT");
     expect(draw.status).toBe("RESULT_PENDING");
   });
 

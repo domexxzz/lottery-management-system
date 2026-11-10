@@ -4,6 +4,7 @@ import { getActor, orgScope } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { BetSlip, type SlipRepresentative, type SlipRestriction } from "./BetSlip";
+import { fullNumbersByDraw } from "@/lib/draws/number-cap";
 import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
 import { billSequencePeriod } from "@/lib/bills/numbering";
 import "./new-bill.css";
@@ -35,7 +36,7 @@ export default async function NewBillPage() {
   if (!can(actor.role, "bill.create")) redirect("/bills");
 
   const sequencePeriod = billSequencePeriod(new Date());
-  const drawSelect = { id: true, name: true, drawDate: true, lotteryType: true, cutoffAt: true, status: true } as const;
+  const drawSelect = { id: true, name: true, drawDate: true, lotteryType: true, cutoffAt: true, status: true, numberCap: true } as const;
   const [openDraws, prizeTypes, representatives, ownAgent] = await Promise.all([
     prisma.draw.findMany({
       where: { ...orgScope(actor), status: "OPEN", cutoffAt: { gt: new Date() } },
@@ -99,6 +100,14 @@ export default async function NewBillPage() {
       kind: row.kind,
       payoutRate: row.payoutRate?.toFixed(4) ?? null,
     });
+  }
+  // เลขที่ยอดครบเพดานแล้วถือเป็นเลขเต็ม ใส่ทีหลังเพื่อทับเลขอั้นของเลขเดียวกัน
+  // หน้าแทงจะเตือนทันที ส่วนการตัดสินจริงทำซ้ำฝั่ง Server ตอนยืนยันบิล
+  const fullByDraw = await fullNumbersByDraw(prisma, actor.organizationId, draws.filter((draw) => draw.status === "OPEN"));
+  for (const [drawId, rows] of fullByDraw) {
+    for (const row of rows) {
+      (restrictions[drawId] ??= []).push({ prizeTypeId: row.prizeTypeId, number: row.number, kind: "CLOSED", payoutRate: null });
+    }
   }
 
   const slipRepresentatives: SlipRepresentative[] | null = representatives?.map((user) => ({

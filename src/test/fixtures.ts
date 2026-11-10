@@ -143,7 +143,7 @@ export async function createFixtures() {
         digits: 1,
         resultDigits: 3,
         matchRule: "CONTAINS_DIGIT",
-        payoutRate: new Prisma.Decimal("3.2"),
+        payoutRate: new Prisma.Decimal("2.5"),
       },
     }),
   ]);

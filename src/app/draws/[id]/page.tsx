@@ -21,6 +21,7 @@ import {
 import { GloResultImporter } from "./GloResultImporter";
 import { RestrictionManager } from "./RestrictionManager";
 import { listRestrictions } from "@/lib/draws/restrictions";
+import { capLabel, fullNumbersByDraw } from "@/lib/draws/number-cap";
 import { compactRate } from "@/lib/bills/betting";
 import { prisma } from "@/lib/db";
 import { DRAW_DISPLAY_STATUS_LABEL, getDrawDisplayStatus } from "@/lib/draws/display-status";
@@ -97,7 +98,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
 
   const { draw, prizeTypes, latestByPrizeType, approvedByPrizeType } = results;
   const canManageRestrictions = can(actor.role, "draw.manage");
-  const [restrictionRows, restrictionPrizeTypes] = canManageRestrictions
+  const [restrictionRows, restrictionPrizeTypes, capDraw] = canManageRestrictions
     ? await Promise.all([
         listRestrictions(actor, draw.id),
         prisma.prizeType.findMany({
@@ -105,13 +106,21 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
           orderBy: { code: "asc" },
           select: { id: true, code: true, name: true, digits: true, payoutRate: true },
         }),
+        prisma.draw.findFirst({ where: { ...orgScope(actor), id: draw.id }, select: { id: true, numberCap: true } }),
       ])
-    : [[], []];
+    : [[], [], null];
+  const fullNumberRows = capDraw
+    ? (await fullNumbersByDraw(prisma, actor.organizationId, [capDraw])).get(capDraw.id) ?? []
+    : [];
+  const prizeNameById = new Map(restrictionPrizeTypes.map((prizeType) => [prizeType.id, prizeType.name]));
   const canEnter = can(actor.role, "result.enter");
   const canApproveResult = can(actor.role, "result.approve");
+  const canApproveCorrection = can(actor.role, "result.approveCorrection");
   const canProposeCorrection = can(actor.role, "result.proposeCorrection");
+  const correctionAppliesImmediately = actor.role === "OWNER" || actor.role === "GODMODE";
   const canCalculate = can(actor.role, "settlement.calculate");
   const canApproveSettlement = can(actor.role, "settlement.approve");
+  const canViewAgentProfiles = can(actor.role, "report.viewAllAgents");
 
   const winsByAgent = new Map<string, WinItem[]>();
   for (const item of settlementData.winningItems) {
@@ -250,9 +259,11 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                             currentValues={storedResultValues(approvedResult)}
                             resultLength={resultLength}
                             valueCount={valueCount}
+                            appliesImmediately={correctionAppliesImmediately}
                           />
                         )}
-                      {canApproveResult && latest?.status === "DRAFT" && (
+                      {latest?.status === "DRAFT" &&
+                        (latest.version === 1 ? canApproveResult : canApproveCorrection) && (
                         <>
                           <ApproveResultForm drawId={draw.id} resultId={latest.id} />
                           <RejectResultForm drawId={draw.id} resultId={latest.id} />
@@ -298,7 +309,15 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                   <Fragment key={s.id}>
                   <tr className={wins.length > 0 ? "settlement-row has-wins" : "settlement-row"}>
                     <td>
-                      {s.agent.code} {s.agent.name}
+                      {canViewAgentProfiles ? (
+                        <Link className="settlement-agent-link" href={`/agents/${s.agentId}?drawId=${draw.id}`}>
+                          <strong>{s.agent.code}</strong>
+                          <span>{s.agent.name}</span>
+                          <small>ดูยอดขายและบิลของงวดนี้ →</small>
+                        </Link>
+                      ) : (
+                        <>{s.agent.code} {s.agent.name}</>
+                      )}
                     </td>
                     <td className="num">{s.gross.toFixed(2)}</td>
                     <td className="num">{s.payout.toFixed(2)}</td>
@@ -364,6 +383,14 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
               payoutRate: row.payoutRate ? compactRate(row.payoutRate) : null,
               prizeTypeName: row.prizeType.name,
               normalRate: compactRate(row.prizeType.payoutRate),
+            }))}
+            numberCap={capDraw?.numberCap ? String(Number(capDraw.numberCap)) : ""}
+            capLabel={capLabel(capDraw?.numberCap ?? null)}
+            fullNumbers={fullNumberRows.map((row) => ({
+              key: `${row.prizeTypeId}:${row.number}`,
+              prizeTypeName: prizeNameById.get(row.prizeTypeId) ?? "-",
+              number: row.number,
+              used: MONEY.format(Number(row.used)),
             }))}
           />
         )}

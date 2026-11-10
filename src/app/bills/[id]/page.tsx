@@ -6,7 +6,7 @@ import { can } from "@/lib/auth/permissions";
 import { getBill } from "@/lib/bills/service";
 import { canTransition } from "@/lib/bills/lifecycle";
 import { NotFoundError } from "@/lib/errors";
-import { CancelForm, ConfirmButton, DeleteBillForm, RequestCancelForm } from "./BillActions";
+import { CancelForm, ConfirmButton, DeleteBillForm, EditBillForm, RequestCancelForm } from "./BillActions";
 import { EvidenceManager } from "./EvidenceManager";
 import { SlipDetail } from "./SlipDetail";
 import "./evidence.css";
@@ -22,13 +22,13 @@ export default async function BillDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ placed?: string }>;
+  searchParams: Promise<{ placed?: string; edit?: string }>;
 }) {
   const actor = await getActor();
   if (!actor) redirect("/login");
 
   const { id } = await params;
-  const { placed } = await searchParams;
+  const { placed, edit } = await searchParams;
 
   let bill;
   try {
@@ -45,26 +45,33 @@ export default async function BillDetailPage({
 
   // หลังปิดรับ ผู้อนุมัติเท่านั้นที่ยกเลิกได้ และต้องไม่ใช่คนที่เสนอเอง
   const canCancel =
+    afterCutoff &&
     canTransition(bill.status, "CANCELLED") &&
-    (afterCutoff
-      ? can(actor.role, "bill.approveChangeAfterCutoff") &&
-        bill.cancelRequestedById !== actor.userId
-      : can(actor.role, "bill.editBeforeCutoff"));
+    can(actor.role, "bill.approveChangeAfterCutoff") &&
+    bill.cancelRequestedById !== actor.userId;
 
   const canRequestCancel =
     afterCutoff &&
     bill.cancelRequestedById === null &&
     can(actor.role, "bill.proposeChangeAfterCutoff") &&
     !can(actor.role, "bill.approveChangeAfterCutoff");
-  const canDeleteBill = can(actor.role, "bill.delete");
+  const beforeCutoff = bill.draw.status === "OPEN" && Date.now() < bill.draw.cutoffAt.getTime();
+  const editableStatus = bill.status === "CONFIRMED" || bill.status === "DRAFT";
+  const canEditBill = beforeCutoff && editableStatus && can(actor.role, "bill.editBeforeCutoff");
+  const canDeleteBill = beforeCutoff && editableStatus && can(actor.role, "bill.delete");
   const canDeleteEvidence = can(actor.role, "evidence.delete");
 
   const evidenceConfig = getStorageConfig();
-  const [attachmentDetails, settlement] = await Promise.all([
+  const [attachmentDetails, settlement, billHistory] = await Promise.all([
     listBillAttachments(actor, bill.id),
     bill.status === "SETTLED"
       ? prisma.settlement.findUnique({ where: { drawId_agentId: { drawId: bill.drawId, agentId: bill.agentId } }, select: { calculatedAt: true } })
       : Promise.resolve(null),
+    prisma.auditEvent.findMany({
+      where: { organizationId: actor.organizationId, entityType: "Bill", entityId: bill.id, action: { in: ["UPDATE", "DELETE"] } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, action: true, before: true, after: true, reason: true, createdAt: true, actor: { select: { displayName: true, role: true } } },
+    }),
   ]);
   const activeEvidence = bill.attachments.filter((attachment) => attachment.replacedBy === null);
   const hasOrderEvidence = activeEvidence.some(
@@ -96,19 +103,77 @@ export default async function BillDetailPage({
             <h1 id="bill-heading">รายละเอียดบิล {bill.drawSequence === null ? "ร่าง" : bill.drawSequence} <span className={`slip-status slip-status-${betStatus.toLowerCase()}`}>{BET_STATUS_LABEL[betStatus]}</span></h1>
           </div>
           <nav className="bill-detail-tools" aria-label="เครื่องมือบิล">
+            {canEditBill && <Link href={`/bills/${bill.id}?edit=1#bill-edit`} className="slip-primary-button">แก้ไขบิล</Link>}
             <Link href={`/bills/${bill.id}/print`} target="_blank" className="slip-outline-button">พิมพ์บิล</Link>
             <Link href={`/bills/${bill.id}/print?format=slip`} target="_blank" className="slip-outline-button">พิมพ์สลิป</Link>
           </nav>
         </header>
 
         {bill.status === "CANCELLED" && (
-          <p className="slip-alert is-danger" role="status">ยกเลิกโดย {bill.cancelledBy?.displayName ?? "-"} · เหตุผล: {bill.cancelReason}</p>
+          <p className="slip-alert is-danger" role="status">{bill.cancelReason === "ลบบิลก่อนปิดรับ" ? "ลบแล้ว" : "ยกเลิกแล้ว"}โดย {bill.cancelledBy?.displayName ?? "-"}{bill.cancelledAt ? ` · ${new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" }).format(bill.cancelledAt)}` : ""}</p>
         )}
         {bill.cancelRequestedById !== null && bill.status !== "CANCELLED" && (
           <p className="slip-alert" role="status">มีคำขอยกเลิกจาก {bill.cancelRequestedBy?.displayName ?? "-"} · เหตุผล: {bill.cancelRequestReason} · รอผู้มีอำนาจอนุมัติ</p>
         )}
 
-        <SlipDetail bill={bill} settledAt={settlement?.calculatedAt ?? null} showDrawLink={actor.role !== "AGENT"} />
+        <SlipDetail
+          bill={bill}
+          settledAt={settlement?.calculatedAt ?? null}
+          showDrawLink={actor.role !== "AGENT"}
+          beforeItems={(
+            <div className="bill-change-zone">
+              {canEditBill && (
+                <details id="bill-edit" className="slip-panel bill-edit-panel" open={edit === "1"}>
+                  <summary><span>แก้ไขเลขและยอดเดิมพัน</span><small>ใช้ได้เฉพาะก่อนปิดรับ · มีผลทันที</small></summary>
+                  <EditBillForm
+                    billId={bill.id}
+                    title={bill.title}
+                    items={bill.items.map((item) => ({
+                      id: item.id,
+                      prizeTypeId: item.prizeTypeId,
+                      prizeTypeName: item.prizeType.name,
+                      number: item.number,
+                      stake: item.stake.toFixed(2),
+                      digits: item.prizeType.digits,
+                    }))}
+                  />
+                </details>
+              )}
+              {billHistory.length > 0 && (
+                <section className="slip-panel bill-change-history" aria-labelledby="bill-history-heading">
+                  <header className="slip-panel-head"><h2 id="bill-history-heading">ประวัติการแก้ไขบิล</h2><span>{billHistory.length} ครั้ง</span></header>
+                  <ol>
+                    {billHistory.map((event) => {
+                      const before = event.before as { title?: string; totalStake?: string; items?: Array<{ number?: string; stake?: string; prizeTypeName?: string }> } | null;
+                      const after = event.after as { title?: string; totalStake?: string; items?: Array<{ number?: string; stake?: string; prizeTypeName?: string }>; status?: string } | null;
+                      const changes: string[] = [];
+                      if (event.action === "DELETE") changes.push("ลบบิลแล้ว และนำออกจากการคำนวณ");
+                      if (before?.title !== undefined && after?.title !== undefined && before.title !== after.title) changes.push(`ชื่อลูกค้า “${before.title}” → “${after.title}”`);
+                      const count = Math.max(before?.items?.length ?? 0, after?.items?.length ?? 0);
+                      for (let index = 0; index < count; index += 1) {
+                        const oldItem = before?.items?.[index];
+                        const newItem = after?.items?.[index];
+                        if (oldItem && newItem) {
+                          const prefix = `รายการ ${index + 1} ${newItem.prizeTypeName ?? oldItem.prizeTypeName ?? ""}`.trim();
+                          if (oldItem.number !== newItem.number) changes.push(`${prefix}: เลข ${oldItem.number} → ${newItem.number}`);
+                          if (oldItem.stake !== newItem.stake) changes.push(`${prefix}: เดิมพัน ${oldItem.stake} → ${newItem.stake} บาท`);
+                        }
+                      }
+                      if (changes.length === 0) changes.push(event.reason ?? "ปรับปรุงข้อมูลบิล");
+                      return (
+                        <li key={event.id} className={event.action === "DELETE" ? "is-delete" : ""}>
+                          <span className="bill-history-icon" aria-hidden="true">{event.action === "DELETE" ? "×" : "✎"}</span>
+                          <div><strong>{event.action === "DELETE" ? "ลบบิล" : "แก้ไขบิล"}</strong>{changes.map((change) => <p key={change}>{change}</p>)}</div>
+                          <div className="bill-history-who"><b>{event.actor?.displayName ?? "ระบบ"}</b><small>{new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" }).format(event.createdAt)}</small></div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </section>
+              )}
+            </div>
+          )}
+        />
 
         {/* ส่วนรองพับไว้ เปิดอัตโนมัติเฉพาะตอนที่ต้องลงมือ เช่นบิลร่างหรือหลักฐานถูกตีกลับ */}
         <details className="slip-panel slip-collapse" open={bill.status === "DRAFT" || hasRejectedEvidence || placed === "1"}>

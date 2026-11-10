@@ -77,6 +77,23 @@ function pageNumbers(page: number, pageCount: number): (number | "gap")[] {
   return result;
 }
 
+export type RestrictionAnnouncement = {
+  drawId: string;
+  drawName: string;
+  drawDate: Date | null;
+  opensAt: Date;
+  cutoffAt: Date;
+  /** เพดานรับต่อเลขสำหรับแสดงผล เช่น "2,000" หรือ null ถ้าไม่จำกัด */
+  capLabel: string | null;
+  reduced: { id: string; number: string; prizeTypeName: string; payoutRate: string; normalRate: string }[];
+  full: { id: string; number: string; prizeTypeName: string; note: string }[];
+  /** เลขที่ยอดเกินครึ่งเพดาน พร้อมยอดที่ยังรับได้ เรียงจากเหลือน้อยสุด */
+  near: { id: string; number: string; prizeTypeName: string; remaining: string; percent: number }[];
+  /** จำนวนจริงทั้งหมด (รายการที่ส่งมาอาจถูกตัดให้สั้นลง) */
+  fullTotal: number;
+  nearTotal: number;
+};
+
 /** หน้าประวัติรายการ ใช้ร่วมกันทุกบทบาท Agent เห็นเฉพาะบิลของตนเองผ่าน billScope */
 export async function AgentBillBoard({
   actor,
@@ -89,15 +106,9 @@ export async function AgentBillBoard({
   filter: ParsedHistoryFilter;
   scope: ResolvedHistoryScope;
   agents: { value: string; label: string }[] | null;
-  announcements: {
-    drawId: string;
-    drawName: string;
-    drawDate: Date | null;
-    opensAt: Date;
-    cutoffAt: Date;
-    entries: { id: string; number: string; kind: "CLOSED" | "REDUCED_RATE"; payoutRate: string | null; prizeTypeName: string }[];
-  }[];
+  announcements: RestrictionAnnouncement[];
 }) {
+  const canViewExposure = can(actor.role, "report.viewAllAgents");
   const result = await listBetBills(actor, {
     tab: filter.tab,
     lotteryType: filter.lotteryType,
@@ -174,7 +185,7 @@ export async function AgentBillBoard({
             <span aria-hidden="true">!</span>
             <div>
               <h2 id="restriction-announcement-heading">ประกาศเลขอั้น / เลขเต็ม</h2>
-              <p>ประกาศล่วงหน้าทันทีที่กำหนด และเลขอั้นมีผลกับทั้งบิลเดิมและบิลใหม่ของงวด</p>
+              <p>เลขอั้นรับแต่จ่ายลด มีผลกับทั้งบิลเดิมและบิลใหม่ · เลขเต็มปิดรับแล้ว แทงเลขนี้ไม่ได้</p>
             </div>
           </header>
           <div className="slip-restriction-draws">
@@ -185,22 +196,96 @@ export async function AgentBillBoard({
                   <div className="slip-restriction-draw-head">
                     <div>
                       <strong>{announcement.drawName}</strong>
-                      <small>งวด {drawDateLabel({ drawDate: announcement.drawDate, name: announcement.drawName })}</small>
+                      <small>
+                        งวด {drawDateLabel({ drawDate: announcement.drawDate, name: announcement.drawName })}
+                        {" · "}
+                        {future ? `เริ่มรับ ${THAI_DATE_TIME.format(announcement.opensAt)}` : `ปิดรับ ${THAI_DATE_TIME.format(announcement.cutoffAt)}`}
+                      </small>
                     </div>
                     <span className={future ? "is-future" : "is-open"}>{future ? "ประกาศล่วงหน้า" : "เปิดรับแล้ว"}</span>
                   </div>
-                  <p className="slip-restriction-time">
-                    {future ? `เริ่มรับ ${THAI_DATE_TIME.format(announcement.opensAt)}` : `ปิดรับ ${THAI_DATE_TIME.format(announcement.cutoffAt)}`}
-                  </p>
-                  <ul>
-                    {announcement.entries.map((entry) => (
-                      <li key={entry.id} className={entry.kind === "CLOSED" ? "is-closed" : "is-reduced"}>
-                        <span>{entry.prizeTypeName}</span>
-                        <strong>{entry.number}</strong>
-                        <small>{entry.kind === "CLOSED" ? "ปิดรับ" : `จ่าย ${entry.payoutRate ?? "-"}`}</small>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="slip-restriction-boxes">
+                    <section className="slip-restriction-box is-reduced" aria-label={`เลขอั้น ${announcement.drawName}`}>
+                      <h3>เลขอั้น <small>{announcement.reduced.length} เลข · รับแต่จ่ายลด</small></h3>
+                      {announcement.reduced.length === 0 ? (
+                        <p className="slip-restriction-empty">ไม่มีเลขอั้น</p>
+                      ) : (
+                        <table>
+                          <thead>
+                            <tr><th scope="col">เลข</th><th scope="col">อัตราจ่าย</th></tr>
+                          </thead>
+                          <tbody>
+                            {announcement.reduced.map((entry) => (
+                              <tr key={entry.id}>
+                                <td><strong>{entry.number}</strong><small>{entry.prizeTypeName}</small></td>
+                                <td><strong>{entry.payoutRate}</strong><small>ปกติ {entry.normalRate}</small></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </section>
+                    <section className="slip-restriction-box is-full" aria-label={`เลขเต็ม ${announcement.drawName}`}>
+                      <h3>
+                        เลขเต็ม <small>{announcement.fullTotal.toLocaleString("th-TH")} เลข · ปิดรับ</small>
+                      </h3>
+                      {announcement.capLabel && <p className="slip-restriction-cap">รับเลขละไม่เกิน {announcement.capLabel} บาท ครบแล้วปิดรับอัตโนมัติ</p>}
+                      {announcement.full.length === 0 && (
+                        <p className="slip-restriction-empty">
+                          ยังไม่มีเลขเต็ม
+                          {announcement.capLabel && (announcement.near.length === 0
+                            ? ` · ทุกเลขยังรับได้เต็ม ${announcement.capLabel} บาท`
+                            : ` · เลขที่ใกล้เต็มอยู่ด้านล่าง`)}
+                        </p>
+                      )}
+                      {announcement.full.length > 0 && (
+                        <table>
+                          <thead>
+                            <tr><th scope="col">เลข</th><th scope="col">สถานะ</th></tr>
+                          </thead>
+                          <tbody>
+                            {announcement.full.map((entry) => (
+                              <tr key={entry.id}>
+                                <td><strong>{entry.number}</strong><small>{entry.prizeTypeName}</small></td>
+                                <td><strong>ปิดรับ</strong><small>{entry.note}</small></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                      {announcement.near.length > 0 && (
+                        <div className="slip-restriction-near">
+                          <h4>
+                            ใกล้เต็ม {announcement.nearTotal.toLocaleString("th-TH")} เลข
+                            {announcement.nearTotal > announcement.near.length && ` · แสดง ${announcement.near.length} เลขที่เหลือน้อยสุด`}
+                          </h4>
+                          <table>
+                            <thead>
+                              <tr><th scope="col">เลข</th><th scope="col">รับได้อีก</th></tr>
+                            </thead>
+                            <tbody>
+                              {announcement.near.map((entry) => (
+                                <tr key={entry.id}>
+                                  <td><strong>{entry.number}</strong><small>{entry.prizeTypeName}</small></td>
+                                  <td>
+                                    <strong>{entry.remaining} บาท</strong>
+                                    <small>ใช้ไป {entry.percent.toLocaleString("th-TH", { maximumFractionDigits: 0 })}%</small>
+                                    <span className="slip-cap-bar" aria-hidden="true"><i style={{ width: `${Math.min(entry.percent, 100)}%` }} /></span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {announcement.fullTotal > announcement.full.length && (
+                        <p className="slip-restriction-more">และเลขเต็มอีก {(announcement.fullTotal - announcement.full.length).toLocaleString("th-TH")} เลข</p>
+                      )}
+                      {canViewExposure && (
+                        <Link className="slip-restriction-all" href={`/numbers?drawId=${announcement.drawId}`}>ดูสถานะทุกเลข →</Link>
+                      )}
+                    </section>
+                  </div>
                 </article>
               );
             })}
@@ -259,6 +344,7 @@ export async function AgentBillBoard({
             <ol className="slip-history-cards">
               {bills.map((bill, index) => {
                 const betStatus = betStatusOf(bill);
+                const statusLabel = bill.cancelReason === "ลบบิลก่อนปิดรับ" ? "ลบแล้ว" : BET_STATUS_LABEL[betStatus];
                 const payout = Number(bill.totalPayout);
                 return (
                   <li key={bill.id} className="slip-history-card">
@@ -269,9 +355,9 @@ export async function AgentBillBoard({
                       </div>
                       <span
                         className={`slip-status slip-status-${betStatus.toLowerCase()}`}
-                        aria-label={`สถานะบิล ${BET_STATUS_LABEL[betStatus]}`}
+                        aria-label={`สถานะบิล ${statusLabel}`}
                       >
-                        {BET_STATUS_LABEL[betStatus]}
+                        {statusLabel}
                       </span>
                     </header>
                     <div className="slip-card-identity">

@@ -85,6 +85,7 @@ describe("CONTAINS_DIGIT — รางวัลวิ่ง", () => {
   test("ปรากฏหลายครั้งยังนับเป็นถูกครั้งเดียว", () => {
     // ฟังก์ชันคืนค่า boolean จึงไม่คูณยอดจ่ายตามจำนวนที่พบ
     expect(win("1", "111", "CONTAINS_DIGIT")).toBe(true);
+    expect(win("2", "224", "CONTAINS_DIGIT")).toBe(true);
   });
 
   test("เลขศูนย์ทำงานถูกต้อง", () => {
