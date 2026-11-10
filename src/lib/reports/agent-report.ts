@@ -194,7 +194,7 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
           where: countedBillFilter,
           orderBy: { createdAt: "desc" },
           take: 200,
-          select: { id: true, billNumber: true, title: true, status: true, totalStake: true, totalPayout: true, createdAt: true, draw: { select: { name: true } }, _count: { select: { items: true } } },
+          select: { id: true, drawSequence: true, title: true, status: true, totalStake: true, totalPayout: true, createdAt: true, draw: { select: { name: true } }, _count: { select: { items: true } } },
         })
       : Promise.resolve([]),
   ]);

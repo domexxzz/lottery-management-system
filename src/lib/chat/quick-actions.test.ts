@@ -35,14 +35,22 @@ describe("ปุ่มลัดเปลี่ยนตามสถานะร�
   });
 
   test("สถานะที่ไม่รู้จักยังได้ปุ่มพื้นฐาน ไม่พัง", () => {
-    expect(quickActionsFor("SOMETHING_NEW")).toHaveLength(2);
+    expect(quickActionsFor("SOMETHING_NEW").map((a) => a.label)).toEqual(["งานที่ต้องดำเนินการ", "ตรวจสอบข้อมูล", "แนะนำระบบ"]);
   });
 
-  test("แต่ละสถานะมีปุ่มไม่เกิน 4 ปุ่ม", () => {
+  test("ทุกสถานะมีปุ่มแนะนำระบบเป็นปุ่มสุดท้าย และกดได้แม้ยังไม่ตั้งค่าผู้ช่วย", () => {
+    for (const status of [...STATUSES, null]) {
+      const actions = quickActionsFor(status);
+      expect(actions.at(-1)).toMatchObject({ label: "แนะนำระบบ", prompt: "แนะนำระบบ", offline: true });
+      expect(actions.filter((a) => a.label === "แนะนำระบบ")).toHaveLength(1);
+    }
+  });
+
+  test("แต่ละสถานะมีปุ่มข้อมูลไม่เกิน 4 ปุ่ม บวกปุ่มแนะนำระบบ", () => {
     for (const status of [...STATUSES, null, "SOMETHING_NEW"]) {
       const actions = quickActionsFor(status);
       expect(actions.length).toBeGreaterThan(0);
-      expect(actions.length).toBeLessThanOrEqual(4);
+      expect(actions.length).toBeLessThanOrEqual(5);
     }
   });
 
@@ -51,7 +59,8 @@ describe("ปุ่มลัดเปลี่ยนตามสถานะร�
       for (const action of quickActionsFor(status)) {
         expect(action.label.trim().length).toBeGreaterThan(0);
         // คำถามต้องยาวกว่าป้ายปุ่ม เพราะเขียนเต็มเพื่อให้โมเดลตอบตรงจุด
-        expect(action.prompt.length).toBeGreaterThan(action.label.length);
+        // ยกเว้นปุ่มที่ตอบจากคู่มือในระบบ ซึ่งส่งคำสั่งสั้นตามป้ายตรง ๆ
+        if (!action.offline) expect(action.prompt.length).toBeGreaterThan(action.label.length);
       }
     }
   });

@@ -4,6 +4,7 @@ import { ownerChatRequestSchema } from "@/lib/chat/schema";
 import { getOwnerConversationContext, saveOwnerChatExchange } from "@/lib/chat/history";
 import { checkQuota, recordAssistantQuery } from "@/lib/chat/usage";
 import { askOwnerAssistant } from "@/lib/chat/typhoon";
+import { resolveGuideTurn } from "@/lib/chat/system-guide";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +72,21 @@ export async function POST(request: Request) {
     ...previousMessages,
     { role: "user" as const, content: parsed.data.message },
   ];
+
+  /*
+   * แนะนำระบบ: ตอบจากคู่มือที่สร้างจากสิทธิ์และเมนูจริงของระบบ ไม่ผ่านโมเดล
+   * จึงถูกต้องเสมอ ไม่กินโควตา ไม่ส่งข้อมูลออกไปภายนอก และใช้ได้แม้ยังไม่ตั้งค่าคีย์
+   */
+  const guide = resolveGuideTurn(messages);
+  if (guide) {
+    const conversation = await saveOwnerChatExchange(actor, {
+      conversationId: parsed.data.conversationId,
+      userContent: parsed.data.message,
+      assistantContent: guide.reply,
+    });
+    if (!conversation) return NextResponse.json({ error: "ไม่พบบทสนทนานี้" }, { status: 404 });
+    return NextResponse.json({ reply: guide.reply, suggestions: guide.suggestions, conversation });
+  }
 
   // คุมทั้งค่าใช้จ่ายปลายทางและโหลดฐานข้อมูล — ตรวจก่อนทำงานหนัก
   const quota = await checkQuota(actor);

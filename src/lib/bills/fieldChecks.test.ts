@@ -24,6 +24,7 @@ describe("checkNumberField", () => {
 
 describe("checkStakeField", () => {
   test("ยอมรับจำนวนเต็มและทศนิยมไม่เกินสองตำแหน่ง", () => {
+    expect(checkStakeField("5")).toBeNull();
     expect(checkStakeField("100")).toBeNull();
     expect(checkStakeField("100.5")).toBeNull();
     expect(checkStakeField("100.55")).toBeNull();
@@ -36,6 +37,11 @@ describe("checkStakeField", () => {
   test("ปฏิเสธค่าติดลบและศูนย์", () => {
     expect(checkStakeField("-5")).toBe("ต้องเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง");
     expect(checkStakeField("0")).toBe("ต้องมากกว่า 0");
+  });
+
+  test("ปฏิเสธยอดเดิมพันต่ำกว่า 5 บาท", () => {
+    expect(checkStakeField("1")).toBe("ขั้นต่ำ 5 บาท");
+    expect(checkStakeField("4.99")).toBe("ขั้นต่ำ 5 บาท");
   });
 
   test("ปฏิเสธข้อความที่ไม่ใช่ตัวเลข", () => {

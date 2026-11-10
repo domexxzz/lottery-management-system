@@ -1,4 +1,5 @@
 import type { AttachmentType } from "@prisma/client";
+import { visibleBillNumber } from "@/lib/bills/numbering";
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -70,7 +71,7 @@ type PendingRow = {
   organizationId: string;
   bill: {
     id: string;
-    billNumber: string | null;
+    drawSequence: number | null;
     totalStake: unknown;
     agent: { code: string };
     draw: { name: string };
@@ -99,7 +100,7 @@ async function pendingAttachments(limit: number): Promise<PendingRow[]> {
       bill: {
         select: {
           id: true,
-          billNumber: true,
+          drawSequence: true,
           totalStake: true,
           agent: { select: { code: true } },
           draw: { select: { name: true } },
@@ -147,7 +148,7 @@ function buildCaption(
 
   const lines = [
     `${TYPE_LABEL[(shown ?? first).type]} รอตรวจ`,
-    `บิล ${first.bill.billNumber ?? "(ยังไม่ออกเลข)"} · รอบ ${first.bill.draw.name}`,
+    `${visibleBillNumber(first.bill.drawSequence)} · รอบ ${first.bill.draw.name}`,
     `Agent ${first.bill.agent.code} · ยอด ${stake} บาท`,
     `ส่งเมื่อ ${formatTime(first.createdAt, first.organization.timezone)}`,
   ];
@@ -267,7 +268,7 @@ export async function runEvidenceAlerts(
         after: {
           channel: "evidence",
           attachmentType: row.type,
-          billNumber: row.bill.billNumber,
+          billNumber: visibleBillNumber(row.bill.drawSequence),
           withPhoto: photo !== undefined,
           groupedWith: group.length,
           shownInChat: row.id === shown?.id,

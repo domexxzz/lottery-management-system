@@ -3,7 +3,9 @@ import { channelThreadId } from "./channels";
 import {
   answerCallbackQuery,
   fetchTelegramUpdates,
+  isConfiguredChat,
   sendTelegramMessage,
+  telegramDisplayName,
   type TelegramUpdate,
 } from "./telegram";
 import { handleEvidenceAction, parseCallbackData } from "./telegram-actions";
@@ -65,8 +67,14 @@ async function handleCallback(update: TelegramUpdate): Promise<"verified" | "rej
     return "ignored";
   }
 
+  const who = {
+    telegramUserId,
+    telegramName: telegramDisplayName(query.from),
+    fromConfiguredGroup: isConfiguredChat(query.message?.chat?.id),
+  };
+
   if (action.kind === "verify") {
-    const outcome = await handleEvidenceAction({ telegramUserId, action });
+    const outcome = await handleEvidenceAction({ ...who, action });
     await answerCallbackQuery({
       callbackQueryId: query.id,
       text: outcome.message,
@@ -81,7 +89,7 @@ async function handleCallback(update: TelegramUpdate): Promise<"verified" | "rej
    * ตรวจสิทธิ์ก่อนถามเหตุผล เพื่อไม่ให้คนที่กดไม่ได้อยู่แล้วเสียเวลาพิมพ์
    * แล้วเพิ่งมารู้ตอนท้ายว่าทำไม่ได้
    */
-  const probe = await handleEvidenceAction({ telegramUserId, action, reason: undefined });
+  const probe = await handleEvidenceAction({ ...who, action, reason: undefined });
   if (probe.message.includes("ยังไม่ได้ผูก")) {
     await answerCallbackQuery({ callbackQueryId: query.id, text: probe.message, showAlert: true });
     return "ignored";
@@ -114,6 +122,8 @@ async function handleReply(update: TelegramUpdate): Promise<"rejected" | "ignore
 
   const outcome = await handleEvidenceAction({
     telegramUserId,
+    telegramName: telegramDisplayName(message.from),
+    fromConfiguredGroup: isConfiguredChat(message.chat?.id),
     action,
     reason: message.text,
   });

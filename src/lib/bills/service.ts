@@ -15,8 +15,7 @@ import {
   type PrizeTypeRule,
 } from "./validation";
 import { assertBillEvidenceReady } from "@/lib/evidence/service";
-
-const BILL_NUMBER_PAD = 8;
+import { billSequencePeriod, buildInternalBillNumber } from "./numbering";
 
 export type ItemInput = {
   prizeTypeId: string;
@@ -264,7 +263,7 @@ function toDecimal(raw: string): Prisma.Decimal {
 export async function confirmBill(
   actor: Actor,
   billId: string,
-): Promise<{ billNumber: string; totalStake: string }> {
+): Promise<{ billNumber: string; drawSequence: number; totalStake: string }> {
   requirePermission(actor, "bill.confirm");
   return prisma.$transaction((tx) => confirmInTx(tx, actor, billId, { requireEvidence: true }));
 }
@@ -293,13 +292,13 @@ async function confirmInTx(
   actor: Actor,
   billId: string,
   options: { requireEvidence: boolean },
-): Promise<{ billNumber: string; totalStake: string }> {
+): Promise<{ billNumber: string; drawSequence: number; totalStake: string }> {
   const bill = await tx.bill.findFirst({
     where: { id: billId, ...billScope(actor) },
     include: {
       items: { select: { id: true, prizeTypeId: true, number: true, stake: true } },
-      draw: { select: { id: true, status: true, cutoffAt: true } },
-      agent: { select: { id: true, status: true, creditLimit: true, perNumberLimit: true } },
+      draw: { select: { id: true, status: true, cutoffAt: true, drawDate: true, lotteryType: true } },
+      agent: { select: { id: true, code: true, status: true, creditLimit: true, perNumberLimit: true } },
     },
   });
 
@@ -350,14 +349,28 @@ async function confirmInTx(
     throw new ValidationError(issues.map((i) => i.message).join(" · "));
   }
 
-  // Prisma แปลง atomic increment เป็น UPDATE ... RETURNING ให้เอง และเคารพ schema
-  // ของ driver adapter จึงใช้ได้ทั้ง public และ integration_test โดยไม่เสี่ยง query ข้าม schema
-  const org = await tx.organization.update({
-    where: { id: bill.organizationId },
-    data: { billSequence: { increment: 1 } },
-    select: { billSequence: true },
+  const confirmedAt = new Date();
+  const sequencePeriod = billSequencePeriod(confirmedAt);
+  // ตัวนับแยก Agent/เดือนและเพิ่มแบบ atomic ใน transaction เดียวกับการยืนยัน
+  // Agent แต่ละคนจึงเริ่มจากบิล 1 เมื่อขึ้นเดือนใหม่ และกดยืนยันพร้อมกันก็ไม่ชนกัน
+  const sequence = await tx.agentBillCounter.upsert({
+    where: { agentId_period: { agentId: bill.agentId, period: sequencePeriod } },
+    create: {
+      organizationId: bill.organizationId,
+      agentId: bill.agentId,
+      period: sequencePeriod,
+      lastSequence: 1,
+    },
+    update: { lastSequence: { increment: 1 } },
+    select: { lastSequence: true },
   });
-  const billNumber = String(org.billSequence).padStart(BILL_NUMBER_PAD, "0");
+  const drawSequence = sequence.lastSequence;
+  const billNumber = buildInternalBillNumber({
+    agentCode: bill.agent.code,
+    lotteryType: bill.draw.lotteryType,
+    issuedAt: confirmedAt,
+    drawSequence,
+  });
 
   // เขียน payout snapshot ของจริง ณ วินาทีที่ยืนยัน เลขอั้นใช้อัตราที่ลดลง
   for (const item of bill.items) {
@@ -379,10 +392,12 @@ async function confirmInTx(
     data: {
       status: "CONFIRMED",
       billNumber,
+      drawSequence,
+      sequencePeriod,
       totalStake: total,
-      confirmedAt: new Date(),
+      confirmedAt,
     },
-    select: { id: true, billNumber: true, status: true, totalStake: true },
+    select: { id: true, billNumber: true, drawSequence: true, sequencePeriod: true, status: true, totalStake: true },
   });
 
   await writeAudit(tx, {
@@ -394,10 +409,10 @@ async function confirmInTx(
     entityType: "Bill",
     entityId: bill.id,
     before: { status: "DRAFT", billNumber: null },
-    after: { status: updated.status, billNumber: updated.billNumber },
+    after: { status: updated.status, billNumber: updated.billNumber, drawSequence: updated.drawSequence, sequencePeriod: updated.sequencePeriod },
   });
 
-  return { billNumber, totalStake: total.toFixed(2) };
+  return { billNumber, drawSequence, totalStake: total.toFixed(2) };
 }
 
 /**
@@ -408,7 +423,7 @@ async function confirmInTx(
 export async function placeBill(
   actor: Actor,
   input: { drawId: string; title: string; items: readonly ItemInput[]; representativeUserId?: string },
-): Promise<{ billId: string; billNumber: string }> {
+): Promise<{ billId: string; billNumber: string; drawSequence: number }> {
   requirePermission(actor, "bill.create");
   requirePermission(actor, "bill.confirm");
 
@@ -471,7 +486,7 @@ export async function placeBill(
     });
 
     const confirmed = await confirmInTx(tx, actor, created.id, { requireEvidence: false });
-    return { billId: created.id, billNumber: confirmed.billNumber };
+    return { billId: created.id, billNumber: confirmed.billNumber, drawSequence: confirmed.drawSequence };
   });
 }
 
@@ -601,6 +616,7 @@ export async function listBills(actor: Actor, filter: { drawId?: string; status?
     select: {
       id: true,
       billNumber: true,
+      drawSequence: true,
       title: true,
       status: true,
       totalStake: true,
@@ -678,6 +694,8 @@ export type BetBillFilter = {
   dateFrom?: Date;
   dateTo?: Date;
   drawId?: string;
+  /** เงื่อนไขงวดของขอบเขตงวดปัจจุบัน/ย้อนหลัง */
+  drawWhere?: Prisma.DrawWhereInput;
   /** ใช้ได้เฉพาะผู้ที่เห็นทุก Agent — Agent ถูก billScope บังคับอยู่แล้ว */
   agentId?: string;
 };
@@ -690,7 +708,12 @@ function betBaseWhere(actor: Actor, filter: BetBillFilter): Prisma.BillWhereInpu
     ...billScope(actor),
     ...(filter.agentId && actor.role !== "AGENT" && { agentId: filter.agentId }),
     ...(filter.drawId && { drawId: filter.drawId }),
-    ...(filter.lotteryType !== undefined && { draw: { lotteryType: filter.lotteryType } }),
+    ...((filter.lotteryType !== undefined || filter.drawWhere) && {
+      draw: {
+        ...filter.drawWhere,
+        ...(filter.lotteryType !== undefined && { lotteryType: filter.lotteryType }),
+      },
+    }),
     ...(query && {
       OR: [
         { billNumber: { contains: query, mode: "insensitive" } },
@@ -750,6 +773,7 @@ export async function listBetBills(actor: Actor, filter: BetBillFilter & { page?
     select: {
       id: true,
       billNumber: true,
+      drawSequence: true,
       title: true,
       status: true,
       totalStake: true,
@@ -785,6 +809,7 @@ export async function exportBetBills(actor: Actor, filter: BetBillFilter, limit 
     take: limit,
     select: {
       billNumber: true,
+      drawSequence: true,
       title: true,
       status: true,
       totalStake: true,

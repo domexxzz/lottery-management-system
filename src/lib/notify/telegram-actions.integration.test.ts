@@ -13,7 +13,7 @@ import {
  * การกดปุ่มในแชทเปลี่ยนสถานะหลักฐานจริง
  *
  * สิ่งที่ชุดนี้ต้องพิสูจน์ เรียงตามความสำคัญ
- *   1. บัญชี Telegram ที่ไม่ได้ผูก กดไม่ได้ — ไม่มีทางลัดให้คนนอก
+ *   1. บัญชีที่ไม่ได้ผูก กดได้เฉพาะจากกลุ่มที่ตั้งไว้ (ในนาม Owner) — คนนอกกลุ่มกดไม่ได้
  *   2. ด่านสิทธิ์เดิมยังบังคับอยู่ — Agent กดไม่ได้แม้จะผูกบัญชีแล้ว
  *   3. Audit บันทึกชื่อคนจริง ไม่ใช่ "บอท"
  */
@@ -152,6 +152,80 @@ describe("ตัวตนและสิทธิ์", () => {
 
     expect(outcome.ok).toBe(false);
     expect(outcome.message).toContain("ยังไม่ได้ผูก");
+  });
+});
+
+describe("สมาชิกกลุ่มที่ยังไม่ผูกบัญชี", () => {
+  test("กดยืนยันจากกลุ่มได้ ทำในนาม Owner และ Audit เก็บว่าใครกด", async () => {
+    const attachmentId = await pendingAttachment();
+
+    const outcome = await handleEvidenceAction({
+      telegramUserId: "990001",
+      telegramName: "สมชาย ใจดี (@somchai)",
+      fromConfiguredGroup: true,
+      action: { scope: "attachment", kind: "verify", attachmentId },
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(outcome.message).toContain("สมชาย ใจดี");
+
+    const after = await prisma.billAttachment.findUniqueOrThrow({ where: { id: attachmentId } });
+    expect(after.status).toBe("VERIFIED");
+    expect(after.verifiedById).toBe(f.users.owner.id);
+
+    const audit = await prisma.auditEvent.findFirstOrThrow({
+      where: { entityType: "BillAttachment", entityId: attachmentId, action: "FILE_VERIFIED" },
+      select: { actorId: true, requestId: true },
+    });
+    expect(audit.actorId).toBe(f.users.owner.id);
+    expect(audit.requestId).toContain("telegram:990001");
+    expect(audit.requestId).toContain("@somchai");
+  });
+
+  test("ตีกลับจากกลุ่มพร้อมเหตุผลได้", async () => {
+    const attachmentId = await pendingAttachment();
+
+    const outcome = await handleEvidenceAction({
+      telegramUserId: "990002",
+      telegramName: "สมหญิง",
+      fromConfiguredGroup: true,
+      action: { scope: "attachment", kind: "reject", attachmentId },
+      reason: "สลิปไม่ชัด",
+    });
+
+    expect(outcome.ok).toBe(true);
+    const after = await prisma.billAttachment.findUniqueOrThrow({ where: { id: attachmentId } });
+    expect(after.status).toBe("REJECTED");
+  });
+
+  test("กดจากแชทอื่นที่ไม่ใช่กลุ่มที่ตั้งไว้ ยังกดไม่ได้", async () => {
+    const attachmentId = await pendingAttachment();
+
+    const outcome = await handleEvidenceAction({
+      telegramUserId: "990003",
+      telegramName: "คนนอก",
+      fromConfiguredGroup: false,
+      action: { scope: "attachment", kind: "verify", attachmentId },
+    });
+
+    expect(outcome.ok).toBe(false);
+    const after = await prisma.billAttachment.findUniqueOrThrow({ where: { id: attachmentId } });
+    expect(after.status).toBe("PENDING");
+  });
+
+  test("Agent ที่ผูกบัญชีไว้ไม่ได้สิทธิ์ Owner แม้กดจากกลุ่ม", async () => {
+    const attachmentId = await pendingAttachment();
+    await link(f.users.agentUser1.id, "990004");
+
+    const outcome = await handleEvidenceAction({
+      telegramUserId: "990004",
+      fromConfiguredGroup: true,
+      action: { scope: "attachment", kind: "verify", attachmentId },
+    });
+
+    expect(outcome.ok).toBe(false);
+    const after = await prisma.billAttachment.findUniqueOrThrow({ where: { id: attachmentId } });
+    expect(after.status).toBe("PENDING");
   });
 });
 

@@ -312,7 +312,7 @@ export async function duplicateEvidenceHistory(actor: Actor, attachmentId: strin
       originalName: true,
       createdAt: true,
       uploadedBy: { select: { displayName: true } },
-      bill: { select: { id: true, billNumber: true, title: true, agent: { select: { code: true, name: true } } } },
+      bill: { select: { id: true, drawSequence: true, title: true, agent: { select: { code: true, name: true } } } },
     },
   });
 }
@@ -652,7 +652,7 @@ export async function listEvidenceReviewQueue(
       rejectionReason: true,
       createdAt: true,
       verifiedAt: true,
-      bill: { select: { id: true, billNumber: true, title: true, status: true, totalStake: true, agent: { select: { code: true, name: true } }, draw: { select: { name: true } } } },
+      bill: { select: { id: true, drawSequence: true, title: true, status: true, totalStake: true, agent: { select: { code: true, name: true } }, draw: { select: { name: true } } } },
       uploadedBy: { select: { displayName: true } },
       verifiedBy: { select: { displayName: true } },
       payment: { select: { amount: true, paidAt: true, paymentMethod: true, bankName: true, transactionReference: true, note: true, verificationStatus: true } },

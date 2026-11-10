@@ -97,6 +97,30 @@ describe("เส้นทางเงินเต็มเส้น", () => {
     ]);
   });
 
+  test("บิลเก่ารหัส 3 ตัวสลับใช้ผล 3 ตัวบน ไม่ต้องกรอกผลสลับแยก", async () => {
+    const legacySwap = await prisma.prizeType.create({
+      data: {
+        organizationId: f.org.id,
+        code: 10,
+        name: "3 ตัวสลับ (เดิม)",
+        digits: 3,
+        matchRule: "EXACT",
+        payoutRate: "650",
+        isActive: true,
+      },
+    });
+    await confirmedBill(f.actors.AGENT1, [
+      { prizeTypeId: legacySwap.id, number: "321", stake: "10" },
+    ]);
+
+    await lockDrawManually(f.actors.ADMIN, f.draw.id);
+    await approveResults([{ prizeTypeId: f.prizeTypes.threeTop.id, value: "321" }]);
+
+    const [preview] = await calculateSettlement(f.actors.ADMIN, f.draw.id);
+    expect(preview?.winningItems).toBe(1);
+    expect(preview?.payout.toFixed(2)).toBe("6500.00");
+  });
+
   test("แยกยอดต่อ Agent ไม่ปนกัน และใช้อัตราคอมของแต่ละราย", async () => {
     const { threeTop } = f.prizeTypes;
 

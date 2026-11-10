@@ -84,14 +84,14 @@ export default async function BillDetailPage({
   return (
     <main className="workspace-page bill-detail-page slip-board-page">
       <section className="slip-detail-page" aria-labelledby="bill-heading">
-        {placed === "1" && bill.billNumber && (
-          <p className="slip-placed" role="status">บันทึกบิลสำเร็จ · เลขบิล #{bill.billNumber} · แนบหลักฐานได้ในส่วนด้านล่างจนกว่าจะปิดรับ</p>
+        {placed === "1" && bill.drawSequence !== null && (
+          <p className="slip-placed" role="status">บันทึกบิลสำเร็จ · บิล {bill.drawSequence} · แนบหลักฐานได้ในส่วนด้านล่างจนกว่าจะปิดรับ</p>
         )}
         <header className="bill-detail-toolbar">
           <Link href="/bills" className="slip-outline-button bill-detail-back">← กลับไปหน้าประวัติ</Link>
           <div className="bill-detail-title">
             <nav className="slip-breadcrumb" aria-label="ตำแหน่งหน้า"><Link href="/bills">ประวัติรายการ</Link><span aria-hidden="true">/</span><span>รายละเอียดบิล</span></nav>
-            <h1 id="bill-heading">รายละเอียดบิล #{bill.billNumber ?? "ร่าง"} <span className={`slip-status slip-status-${betStatus.toLowerCase()}`}>{BET_STATUS_LABEL[betStatus]}</span></h1>
+            <h1 id="bill-heading">รายละเอียดบิล {bill.drawSequence === null ? "ร่าง" : bill.drawSequence} <span className={`slip-status slip-status-${betStatus.toLowerCase()}`}>{BET_STATUS_LABEL[betStatus]}</span></h1>
           </div>
           <nav className="bill-detail-tools" aria-label="เครื่องมือบิล">
             <Link href={`/bills/${bill.id}/print`} target="_blank" className="slip-outline-button">พิมพ์บิล</Link>

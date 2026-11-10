@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { databaseSchema, prisma } from "@/lib/db";
+import { drawFilterSql, type DrawFilter } from "@/lib/draws/range";
 
 const CUSTOMER_PREVIEW_LIMIT = 6;
 
@@ -11,18 +12,18 @@ function table(name: "agents" | "bills" | "settlements") {
   return Prisma.raw(`"${schema}"."${name}"`);
 }
 
-function billWhere(actor: Actor, drawId?: string) {
+function billWhere(actor: Actor, draws: DrawFilter) {
   return Prisma.sql`
     b."organizationId" = ${actor.organizationId}
     AND b."status" IN ('CONFIRMED', 'LOCKED', 'SETTLED')
-    ${drawId ? Prisma.sql`AND b."drawId" = ${drawId}` : Prisma.empty}
+    ${drawFilterSql(Prisma.sql`b."drawId"`, draws)}
   `;
 }
 
-function settlementWhere(actor: Actor, drawId?: string) {
+function settlementWhere(actor: Actor, draws: DrawFilter) {
   return Prisma.sql`
     s."organizationId" = ${actor.organizationId}
-    ${drawId ? Prisma.sql`AND s."drawId" = ${drawId}` : Prisma.empty}
+    ${drawFilterSql(Prisma.sql`s."drawId"`, draws)}
   `;
 }
 
@@ -49,7 +50,8 @@ type CustomerRow = {
 };
 
 /** โหลดเฉพาะผลรวมและลูกค้าที่ต้องวาดบนผัง ไม่โหลดบิลทุกใบเข้าหน่วยความจำ */
-export async function getOrganizationMapData(actor: Actor, drawId?: string) {
+/** draws: id งวดเดียว, รายการ id (ช่วงวันที่) หรือ undefined = ทุกงวด */
+export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
   requirePermission(actor, "report.viewAllAgents");
   const [agents, stats, topCustomers] = await Promise.all([
     prisma.agent.findMany({
@@ -62,7 +64,7 @@ export async function getOrganizationMapData(actor: Actor, drawId?: string) {
         SELECT b."agentId", COUNT(*)::int AS "billCount",
                COALESCE(SUM(b."totalStake"), 0) AS sales
         FROM ${table("bills")} b
-        WHERE ${billWhere(actor, drawId)}
+        WHERE ${billWhere(actor, draws)}
         GROUP BY b."agentId"
       ), settlement_agg AS (
         SELECT s."agentId",
@@ -70,7 +72,7 @@ export async function getOrganizationMapData(actor: Actor, drawId?: string) {
                COALESCE(SUM(s.commission), 0) AS commission,
                COALESCE(SUM(s.net), 0) AS net
         FROM ${table("settlements")} s
-        WHERE ${settlementWhere(actor, drawId)}
+        WHERE ${settlementWhere(actor, draws)}
         GROUP BY s."agentId"
       )
       SELECT a.id AS "agentId",
@@ -91,7 +93,7 @@ export async function getOrganizationMapData(actor: Actor, drawId?: string) {
                CASE WHEN BTRIM(b.title) = '' THEN 'ไม่ระบุชื่อ' ELSE BTRIM(b.title) END AS name,
                b."totalStake"
         FROM ${table("bills")} b
-        WHERE ${billWhere(actor, drawId)}
+        WHERE ${billWhere(actor, draws)}
       ), customers AS (
         SELECT nb."agentId", nb.key, MIN(nb.name) AS name,
                COUNT(*)::int AS "billCount",

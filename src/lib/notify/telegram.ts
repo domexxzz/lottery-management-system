@@ -356,19 +356,38 @@ export async function answerCallbackQuery(input: {
   }
 }
 
+export type TelegramUser = { id?: number; first_name?: string; last_name?: string; username?: string };
+
 export type TelegramUpdate = {
   update_id: number;
   callback_query?: {
     id: string;
-    from?: { id?: number };
+    from?: TelegramUser;
     data?: string;
+    /** ข้อความที่มีปุ่ม — บอกได้ว่ากดจากแชทไหน Telegram เป็นคนใส่ ปลอมไม่ได้ */
+    message?: { chat?: { id?: number } };
   };
   message?: {
     text?: string;
-    from?: { id?: number };
+    from?: TelegramUser;
+    chat?: { id?: number };
     reply_to_message?: { text?: string };
   };
 };
+
+/** ชื่อที่ใช้แสดงและบันทึกว่าใครกด เช่น "สมชาย ใจดี (@somchai)" */
+export function telegramDisplayName(user: TelegramUser | undefined): string {
+  const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ").trim();
+  const handle = user?.username ? `@${user.username}` : "";
+  if (name && handle) return `${name} (${handle})`;
+  return name || handle || (user?.id ? `Telegram ${user.id}` : "ไม่ทราบชื่อ");
+}
+
+/** แชทนี้คือกลุ่มที่ตั้งไว้ใน TELEGRAM_CHAT_ID หรือไม่ */
+export function isConfiguredChat(chatId: number | undefined): boolean {
+  const configured = process.env.TELEGRAM_CHAT_ID?.trim();
+  return chatId !== undefined && Boolean(configured) && String(chatId) === configured;
+}
 
 /**
  * ดึงเหตุการณ์ใหม่จาก Telegram

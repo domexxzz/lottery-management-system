@@ -664,3 +664,11 @@
 @media print {
   .owner-chat-page-shell { display: none !important; }
 }
+
+/* ปุ่มตอบกลับใต้ข้อความของผู้ช่วย เช่น หัวข้อคู่มือแนะนำระบบ */
+.owner-chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}

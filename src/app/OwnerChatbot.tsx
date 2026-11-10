@@ -9,6 +9,8 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   error?: boolean;
+  /** ปุ่มตอบกลับที่ผู้ช่วยเสนอ เช่น หัวข้อของคู่มือ — กดแล้วส่งข้อความนั้นทันที */
+  suggestions?: string[];
 };
 
 type ConversationSummary = {
@@ -75,8 +77,12 @@ export function OwnerChatbot({
       const payload = (await response.json()) as {
         reply?: unknown;
         error?: unknown;
+        suggestions?: unknown;
         conversation?: ConversationSummary;
       };
+      const suggestions = Array.isArray(payload.suggestions)
+        ? payload.suggestions.filter((item): item is string => typeof item === "string")
+        : [];
       if (!response.ok || typeof payload.reply !== "string" || !payload.conversation) {
         throw new Error(typeof payload.error === "string" ? payload.error : "ไม่สามารถรับคำตอบได้");
       }
@@ -89,6 +95,7 @@ export function OwnerChatbot({
         id: `local-${nextId.current++}`,
         role: "assistant",
         content: payload.reply as string,
+        suggestions,
       }]);
     } catch (error) {
       setMessages((current) => [...current, {
@@ -109,8 +116,14 @@ export function OwnerChatbot({
   }
 
   function runQuickAction(action: QuickAction) {
-    if (isSending || !configured) return;
+    // ปุ่มที่ตอบจากคู่มือในระบบใช้ได้แม้ยังไม่ได้ตั้งค่าผู้ช่วย
+    if (isSending || (!configured && !action.offline)) return;
     void send(action.prompt);
+  }
+
+  function runSuggestion(value: string) {
+    if (isSending) return;
+    void send(value);
   }
 
   function startNewChat() {
@@ -205,6 +218,7 @@ export function OwnerChatbot({
             <div>
               <p>สวัสดีคุณ{ownerName} ผมผู้ช่วยล็อตเตอรี่ครับ มีอะไรให้ช่วยบอกมาได้เลยครับ</p>
               <p>ถามภาพรวมธุรกิจ ยอดขาย งานที่รอตรวจ หรือสถานะงวดได้เลยครับ ผมตอบเฉพาะข้อมูลจากฐานข้อมูลในระบบเท่านั้น</p>
+              <p>ถ้ายังไม่คุ้นกับระบบ กดปุ่ม &ldquo;แนะนำระบบ&rdquo; ด้านล่าง ผมจะอธิบายว่าแต่ละคนทำอะไรได้ และขั้นตอนตั้งแต่เปิดงวดจนปิดงวดครับ</p>
             </div>
           </div>
 
@@ -227,10 +241,22 @@ export function OwnerChatbot({
             </div>
           )}
 
-          {messages.map((item) => (
+          {messages.map((item, index) => (
             <div key={item.id} className={`owner-chat-message ${item.role}${item.error ? " error" : ""}`}>
               {item.role === "assistant" && <AssistantAvatar className="owner-chat-avatar" />}
-              <div><p>{item.content}</p></div>
+              <div>
+                <p>{item.content}</p>
+                {/* ปุ่มตอบกลับแสดงเฉพาะข้อความล่าสุด ข้อความเก่าเลือกไปแล้ว */}
+                {index === messages.length - 1 && item.suggestions && item.suggestions.length > 0 && (
+                  <div className="owner-chat-suggestions" role="group" aria-label="เลือกหัวข้อ">
+                    {item.suggestions.map((suggestion) => (
+                      <button key={suggestion} type="button" className="owner-chat-chip" onClick={() => runSuggestion(suggestion)} disabled={isSending}>
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {item.role === "user" && (
                 <span className="owner-chat-avatar owner-chat-user-avatar" aria-hidden="true">
                   {ownerName.slice(0, 1)}
@@ -258,7 +284,7 @@ export function OwnerChatbot({
                 type="button"
                 className="owner-chat-chip"
                 onClick={() => runQuickAction(action)}
-                disabled={isSending || !configured}
+                disabled={isSending || (!configured && !action.offline)}
                 title={action.prompt}
               >
                 {action.label}

@@ -44,7 +44,7 @@ export default async function PrintBillPage({
     <div className={isSlip ? "sheet sheet-slip" : "sheet sheet-a4"}>
       <header className="sheet-header">
         <h1>บิลรับรายการ</h1>
-        <p className="sheet-number">เลขบิล {bill.billNumber ?? "(ร่าง ยังไม่ออกเลข)"}</p>
+        <p className="sheet-number">{bill.drawSequence === null ? "บิลร่าง" : `บิล ${bill.drawSequence}`}</p>
       </header>
 
       <dl className="sheet-meta">

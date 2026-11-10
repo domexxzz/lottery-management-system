@@ -30,6 +30,8 @@ export async function listResults(actor: Actor, drawId: string) {
     prisma.prizeType.findMany({
       where: {
         ...orgScope(actor),
+        // เลขสลับเป็นเพียงปุ่มช่วยสร้างเลขของตัวบน ไม่ใช่ผลรางวัลแยก
+        code: { notIn: [10, 11] },
         OR: [
           { isActive: true },
           // ประเภทที่ปิดรับใหม่แล้วยังต้องแสดง หากงวดนี้มีบิลหรือผลเดิมอยู่
@@ -133,6 +135,9 @@ export async function enterResultsBatch(
   const validated = input.results.map((result) => {
     const type = prizeTypeById.get(result.prizeTypeId);
     if (!type) throw new NotFoundError("ไม่พบประเภทรางวัล");
+    if (type.code === 10 || type.code === 11) {
+      throw new ValidationError("เลขสลับเป็นตัวช่วยกรอกเลขตัวบน ไม่ต้องลงผลรางวัลแยก");
+    }
     if (!type.isActive) throw new ConflictError(`รางวัล ${type.code} ถูกปิดใช้งานแล้ว`);
     const values = (result.values ?? [result.value ?? ""]).map((value) => value.trim()).filter(Boolean);
     const requiredCount = resultValueCount(type.code);

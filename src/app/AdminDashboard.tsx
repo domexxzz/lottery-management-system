@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { visibleBillNumber } from "@/lib/bills/numbering";
 import { DashboardHeading } from "./DashboardHeading";
 import type { BillStatus, Prisma } from "@prisma/client";
 import type { Actor } from "@/lib/auth/context";
@@ -45,7 +46,7 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
     prisma.billAttachment.findMany({
       where: { ...scope, status: "PENDING", replacedBy: null, bill: billWhere },
       orderBy: { createdAt: "asc" }, take: 30,
-      select: { id: true, type: true, createdAt: true, bill: { select: { id: true, billNumber: true, title: true, agent: { select: { code: true, name: true } }, draw: { select: { name: true } } } } },
+      select: { id: true, type: true, createdAt: true, bill: { select: { id: true, drawSequence: true, title: true, agent: { select: { code: true, name: true } }, draw: { select: { name: true } } } } },
     }),
     prisma.billAttachment.count({ where: { ...scope, status: "PENDING", replacedBy: null, bill: billWhere } }),
     prisma.draw.count({ where: { ...scope, status: { in: ["LOCKED", "RESULT_PENDING"] } } }),
@@ -109,7 +110,7 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
     <AdminOperationsChart daily={daily} backlog={{ evidence: pendingEvidence.length, settlement: pendingSettlements, cancellation: pendingCancellations, rejected: rejectedOutstanding }} />
 
     <section className="admin-main-grid">
-      <article className="dashboard-panel admin-queue"><div className="panel-heading"><div><p className="eyebrow">Priority Queue</p><h2>คิวหลักฐานที่ต้องตรวจ</h2></div><Link href="/evidence">ดูทั้งหมด <Icon name="arrow"/></Link></div>{queue.length === 0 ? <p className="empty-state">ไม่มีหลักฐานรอตรวจตามตัวกรอง</p> : <div>{queue.map((row) => { const minutes = Math.max(0, Math.round((Date.now() - row.oldest.getTime()) / 60000)); return <Link key={row.bill.id} href="/evidence"><span className={minutes >= 60 ? "priority-high" : "priority-normal"}>{minutes >= 60 ? "เร่งด่วน" : "รอตรวจ"}</span><div><strong>{row.bill.billNumber ?? "บิลร่าง"} · {row.bill.title}</strong><small>{row.bill.agent.code} {row.bill.agent.name} · {row.bill.draw.name}</small></div><b>{row.count} รูป</b><time>{minutes} นาที</time><Icon name="arrow"/></Link>; })}</div>}</article>
+      <article className="dashboard-panel admin-queue"><div className="panel-heading"><div><p className="eyebrow">Priority Queue</p><h2>คิวหลักฐานที่ต้องตรวจ</h2></div><Link href="/evidence">ดูทั้งหมด <Icon name="arrow"/></Link></div>{queue.length === 0 ? <p className="empty-state">ไม่มีหลักฐานรอตรวจตามตัวกรอง</p> : <div>{queue.map((row) => { const minutes = Math.max(0, Math.round((Date.now() - row.oldest.getTime()) / 60000)); return <Link key={row.bill.id} href="/evidence"><span className={minutes >= 60 ? "priority-high" : "priority-normal"}>{minutes >= 60 ? "เร่งด่วน" : "รอตรวจ"}</span><div><strong>{visibleBillNumber(row.bill.drawSequence)} · {row.bill.title}</strong><small>{row.bill.agent.code} {row.bill.agent.name} · {row.bill.draw.name}</small></div><b>{row.count} รูป</b><time>{minutes} นาที</time><Icon name="arrow"/></Link>; })}</div>}</article>
 
       <article className="dashboard-panel admin-round-panel"><div className="panel-heading"><div><p className="eyebrow">Current Workflow</p><h2>สถานะงวด</h2></div></div>{!currentDraw ? <p className="empty-state">ยังไม่มีงวดที่กำลังดำเนินการ</p> : <><div className="draw-meta"><strong>{currentDraw.name}</strong><span>ปิดรับ {DATE_TIME.format(currentDraw.cutoffAt)}</span></div><ol className="draw-timeline">{DRAW_STEPS.map((step, index) => <li key={step} className={index < stepIndex ? "complete" : index === stepIndex ? "current" : ""}><span>{index < stepIndex ? "✓" : index + 1}</span><div><strong>{STEP_LABEL[step]}</strong><small>{index === stepIndex ? "กำลังดำเนินการ" : index < stepIndex ? "เสร็จแล้ว" : "รอดำเนินการ"}</small></div></li>)}</ol><Link className="admin-next-action" href={drawAction.href}>{drawAction.label} <Icon name="arrow"/></Link></>}</article>
     </section>

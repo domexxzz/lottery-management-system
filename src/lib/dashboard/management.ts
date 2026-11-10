@@ -76,7 +76,7 @@ export async function loadManagementDashboard(actor: Actor, filters: DashboardFi
       where: listWhere,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 5,
-      select: { id: true, billNumber: true, title: true, status: true, totalStake: true, createdAt: true, agent: { select: { code: true, name: true } } },
+      select: { id: true, drawSequence: true, title: true, status: true, totalStake: true, createdAt: true, agent: { select: { code: true, name: true } } },
     }),
     prisma.bill.groupBy({ by: ["title"], where: { ...moneyWhere, totalPayout: { gt: 0 } }, _count: { _all: true } }),
     prisma.draw.count({ where: { ...scope, status: "SETTLED" } }),
@@ -171,8 +171,9 @@ export async function loadManagementDashboard(actor: Actor, filters: DashboardFi
   const agentFinance = settlementByAgent
     .map((row) => {
       const agent = agentById.get(row.agentId);
-      return { label: agent ? `${agent.code} ${agent.name}` : "-", gross: num(row._sum.gross), payout: num(row._sum.payout), commission: num(row._sum.commission), net: num(row._sum.net) };
+      return { agentId: row.agentId, label: agent ? `${agent.code} ${agent.name}` : "-", gross: num(row._sum.gross), payout: num(row._sum.payout), commission: num(row._sum.commission), net: num(row._sum.net) };
     })
+    // หน้าภาพรวมแสดงเฉพาะ Top 5 ตามยอดขาย ที่เหลือดูได้ที่หน้าภาพรวม Agent
     .sort((a, b) => b.gross - a.gross)
     .slice(0, 5);
 

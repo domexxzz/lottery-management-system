@@ -4,8 +4,10 @@ import { can } from "@/lib/auth/permissions";
 import { getOrganizationMapData } from "@/lib/agents/organization-map";
 import { customerProfileKey } from "@/lib/customers/profile-key";
 import { prisma } from "@/lib/db";
+import { drawDay, inRange, monthShortcuts, parseDay, recentMonths, thaiDayLabel } from "@/lib/draws/range";
+import { pickCurrentDraw } from "@/lib/bills/draw-scope";
 import { DashboardIcon } from "../DashboardIcon";
-import { OrganizationMap, type OrganizationAgentNode } from "./OrganizationMap";
+import { AgentTable, type AgentTableRow } from "./AgentTable";
 import "./agents.css";
 
 export const dynamic = "force-dynamic";
@@ -21,20 +23,25 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
   const query = await searchParams;
   const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
   const drawId = first(query.drawId);
+  // ช่วงวันที่ (วันออกรางวัลของงวด) มาก่อนการเลือกงวดเดียว
+  const from = parseDay(first(query.from));
+  const to = parseDay(first(query.to));
+  const byRange = Boolean(from || to);
   const selectedAllDraws = !drawId || drawId === "all";
   const drawOptions = await prisma.draw.findMany({
     where: orgScope(actor),
     orderBy: { cutoffAt: "desc" },
-    select: { id: true, name: true, status: true },
+    select: { id: true, name: true, status: true, drawDate: true, cutoffAt: true },
   });
   const organization = await prisma.organization.findUnique({
     where: { id: actor.organizationId },
     select: { name: true },
   });
   const defaultDraw = drawOptions.find((draw) => ["OPEN", "LOCKED", "RESULT_PENDING", "SETTLED"].includes(draw.status)) ?? drawOptions[0] ?? null;
-  const currentDraw = selectedAllDraws ? null : (drawOptions.find((draw) => draw.id === drawId) ?? defaultDraw);
+  const currentDraw = byRange || selectedAllDraws ? null : (drawOptions.find((draw) => draw.id === drawId) ?? defaultDraw);
+  const rangeDraws = byRange ? drawOptions.filter((draw) => inRange(drawDay(draw), from, to)) : [];
 
-  const mapData = await getOrganizationMapData(actor, currentDraw?.id);
+  const mapData = await getOrganizationMapData(actor, byRange ? rangeDraws.map((draw) => draw.id) : currentDraw?.id);
   const performance = new Map(mapData.stats.map((row) => [row.agentId, row]));
   const customerRows = new Map<string, typeof mapData.topCustomers>();
   const customerCounts = new Map<string, number>();
@@ -45,7 +52,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
     customerCounts.set(customer.agentId, customer.customerCount);
   }
 
-  const nodes: OrganizationAgentNode[] = mapData.agents
+  const nodes: AgentTableRow[] = mapData.agents
     .map((agent) => {
       const stats = performance.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, commission: 0, net: 0 };
       const customers = customerRows.get(agent.id) ?? [];
@@ -72,18 +79,32 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
           gross: customer.gross,
           profileHref: `/customers/${customerProfileKey(customer.name)}`,
         })),
-      } satisfies OrganizationAgentNode;
+      } satisfies AgentTableRow;
     })
     .sort((a, b) => b.sales - a.sales || a.code.localeCompare(b.code, "th-TH"));
 
   const totalSales = nodes.reduce((sum, agent) => sum + agent.sales, 0);
   const totalCustomers = nodes.reduce((sum, agent) => sum + agent.customerCount, 0);
   const activeAgents = nodes.filter((agent) => agent.status === "ACTIVE").length;
-  const selectedDrawLabel = currentDraw?.name ?? "ทุกงวด";
+  const rangeLabel = byRange
+    ? `${from ? thaiDayLabel(from) : "เริ่มต้น"} – ${to ? thaiDayLabel(to) : "ล่าสุด"} (${rangeDraws.length} งวด)`
+    : null;
+  const selectedDrawLabel = rangeLabel ?? currentDraw?.name ?? "ทุกงวด";
+  const csvQuery = byRange
+    ? `?${new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}) })}`
+    : currentDraw ? `?draw=${currentDraw.id}` : "";
+  const organizationName = organization?.name ?? "ภาพรวมองค์กร";
 
-  return <main className="agents-page agents-map-page">
+  // คีย์ลัด: คำนวณฝั่ง server ตามเวลาไทย ไม่พึ่งนาฬิกาเครื่องผู้ใช้
+  const now = new Date();
+  const today = new Date(now.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const thisMonth = recentMonths(now, 1)[0]!;
+  // งวดนี้ใช้กติกาเดียวกับหน้ารายการบิล: งวดที่เปิดรับอยู่ หรือออกรางวัลมาไม่เกิน 2 วัน
+  const thisDraw = pickCurrentDraw(drawOptions, now) ?? defaultDraw;
+
+  return <main className="agents-page agents-table-page">
     <header className="agents-map-header">
-      <div className="agents-map-title"><span><DashboardIcon name="agent" /></span><div><p>ORGANIZATION & CUSTOMER MAP</p><h1>โครงสร้าง Agent และลูกค้า</h1><small>ดูความสัมพันธ์ เจ้าของ → Agent → ลูกค้า พร้อมยอดขายจริงในแต่ละระดับ</small></div></div>
+      <div className="agents-map-title"><span><DashboardIcon name="agent" /></span><div><p>AGENT OVERVIEW</p><h1>ภาพรวม Agent</h1><small>{organizationName} · {selectedDrawLabel} · เรียงตามยอดขาย กด ▸ เพื่อดูลูกค้า</small></div></div>
       <section className="agents-map-kpis" aria-label="สรุปโครงสร้าง Agent">
         <article><span><DashboardIcon name="agent" /></span><small>Agent</small><strong>{nodes.length}</strong></article>
         <article><i /><small>ใช้งาน</small><strong>{activeAgents}</strong></article>
@@ -92,13 +113,15 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
       </section>
     </header>
 
-    <OrganizationMap
-      ownerName={actor.displayName}
-      organizationName={organization?.name ?? "ภาพรวมองค์กร"}
+    <AgentTable
       draws={drawOptions.map((draw) => ({ id: draw.id, name: draw.name }))}
       selectedDrawId={currentDraw?.id ?? ""}
-      selectedDrawLabel={selectedDrawLabel}
-      csvHref={`/api/agents/customers${currentDraw ? `?draw=${currentDraw.id}` : ""}`}
+      from={from ?? ""}
+      to={to ?? ""}
+      months={monthShortcuts(drawOptions.map(drawDay))}
+      rangeDraws={rangeDraws.map((draw) => draw.name)}
+      shortcuts={{ today, monthFrom: thisMonth.from, monthTo: thisMonth.to, drawId: thisDraw?.id ?? "" }}
+      csvHref={`/api/agents/customers${csvQuery}`}
       agents={nodes}
     />
   </main>;

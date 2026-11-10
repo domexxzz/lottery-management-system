@@ -2,6 +2,7 @@ import type { Actor } from "@/lib/auth/context";
 import type { BillStatus, Prisma } from "@prisma/client";
 import { orgScope } from "@/lib/auth/context";
 import { prisma } from "@/lib/db";
+import { visibleBillNumber } from "@/lib/bills/numbering";
 import { drawSummary } from "@/lib/reports/service";
 import { sanitizeLabel } from "./sanitize";
 
@@ -292,7 +293,7 @@ export async function buildOwnerSnapshot(
           bill: {
             select: {
               title: true,
-              billNumber: true,
+              drawSequence: true,
               draw: { select: { name: true, cutoffAt: true } },
             },
           },
@@ -523,7 +524,7 @@ export async function buildOwnerSnapshot(
               stake: true,
               payout: true,
               prizeType: { select: { name: true } },
-              bill: { select: { title: true, billNumber: true } },
+              bill: { select: { title: true, drawSequence: true } },
             },
           }),
           prisma.bill.findMany({
@@ -618,7 +619,7 @@ export async function buildOwnerSnapshot(
               detailsTruncated: totalWinningItems > winnerItems.length,
               details: winnerItems.map((item) => ({
                 customerReference: sanitizeLabel(item.bill.title),
-                billNumber: item.bill.billNumber ?? "ไม่ระบุ",
+                billNumber: visibleBillNumber(item.bill.drawSequence),
                 prizeType: sanitizeLabel(item.prizeType.name),
                 number: item.number,
                 stake: item.stake.toFixed(2),
@@ -633,7 +634,7 @@ export async function buildOwnerSnapshot(
       detailsTruncated: winnerHistoryCount > winnerHistoryItems.length,
       details: winnerHistoryItems.map((item) => ({
         customerReference: sanitizeLabel(item.bill.title),
-        billNumber: item.bill.billNumber ?? "ไม่ระบุ",
+        billNumber: visibleBillNumber(item.bill.drawSequence),
         drawName: sanitizeLabel(item.bill.draw.name),
         drawCutoffAt: item.bill.draw.cutoffAt.toISOString(),
         prizeType: sanitizeLabel(item.prizeType.name),

@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { databaseSchema, prisma } from "@/lib/db";
 import { NotFoundError } from "@/lib/errors";
+import { drawFilterSql, type DrawFilter } from "@/lib/draws/range";
 
 type CustomerQueryRow = {
   agentId: string;
@@ -20,7 +21,7 @@ function table(name: "agents" | "bills") {
   return Prisma.raw(`"${schema}"."${name}"`);
 }
 
-async function queryCustomers(actor: Actor, agentId?: string, drawId?: string) {
+async function queryCustomers(actor: Actor, agentId?: string, draws?: DrawFilter) {
   const rows = await prisma.$queryRaw<CustomerQueryRow[]>(Prisma.sql`
     WITH normalized AS (
       SELECT b."agentId",
@@ -31,7 +32,7 @@ async function queryCustomers(actor: Actor, agentId?: string, drawId?: string) {
       WHERE b."organizationId" = ${actor.organizationId}
         AND b."status" IN ('CONFIRMED', 'LOCKED', 'SETTLED')
         ${agentId ? Prisma.sql`AND b."agentId" = ${agentId}` : Prisma.empty}
-        ${drawId ? Prisma.sql`AND b."drawId" = ${drawId}` : Prisma.empty}
+        ${drawFilterSql(Prisma.sql`b."drawId"`, draws)}
     )
     SELECT n."agentId", a.code AS "agentCode", a.name AS "agentName",
            n.key, MIN(n.name) AS name,
@@ -83,7 +84,7 @@ export async function listAgentCustomers(actor: Actor, agentId: string, drawId?:
 }
 
 /** ใช้ตอนผู้ใช้กดส่งออกเท่านั้น จึงไม่เพิ่ม payload ให้หน้าแผนผัง */
-export async function listOrganizationCustomers(actor: Actor, drawId?: string) {
+export async function listOrganizationCustomers(actor: Actor, draws?: DrawFilter) {
   requirePermission(actor, "report.viewAllAgents");
-  return queryCustomers(actor, undefined, drawId);
+  return queryCustomers(actor, undefined, draws);
 }

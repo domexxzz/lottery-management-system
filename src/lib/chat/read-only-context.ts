@@ -1,6 +1,7 @@
 import type { Actor } from "@/lib/auth/context";
 import { orgScope } from "@/lib/auth/context";
 import { prisma } from "@/lib/db";
+import { visibleBillNumber } from "@/lib/bills/numbering";
 import { sanitizeLabel } from "./sanitize";
 
 // จำกัดข้อมูลรายละเอียดต่อหมวดเพื่อไม่ให้ prompt ล้น context window
@@ -143,7 +144,7 @@ export async function buildReadOnlyBusinessContext(actor: Actor, rawQuery: strin
           orderBy: { createdAt: "desc" },
           take: DETAIL_LIMIT,
           select: {
-            billNumber: true,
+            drawSequence: true,
             title: true,
             status: true,
             totalStake: true,
@@ -185,7 +186,7 @@ export async function buildReadOnlyBusinessContext(actor: Actor, rawQuery: strin
           where: scope,
           orderBy: { createdAt: "desc" },
           take: DETAIL_LIMIT,
-          select: { type: true, originalName: true, mimeType: true, fileSize: true, status: true, verifiedAt: true, rejectionReason: true, createdAt: true, bill: { select: { billNumber: true, title: true } }, uploadedBy: { select: { displayName: true } }, verifiedBy: { select: { displayName: true } } },
+          select: { type: true, originalName: true, mimeType: true, fileSize: true, status: true, verifiedAt: true, rejectionReason: true, createdAt: true, bill: { select: { drawSequence: true, title: true } }, uploadedBy: { select: { displayName: true } }, verifiedBy: { select: { displayName: true } } },
         })
       : Promise.resolve([]),
     wantsEvidence
@@ -193,7 +194,7 @@ export async function buildReadOnlyBusinessContext(actor: Actor, rawQuery: strin
           where: scope,
           orderBy: { createdAt: "desc" },
           take: DETAIL_LIMIT,
-          select: { amount: true, paidAt: true, paymentMethod: true, bankName: true, verificationStatus: true, verifiedAt: true, rejectionReason: true, createdAt: true, bill: { select: { billNumber: true, title: true } }, verifiedBy: { select: { displayName: true } } },
+          select: { amount: true, paidAt: true, paymentMethod: true, bankName: true, verificationStatus: true, verifiedAt: true, rejectionReason: true, createdAt: true, bill: { select: { drawSequence: true, title: true } }, verifiedBy: { select: { displayName: true } } },
         })
       : Promise.resolve([]),
     wantsAudit
@@ -254,11 +255,11 @@ export async function buildReadOnlyBusinessContext(actor: Actor, rawQuery: strin
     },
     details: {
       users: users.map((row) => ({ login: row.login, displayName: sanitizeLabel(row.displayName), role: row.role, status: row.status, mustChangePassword: row.mustChangePassword, lastLoginAt: iso(row.lastLoginAt), createdAt: row.createdAt.toISOString() })),
-      bills: bills.map((bill) => ({ billNumber: bill.billNumber, customerReference: sanitizeLabel(bill.title), status: bill.status, draw: sanitizeLabel(bill.draw.name), agent: `${bill.agent.code} · ${sanitizeLabel(bill.agent.name)}`, createdBy: sanitizeLabel(bill.createdBy.displayName), totalStake: bill.totalStake.toFixed(2), totalPayout: bill.totalPayout.toFixed(2), confirmedAt: iso(bill.confirmedAt), cancelledAt: iso(bill.cancelledAt), cancelReason: sanitizeLabel(bill.cancelReason), cancelRequestedAt: iso(bill.cancelRequestedAt), cancelRequestReason: sanitizeLabel(bill.cancelRequestReason), createdAt: bill.createdAt.toISOString(), items: bill.items.map((item) => ({ prizeType: sanitizeLabel(item.prizeType.name), number: item.number, stake: item.stake.toFixed(2), payoutRate: item.payoutRateSnapshot.toFixed(4), isWinner: item.isWinner, payout: item.payout.toFixed(2) })) })),
+      bills: bills.map((bill) => ({ billNumber: visibleBillNumber(bill.drawSequence), customerReference: sanitizeLabel(bill.title), status: bill.status, draw: sanitizeLabel(bill.draw.name), agent: `${bill.agent.code} · ${sanitizeLabel(bill.agent.name)}`, createdBy: sanitizeLabel(bill.createdBy.displayName), totalStake: bill.totalStake.toFixed(2), totalPayout: bill.totalPayout.toFixed(2), confirmedAt: iso(bill.confirmedAt), cancelledAt: iso(bill.cancelledAt), cancelReason: sanitizeLabel(bill.cancelReason), cancelRequestedAt: iso(bill.cancelRequestedAt), cancelRequestReason: sanitizeLabel(bill.cancelRequestReason), createdAt: bill.createdAt.toISOString(), items: bill.items.map((item) => ({ prizeType: sanitizeLabel(item.prizeType.name), number: item.number, stake: item.stake.toFixed(2), payoutRate: item.payoutRateSnapshot.toFixed(4), isWinner: item.isWinner, payout: item.payout.toFixed(2) })) })),
       results: results.map((row) => ({ draw: sanitizeLabel(row.draw.name), prizeType: sanitizeLabel(row.prizeType.name), value: row.value, version: row.version, status: row.status, maker: sanitizeLabel(row.maker.displayName), checker: sanitizeLabel(row.checker?.displayName), enteredAt: row.enteredAt.toISOString(), checkedAt: iso(row.checkedAt), rejectReason: sanitizeLabel(row.rejectReason) })),
       settlements: settlements.map((row) => ({ draw: sanitizeLabel(row.draw.name), agent: `${row.agent.code} · ${sanitizeLabel(row.agent.name)}`, gross: row.gross.toFixed(2), payout: row.payout.toFixed(2), commission: row.commission.toFixed(2), net: row.net.toFixed(2), commissionRate: row.commissionRateSnapshot.toFixed(4), status: row.status, calculatedAt: row.calculatedAt.toISOString(), reconciledBy: sanitizeLabel(row.reconciledBy?.displayName), reconciledAt: iso(row.reconciledAt), approvedBy: sanitizeLabel(row.approvedBy?.displayName), approvedAt: iso(row.approvedAt) })),
-      evidence: evidence.map((row) => ({ billNumber: row.bill.billNumber, customerReference: sanitizeLabel(row.bill.title), type: row.type, originalName: sanitizeLabel(row.originalName), mimeType: row.mimeType, fileSize: row.fileSize, status: row.status, uploadedBy: sanitizeLabel(row.uploadedBy.displayName), verifiedBy: sanitizeLabel(row.verifiedBy?.displayName), verifiedAt: iso(row.verifiedAt), rejectionReason: sanitizeLabel(row.rejectionReason), createdAt: row.createdAt.toISOString() })),
-      payments: payments.map((row) => ({ billNumber: row.bill.billNumber, customerReference: sanitizeLabel(row.bill.title), amount: row.amount.toFixed(2), paidAt: row.paidAt.toISOString(), paymentMethod: sanitizeLabel(row.paymentMethod), bankName: sanitizeLabel(row.bankName), status: row.verificationStatus, verifiedBy: sanitizeLabel(row.verifiedBy?.displayName), verifiedAt: iso(row.verifiedAt), rejectionReason: sanitizeLabel(row.rejectionReason), createdAt: row.createdAt.toISOString() })),
+      evidence: evidence.map((row) => ({ billNumber: visibleBillNumber(row.bill.drawSequence), customerReference: sanitizeLabel(row.bill.title), type: row.type, originalName: sanitizeLabel(row.originalName), mimeType: row.mimeType, fileSize: row.fileSize, status: row.status, uploadedBy: sanitizeLabel(row.uploadedBy.displayName), verifiedBy: sanitizeLabel(row.verifiedBy?.displayName), verifiedAt: iso(row.verifiedAt), rejectionReason: sanitizeLabel(row.rejectionReason), createdAt: row.createdAt.toISOString() })),
+      payments: payments.map((row) => ({ billNumber: visibleBillNumber(row.bill.drawSequence), customerReference: sanitizeLabel(row.bill.title), amount: row.amount.toFixed(2), paidAt: row.paidAt.toISOString(), paymentMethod: sanitizeLabel(row.paymentMethod), bankName: sanitizeLabel(row.bankName), status: row.verificationStatus, verifiedBy: sanitizeLabel(row.verifiedBy?.displayName), verifiedAt: iso(row.verifiedAt), rejectionReason: sanitizeLabel(row.rejectionReason), createdAt: row.createdAt.toISOString() })),
       audit: audits.map((row) => ({ action: row.action, entityType: sanitizeLabel(row.entityType), entityId: row.entityId, actor: sanitizeLabel(row.actor?.displayName), actorRole: row.actor?.role ?? null, reason: sanitizeLabel(row.reason), createdAt: row.createdAt.toISOString() })),
     },
   };

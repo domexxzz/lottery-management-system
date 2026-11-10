@@ -50,7 +50,8 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
 
   const result = await login({
     organizationId,
-    loginName: parsed.data.login,
+    // ชื่อผู้ใช้เก็บเป็นตัวพิมพ์เล็กเสมอ พิมพ์ A7 หรือ a7 ก็เข้าได้
+    loginName: parsed.data.login.toLowerCase(),
     password: parsed.data.password,
     ipAddress,
     userAgent: h.get("user-agent") ?? undefined,
@@ -70,5 +71,5 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     sessionCookieOptions(result.expiresAt),
   );
 
-  redirect(result.mustChangePassword ? "/change-password" : "/");
+  redirect(result.mustChangePassword ? "/change-password" : result.role === "AGENT" ? "/bills" : "/");
 }

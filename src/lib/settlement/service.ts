@@ -26,14 +26,23 @@ async function approvedResults(tx: TxClient, drawId: string) {
   const rows = await tx.result.findMany({
     where: { drawId, status: "APPROVED" },
     orderBy: { version: "desc" },
-    select: { prizeTypeId: true, value: true, values: true, version: true },
+    select: {
+      prizeTypeId: true,
+      value: true,
+      values: true,
+      version: true,
+      prizeType: { select: { code: true } },
+    },
   });
 
   const byPrizeType = new Map<string, string[]>();
+  const byPrizeCode = new Map<number, string[]>();
   for (const row of rows) {
-    if (!byPrizeType.has(row.prizeTypeId)) byPrizeType.set(row.prizeTypeId, storedResultValues(row));
+    const values = storedResultValues(row);
+    if (!byPrizeType.has(row.prizeTypeId)) byPrizeType.set(row.prizeTypeId, values);
+    if (!byPrizeCode.has(row.prizeType.code)) byPrizeCode.set(row.prizeType.code, values);
   }
-  return byPrizeType;
+  return { byPrizeType, byPrizeCode };
 }
 
 export type SettlementPreview = {
@@ -59,9 +68,9 @@ export async function previewSettlement(
   tx: TxClient,
   drawId: string,
 ): Promise<SettlementPreview[]> {
-  const resultsByPrizeType = await approvedResults(tx, drawId);
+  const results = await approvedResults(tx, drawId);
   const bills = await loadSettlementBills(tx, drawId);
-  return evaluateSettlement(bills, resultsByPrizeType).previews;
+  return evaluateSettlement(bills, results).previews;
 }
 
 /** บิลที่มีผลผูกพันของรอบ พร้อมรายการเลข โหลดครั้งเดียวแล้วใช้ทั้งคำนวณยอดและเขียนผล */
@@ -79,7 +88,7 @@ function loadSettlementBills(tx: TxClient, drawId: string) {
           number: true,
           stake: true,
           payoutRateSnapshot: true,
-          prizeType: { select: { matchRule: true } },
+          prizeType: { select: { code: true, matchRule: true } },
         },
       },
     },
@@ -93,7 +102,10 @@ type SettlementBill = Awaited<ReturnType<typeof loadSettlementBills>>[number];
  *
  * คืนทั้งยอดสรุปและรายการที่ถูกรางวัลพร้อมยอดจ่าย ให้ calculateSettlement เขียนลงฐานข้อมูลต่อ
  */
-function evaluateSettlement(bills: SettlementBill[], resultsByPrizeType: Map<string, string[]>) {
+function evaluateSettlement(
+  bills: SettlementBill[],
+  results: { byPrizeType: Map<string, string[]>; byPrizeCode: Map<number, string[]> },
+) {
   type Bucket = {
     agentCode: string;
     agentName: string;
@@ -128,7 +140,12 @@ function evaluateSettlement(bills: SettlementBill[], resultsByPrizeType: Map<str
       bucket.stakes.push(item.stake);
       bucket.totalItems += 1;
 
-      const resultValues = resultsByPrizeType.get(item.prizeTypeId);
+      // รหัส 10/11 เป็นข้อมูลเก่าจากยุคที่บันทึก "สลับ" เป็นรางวัลแยก
+      // ปัจจุบันสลับเป็นเพียงตัวช่วยสร้างเลข จึงใช้ผล 3 ตัวบน/2 ตัวบนตามลำดับ
+      const legacySourceCode = item.prizeType.code === 10 ? 1 : item.prizeType.code === 11 ? 5 : null;
+      const resultValues = legacySourceCode === null
+        ? results.byPrizeType.get(item.prizeTypeId)
+        : results.byPrizeCode.get(legacySourceCode);
       if (resultValues === undefined) continue;
 
       const won = isWinningAny({
@@ -213,8 +230,8 @@ export async function calculateSettlement(
       throw new ConflictError("ต้องปิดรับรอบก่อนจึงจะคำนวณได้");
     }
 
-    const resultsByPrizeType = await approvedResults(tx, draw.id);
-    if (resultsByPrizeType.size === 0) {
+    const results = await approvedResults(tx, draw.id);
+    if (results.byPrizeType.size === 0) {
       throw new ConflictError("ยังไม่มีผลรางวัลที่อนุมัติแล้วในรอบนี้");
     }
 
@@ -222,7 +239,7 @@ export async function calculateSettlement(
     // เดิมโหลดบิลสองรอบ และ UPDATE ทีละรายการทีละบิลภายใน transaction
     // ซึ่งเป็นหลักร้อยถึงหลักพันคำสั่งต่องวด และเสี่ยงชน timeout ของ transaction เมื่อข้อมูลโต
     const bills = await loadSettlementBills(tx, draw.id);
-    const { previews, winningItems, billPayouts } = evaluateSettlement(bills, resultsByPrizeType);
+    const { previews, winningItems, billPayouts } = evaluateSettlement(bills, results);
     const billIds = bills.map((bill) => bill.id);
 
     if (billIds.length > 0) {
@@ -430,7 +447,7 @@ export async function listSettlements(actor: Actor, drawId: string) {
       payoutRateSnapshot: true,
       payout: true,
       prizeType: { select: { code: true, name: true } },
-      bill: { select: { id: true, billNumber: true, title: true, agentId: true } },
+      bill: { select: { id: true, drawSequence: true, title: true, agentId: true } },
     },
   });
 

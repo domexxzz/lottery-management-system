@@ -14,7 +14,7 @@ import { PrismaClient } from "@prisma/client";
  * กรณีนั้นต้องรีสตาร์ต dev server สถานเดียว package.json จึงมี predev
  * ที่สั่ง prisma generate ให้ทุกครั้งก่อนเริ่ม เพื่อไม่ให้เกิดซ้ำ
  */
-const PRISMA_SCHEMA_VERSION = 3;
+const PRISMA_SCHEMA_VERSION = 4;
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
   prismaSchemaVersion?: number;

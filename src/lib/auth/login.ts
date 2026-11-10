@@ -3,9 +3,10 @@ import { writeAudit } from "@/lib/audit";
 import { createSession, revokeAllSessionsForUser } from "./session";
 import { hashPassword, validatePasswordStrength, verifyPassword } from "./password";
 import { ValidationError } from "@/lib/errors";
+import type { Role } from "@prisma/client";
 
 export type LoginResult =
-  | { ok: true; token: string; expiresAt: Date; mustChangePassword: boolean }
+  | { ok: true; token: string; expiresAt: Date; mustChangePassword: boolean; role: Role }
   | { ok: false; message: string };
 
 /**
@@ -90,6 +91,7 @@ export async function login(input: {
     token,
     expiresAt,
     mustChangePassword: user.mustChangePassword,
+    role: user.role,
   };
 }
 

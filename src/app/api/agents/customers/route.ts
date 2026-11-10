@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { getActor } from "@/lib/auth/context";
+import { getActor, orgScope, type Actor } from "@/lib/auth/context";
+import { prisma } from "@/lib/db";
 import { listOrganizationCustomers } from "@/lib/agents/customers";
 import { csvFile, csvHeaders } from "@/lib/csv";
 import { AppError } from "@/lib/errors";
+import { drawDay, inRange, parseDay } from "@/lib/draws/range";
 
 export const dynamic = "force-dynamic";
 
@@ -12,13 +14,24 @@ const DATE_TIME = new Intl.DateTimeFormat("th-TH", {
   timeZone: "Asia/Bangkok",
 });
 
+/** id ของงวดที่วันออกรางวัลอยู่ในช่วง — ไม่มีงวดในช่วงต้องได้ [] (ผลว่าง) ไม่ใช่ทุกงวด */
+async function drawIdsInRange(actor: Actor, from: string | undefined, to: string | undefined): Promise<string[]> {
+  const draws = await prisma.draw.findMany({ where: orgScope(actor), select: { id: true, drawDate: true, cutoffAt: true } });
+  return draws.filter((draw) => inRange(drawDay(draw), from, to)).map((draw) => draw.id);
+}
+
 export async function GET(request: Request) {
   const actor = await getActor();
   if (!actor) return NextResponse.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
 
-  const drawId = new URL(request.url).searchParams.get("draw") || undefined;
+  const params = new URL(request.url).searchParams;
+  const from = parseDay(params.get("from"));
+  const to = parseDay(params.get("to"));
+  const drawId = params.get("draw") || undefined;
   try {
-    const customers = await listOrganizationCustomers(actor, drawId);
+    // ช่วงวันที่มาก่อนงวดเดียว ให้ตรงกับที่หน้าภาพรวม Agent แสดง
+    const draws = from || to ? await drawIdsInRange(actor, from, to) : drawId;
+    const customers = await listOrganizationCustomers(actor, draws);
     const csv = csvFile(
       ["รหัส Agent", "ชื่อ Agent", "ชื่อลูกค้า", "จำนวนบิล", "ยอดซื้อรวม", "จ่ายรางวัล", "ทำรายการล่าสุด"],
       customers.map((customer) => [

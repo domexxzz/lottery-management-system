@@ -52,6 +52,14 @@ describe("reducedPayoutRate — เลขอั้นจ่ายครึ่ง
   ])("อัตราปกติ %s เหลือ %s", (normal, reduced) => {
     expect(reducedPayoutRate(d(normal)).toFixed(4)).toBe(reduced);
   });
+
+  test("2 ตัวบนอัตราปกติ 75 เลขอั้นจ่าย 38 ตามกติกาธุรกิจ", () => {
+    expect(reducedPayoutRate(d("75"), 5).toFixed(4)).toBe("38.0000");
+  });
+
+  test("2 ตัวล่างอัตราปกติ 75 เลขอั้นจ่าย 38 เท่ากับ 2 ตัวบน", () => {
+    expect(reducedPayoutRate(d("75"), 6).toFixed(4)).toBe("38.0000");
+  });
 });
 
 describe("commissionOf — คิดจากยอดขายรวม", () => {

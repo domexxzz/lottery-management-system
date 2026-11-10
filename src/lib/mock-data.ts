@@ -3,6 +3,7 @@ import { Prisma, type MatchRule } from "@prisma/client";
 import { databaseSchema, prisma } from "@/lib/db";
 import { ConflictError } from "@/lib/errors";
 import { isWinning } from "@/lib/results/matching";
+import { billSequencePeriod, buildInternalBillNumber } from "@/lib/bills/numbering";
 
 export const MOCK_BILL_COUNT = 2_000;
 const DRAW_COUNT = 24;
@@ -21,7 +22,7 @@ type ToggleActor = {
   ipAddress?: string;
 };
 
-function dbTable(name: "organizations" | "draws" | "bills") {
+function dbTable(name: "organizations" | "draws" | "bills" | "agent_bill_counters") {
   const schema = databaseSchema().replaceAll('"', '""');
   return Prisma.raw(`"${schema}"."${name}"`);
 }
@@ -128,8 +129,26 @@ async function deleteMockRows(tx: Prisma.TransactionClient, organizationId: stri
   await tx.settlement.deleteMany({ where: { organizationId, drawId: { in: drawIds } } });
   await tx.result.deleteMany({ where: { organizationId, drawId: { in: drawIds } } });
   const deletedBills = await tx.bill.deleteMany({ where: { organizationId, drawId: { in: drawIds } } });
+  await rebuildAgentBillCounters(tx, organizationId);
   await tx.draw.deleteMany({ where: { organizationId, id: { in: drawIds } } });
   return deletedBills.count;
+}
+
+/** สร้างตัวนับใหม่จากบิลที่เหลือ ป้องกันข้อมูลจำลองกินเลขหรือทำเลขชนกับบิลจริง */
+async function rebuildAgentBillCounters(tx: Prisma.TransactionClient, organizationId: string): Promise<void> {
+  await tx.$executeRaw(Prisma.sql`
+    DELETE FROM ${dbTable("agent_bill_counters")} WHERE "organizationId" = ${organizationId}
+  `);
+  await tx.$executeRaw(Prisma.sql`
+    INSERT INTO ${dbTable("agent_bill_counters")}
+      ("organizationId", "agentId", "period", "lastSequence", "updatedAt")
+    SELECT "organizationId", "agentId", "sequencePeriod", MAX("drawSequence"), CURRENT_TIMESTAMP
+    FROM ${dbTable("bills")}
+    WHERE "organizationId" = ${organizationId}
+      AND "sequencePeriod" IS NOT NULL
+      AND "drawSequence" IS NOT NULL
+    GROUP BY "organizationId", "agentId", "sequencePeriod"
+  `);
 }
 
 export async function isMockDataEnabled(organizationId: string): Promise<boolean> {
@@ -199,7 +218,7 @@ export async function setMockDataEnabled(actor: ToggleActor, enabled: boolean): 
       tx.agent.findMany({
         where: { organizationId: actor.organizationId, status: "ACTIVE" },
         orderBy: { code: "asc" },
-        select: { id: true, userId: true, commissionRate: true },
+        select: { id: true, code: true, userId: true, commissionRate: true },
       }),
       tx.prizeType.findMany({
         where: { organizationId: actor.organizationId, isActive: true },
@@ -219,14 +238,9 @@ export async function setMockDataEnabled(actor: ToggleActor, enabled: boolean): 
     const makerId = users.find((user) => user.role === "ADMIN")?.id ?? actor.userId;
 
     await deleteMockRows(tx, actor.organizationId);
-    const sequence = await tx.organization.update({
-      where: { id: actor.organizationId },
-      data: { billSequence: { increment: MOCK_BILL_COUNT } },
-      select: { billSequence: true },
-    });
-    const firstSequence = sequence.billSequence - MOCK_BILL_COUNT + 1;
     const drawDates = historicalDrawDates(new Date());
     if (drawDates.length !== DRAW_COUNT) throw new ConflictError("สร้างช่วงข้อมูลงวดย้อนหลังหนึ่งปีไม่สำเร็จ");
+    const billsPerDraw = distributeWeightedTotal(MOCK_BILL_COUNT, DRAW_DEMAND_WEIGHTS);
 
     const draws = drawDates.map((cutoffAt, drawIndex) => ({
       id: randomUUID(),
@@ -270,7 +284,11 @@ export async function setMockDataEnabled(actor: ToggleActor, enabled: boolean): 
     const billRows: Prisma.BillCreateManyInput[] = [];
     const itemRows: Prisma.BillItemCreateManyInput[] = [];
     const settlementTotals = new Map<string, { drawId: string; agentId: string; gross: number; payout: number; commissionRate: number }>();
-    const billsPerDraw = distributeWeightedTotal(MOCK_BILL_COUNT, DRAW_DEMAND_WEIGHTS);
+    const existingCounters = await tx.agentBillCounter.findMany({
+      where: { organizationId: actor.organizationId },
+      select: { agentId: true, period: true, lastSequence: true },
+    });
+    const agentMonthSequences = new Map(existingCounters.map((row) => [`${row.agentId}:${row.period}`, row.lastSequence]));
     let globalBillIndex = 0;
 
     for (const [drawIndex, draw] of draws.entries()) {
@@ -282,6 +300,11 @@ export async function setMockDataEnabled(actor: ToggleActor, enabled: boolean): 
         const billId = randomUUID();
         const createdAt = new Date(draw.opensAt.getTime() + ((localBillIndex * 37 + drawIndex * 11) % 13_500) * 60 * 1_000);
         const itemCount = 1 + ((globalBillIndex * 7 + drawIndex * 3) % 5);
+        const confirmedAt = new Date(createdAt.getTime() + 5 * 60 * 1_000);
+        const sequencePeriod = billSequencePeriod(confirmedAt);
+        const sequenceKey = `${agent.id}:${sequencePeriod}`;
+        const drawSequence = (agentMonthSequences.get(sequenceKey) ?? 0) + 1;
+        agentMonthSequences.set(sequenceKey, drawSequence);
         let totalStake = 0;
         let totalPayout = 0;
 
@@ -316,13 +339,20 @@ export async function setMockDataEnabled(actor: ToggleActor, enabled: boolean): 
           organizationId: actor.organizationId,
           agentId: agent.id,
           drawId: draw.id,
-          billNumber: String(firstSequence + globalBillIndex).padStart(8, "0"),
+          billNumber: buildInternalBillNumber({
+            agentCode: agent.code,
+            lotteryType: "THAI_GOVERNMENT",
+            issuedAt: confirmedAt,
+            drawSequence,
+          }),
+          drawSequence,
+          sequencePeriod,
           title: `ลูกค้าจำลอง ${String(customerIndex).padStart(3, "0")}`,
           status: "SETTLED",
           totalStake: money(totalStake),
           totalPayout: money(totalPayout),
           createdById: agent.userId ?? actor.userId,
-          confirmedAt: new Date(createdAt.getTime() + 5 * 60 * 1_000),
+          confirmedAt,
           createdAt,
         });
 
@@ -343,6 +373,7 @@ export async function setMockDataEnabled(actor: ToggleActor, enabled: boolean): 
 
     for (const batch of chunks(billRows)) await tx.bill.createMany({ data: batch });
     for (const batch of chunks(itemRows)) await tx.billItem.createMany({ data: batch });
+    await rebuildAgentBillCounters(tx, actor.organizationId);
 
     const settlementRows: Prisma.SettlementCreateManyInput[] = [...settlementTotals.values()].map((row) => {
       const commission = row.gross * row.commissionRate / 100;

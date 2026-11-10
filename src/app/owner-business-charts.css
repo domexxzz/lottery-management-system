@@ -9,3 +9,27 @@
 @media(max-width:1180px){.finance-small-grid{grid-template-columns:1fr}.finance-small-card{display:grid;grid-template-columns:minmax(180px,.35fr) minmax(0,1fr);gap:1rem}.finance-small-card>header{margin:0;padding:0 .8rem 0 0;border-right:1px solid #e6edf2;border-bottom:0}.finance-small-rows{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.finance-small-card{display:block}.finance-small-card>header{margin-bottom:.7rem;padding:0 0 .6rem;border-right:0;border-bottom:1px solid #e6edf2}.finance-small-rows{grid-template-columns:1fr}.finance-small-row{grid-template-columns:minmax(110px,.7fr) minmax(100px,1fr) auto}.finance-small-row>strong{grid-column:auto;text-align:right}.finance-small-card>header>span{white-space:normal}}
 @media(max-width:480px){.owner-finance-summary{grid-template-columns:1fr}.finance-small-row{grid-template-columns:1fr}.finance-small-row>i{height:13px}.finance-small-row>strong{text-align:left}.finance-small-card>header{flex-direction:column}.finance-small-card>header>span{text-align:left}}
+
+/* ผลงาน Agent Top 5: ตัวเลขตรง ๆ ไม่ใช้หลอด พร้อมปุ่มเข้าโปรไฟล์ */
+.owner-view-title .owner-all-agents{margin-left:auto;padding:.35rem .7rem;border:1px solid #9fd2d7;border-radius:8px;color:#087c88;background:#fff;font-size:.64rem;font-weight:750;text-decoration:none;white-space:nowrap}
+.owner-view-title .owner-all-agents:hover{background:#eef8f9}
+.owner-view-title:has(.owner-all-agents) span{margin-left:.6rem}
+.owner-view-title:has(.owner-all-agents){align-items:center}
+.owner-agent-top{display:grid;gap:.55rem;margin:0;padding:0;list-style:none}
+.owner-agent-top>li{display:grid;grid-template-columns:30px minmax(140px,1.1fr) minmax(0,2.4fr) auto;align-items:center;gap:.8rem;padding:.7rem .8rem;border:1px solid #e4ebee;border-radius:11px;background:#fbfcfd}
+.owner-agent-rank{display:grid;width:28px;height:28px;place-items:center;border-radius:50%;color:#087c88;background:#e3f5f5;font-size:.72rem;font-weight:850}
+.owner-agent-top>li:first-child .owner-agent-rank{color:#fff;background:#087c88}
+.owner-agent-name{display:grid;min-width:0}
+.owner-agent-name strong{overflow:hidden;color:#17384f;font-size:.76rem;text-overflow:ellipsis;white-space:nowrap}
+.owner-agent-name small{color:#8a979f;font-size:.56rem}
+.owner-agent-top dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;margin:0}
+.owner-agent-top dl>div{display:grid;gap:.1rem;min-width:0;padding-left:.7rem;border-left:1px solid #e5ecef}
+.owner-agent-top dt{color:#6d818d;font-size:.6rem;font-weight:700}
+.owner-agent-top dd{margin:0;color:#17384f;font-size:.86rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.owner-agent-top dd.is-payout{color:#b7771a}
+.owner-agent-top dd.is-commission{color:#276da0}
+.owner-agent-top dd .money-unit{color:#8a979f;font-size:.6rem;font-weight:600}
+.owner-agent-profile{padding:.45rem .8rem;border-radius:8px;color:#fff;background:#087c88;font-size:.64rem;font-weight:750;text-decoration:none;white-space:nowrap}
+.owner-agent-profile:hover{background:#06656f}
+@media(max-width:900px){.owner-agent-top>li{grid-template-columns:30px minmax(0,1fr) auto}.owner-agent-top dl{grid-column:1/-1;grid-row:2}}
+@media(max-width:620px){.owner-view-title:has(.owner-all-agents){align-items:flex-start}.owner-view-title .owner-all-agents{margin-left:0}.owner-view-title:has(.owner-all-agents) span{margin-left:0}.owner-agent-top dl{grid-template-columns:1fr 1fr 1fr;gap:.4rem}.owner-agent-top dl>div{padding-left:.45rem}.owner-agent-top dd{font-size:.74rem}}

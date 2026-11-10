@@ -13,6 +13,7 @@ import {
   requestCancelAfterCutoff,
 } from "@/lib/bills/service";
 import { AppError } from "@/lib/errors";
+import { MAX_STAKE_PER_ITEM } from "@/lib/bills/betting";
 
 export type ActionState = { error: string | null };
 
@@ -147,7 +148,7 @@ const PlaceSchema = z.object({
       z.object({
         prizeTypeId: z.string().min(1),
         number: z.string().regex(/^\d{1,6}$/, "เลขไม่ถูกต้อง"),
-        stake: z.number().int("ยอดเดิมพันต้องเป็นจำนวนเต็ม").positive("ยอดเดิมพันต้องมากกว่า 0").max(10_000_000),
+        stake: z.number().int("ยอดเดิมพันต้องเป็นจำนวนเต็ม").positive("ยอดเดิมพันต้องมากกว่า 0").max(MAX_STAKE_PER_ITEM, "ยอดเดิมพันต่อรายการต้องไม่เกิน 1,000 บาท"),
       }),
     )
     .min(1, "ยังไม่มีรายการแทง")

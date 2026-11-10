@@ -24,6 +24,7 @@ import { listRestrictions } from "@/lib/draws/restrictions";
 import { compactRate } from "@/lib/bills/betting";
 import { prisma } from "@/lib/db";
 import { DRAW_DISPLAY_STATUS_LABEL, getDrawDisplayStatus } from "@/lib/draws/display-status";
+import { visibleBillNumber } from "@/lib/bills/numbering";
 import "./draw-detail.css";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +67,7 @@ function WinList({ items }: { items: WinItem[] }) {
             <b>{MONEY.format(Number(item.payout))}</b>
           </span>
           <Link className="settlement-win-bill" href={`/bills/${item.bill.id}`}>
-            บิล #{item.bill.billNumber}
+            {visibleBillNumber(item.bill.drawSequence)}
             {item.bill.title.trim() && ` · ${item.bill.title.trim()}`}
           </Link>
         </li>
@@ -102,7 +103,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
         prisma.prizeType.findMany({
           where: { ...orgScope(actor), isActive: true },
           orderBy: { code: "asc" },
-          select: { id: true, name: true, digits: true, payoutRate: true },
+          select: { id: true, code: true, name: true, digits: true, payoutRate: true },
         }),
       ])
     : [[], []];
@@ -351,6 +352,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
             editable={draw.status === "OPEN"}
             prizeTypes={restrictionPrizeTypes.map((prizeType) => ({
               id: prizeType.id,
+              code: prizeType.code,
               name: prizeType.name,
               digits: prizeType.digits,
               payoutRate: compactRate(prizeType.payoutRate),

@@ -481,3 +481,113 @@ html[data-theme="dark"] .organization-inspector dl > div { border-color: #385267
   .dashboard-shell .app-page .organization-map-actions a { flex: 0 0 auto; }
   .organization-minimap { width: 120px; }
 }
+
+/* ภาพรวม Agent แบบตาราง — หนึ่งแถวต่อ Agent อ่านจากซ้ายไปขวาได้ทันที */
+.agents-table-page{display:flex;flex-direction:column;gap:.8rem;padding:.9rem 1rem 1.2rem}
+.agent-table-card{display:flex;min-width:0;flex-direction:column;gap:.7rem;padding:.85rem;border:1px solid #dfe8ed;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgb(43 91 129 / 6%)}
+.agent-table-toolbar{display:grid;grid-template-columns:minmax(200px,1.4fr) minmax(170px,1fr) minmax(140px,.7fr) auto auto;align-items:center;gap:.5rem}
+.agent-table-csv{padding:.55rem .8rem;border:1px solid #b9dee0;border-radius:9px;color:#127f8c;background:#f1fafa;font-size:.68rem;font-weight:700;text-decoration:none;white-space:nowrap}
+.agent-table-wrap{margin:0}
+.agent-table{width:100%;min-width:860px;border-collapse:collapse}
+.agent-table th{padding:.55rem .65rem;color:#5c7280;background:#f4f8fa;font-size:.64rem;font-weight:700;text-align:left;white-space:nowrap}
+.agent-table td{padding:.55rem .65rem;border-top:1px solid #edf2f4;color:#1d3a4d;font-size:.72rem;vertical-align:middle}
+.agent-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.agent-table td.num small{color:#8a9ba5;font-size:.6rem}
+.agent-table tbody tr:hover>td{background:#f8fbfc}
+.agent-table tbody tr.is-open>td{background:#f1f8fa}
+.agent-table-agent{display:flex;align-items:center;gap:.45rem}
+.agent-table-toggle{display:grid;width:24px;height:24px;flex:0 0 auto;place-items:center;padding:0!important;border:1px solid #d3e2e8!important;border-radius:6px!important;color:#3f6577!important;background:#fff!important;box-shadow:none!important;font-size:.7rem!important}
+.agent-table-toggle:disabled{opacity:.35;cursor:default}
+.agent-table-name{display:flex;min-width:0;flex-direction:column;line-height:1.25}
+.agent-table-name strong{font-size:.74rem}
+.agent-table-name small{color:#6f8390;font-size:.64rem}
+.agent-table-status{display:inline-block;padding:.12rem .5rem;border-radius:99px;font-size:.6rem;font-weight:700}
+.agent-table-status.success{color:#0f7a54;background:#e5f6ee}
+.agent-table-status.warning{color:#9a6100;background:#fff3dc}
+.agent-table-status.muted{color:#66737b;background:#eef1f3}
+.agent-table .positive{color:#0f7a54}
+.agent-table .negative{color:#c0392b;font-weight:700}
+.agent-table-link{text-align:right;white-space:nowrap}
+.agent-table-link a{color:#168b99;font-size:.66rem;font-weight:700}
+.agent-table-empty{padding:1.4rem!important;color:#7d909b;text-align:center}
+.agent-table-customers>td{padding:0 .65rem .65rem 2.6rem!important;border-top:0!important;background:#f1f8fa}
+.agent-table-customers div{display:flex;flex-direction:column;gap:.35rem;padding:.55rem .7rem;border:1px solid #d6e8ec;border-radius:9px;background:#fff}
+.agent-table-customers span{color:#5c7280;font-size:.62rem;font-weight:700}
+.agent-table-customers ol{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.3rem .9rem;margin:0;padding-left:1.1rem}
+.agent-table-customers li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:baseline;gap:.5rem;font-size:.68rem}
+.agent-table-customers li a{overflow:hidden;color:#1d3a4d;text-overflow:ellipsis;white-space:nowrap}
+.agent-table-customers li small{color:#8a9ba5;font-size:.6rem}
+.agent-table-customers li b{font-variant-numeric:tabular-nums}
+.agent-table-more{align-self:flex-start;color:#168b99;font-size:.64rem;font-weight:700}
+.agent-table tfoot th,.agent-table tfoot td{padding:.6rem .65rem;border-top:2px solid #d6e3e9;color:#15364d;background:#f4f8fa;font-size:.72rem;font-weight:800}
+@media(max-width:900px){.agent-table-toolbar{grid-template-columns:1fr 1fr}.agent-table-search{grid-column:1/-1}.agents-table-page .agents-map-header{flex-direction:column;align-items:stretch}.agents-table-page .agents-map-kpis{flex-wrap:wrap}}
+@media(max-width:560px){.agent-table-toolbar{grid-template-columns:1fr}.agents-table-page{padding:.6rem}}
+
+/* ดูยอดตามช่วงวันที่ออกรางวัล + ปุ่มลัดรายเดือน (ลูกค้าจ่ายตัวแทนเป็นรายเดือน) */
+.agent-table-period{display:grid;grid-template-columns:minmax(300px,auto) auto minmax(0,1fr);align-items:end;gap:.5rem .9rem;padding:.65rem .7rem;border:1px solid #e1ebef;border-radius:11px;background:#f8fbfc}
+.agent-table-dates{display:grid;grid-template-columns:1fr 1fr;gap:.45rem}
+.agent-table-dates .date-range-field{margin:0}
+.agent-table-months{display:flex;min-width:0;flex-direction:column;gap:.25rem}
+.agent-table-months>span{color:#5c7280;font-size:.6rem;font-weight:700}
+.agent-table-range-note{grid-column:1/-1;margin:0;color:#36606f;font-size:.64rem}
+@media(max-width:900px){.agent-table-period{grid-template-columns:1fr}}
+@media(max-width:560px){.agent-table-dates{grid-template-columns:1fr}}
+
+/* ช่องค้นหา: กล่องเดียว ไอคอนอยู่ในช่อง — กันสไตล์ input ส่วนกลางวาดกรอบซ้อน */
+.agent-table-card .agent-table-search{position:relative;display:block;margin:0;padding:0;border:0;background:none}
+.agent-table-card .agent-table-search svg{position:absolute;top:50%;left:.7rem;z-index:1;color:#7d909b;transform:translateY(-50%);pointer-events:none}
+.agent-table-card .agent-table-search input{width:100%!important;min-height:40px!important;height:40px;margin:0!important;padding:0 .75rem 0 2.2rem!important;border:1px solid #cfdde6!important;border-radius:9px!important;background:#fff!important;box-shadow:none!important;font-size:.72rem!important;-webkit-appearance:none;appearance:none}
+.agent-table-card .agent-table-search input:focus{border-color:#138b98!important;outline:2px solid rgb(19 139 152 / 15%)!important;outline-offset:0!important}
+.agent-table-months>div{display:flex;align-items:center;gap:.4rem}
+.agent-table-months .app-dropdown{width:220px;max-width:100%}
+.agent-table-months .agent-table-clear{min-height:38px;padding:.35rem .7rem!important;border:1px dashed #d8b46a!important;border-radius:9px!important;color:#8a5a00!important;background:#fffaf0!important;box-shadow:none!important;font-size:.64rem!important;font-weight:700;white-space:nowrap}
+@media(max-width:560px){.agent-table-months>div{flex-wrap:wrap}.agent-table-months .app-dropdown{width:100%}}
+
+/* แบ่งหน้าตาราง Agent ทีละ 10 คน */
+.agent-table-pager{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem}
+.agent-table-pager>span{color:#5c7280;font-size:.66rem}
+.agent-table-pager>div{display:flex;flex-wrap:wrap;gap:.3rem}
+.agent-table-pager button{min-width:36px;min-height:34px;padding:.3rem .6rem!important;border:1px solid #cfdde6!important;border-radius:8px!important;color:#2f5568!important;background:#fff!important;box-shadow:none!important;font-size:.66rem!important;font-weight:700}
+.agent-table-pager button[aria-current="page"]{border-color:#138b98!important;color:#fff!important;background:#138b98!important}
+.agent-table-pager button:disabled{opacity:.45;cursor:default}
+
+/* สลับมุมมองการ์ด/ตาราง (ค่าเริ่มต้นคือการ์ด) */
+.agent-view-switch{display:inline-flex;padding:3px;border:1px solid #b9dee0;border-radius:10px;background:#f1fafa}
+.agent-view-switch button{min-height:32px;margin:0;padding:0 .8rem;border:0;border-radius:7px;color:#2d5a63;background:transparent;box-shadow:none;font-size:.66rem;font-weight:750;cursor:pointer}
+.agent-view-switch button[aria-pressed="true"]{color:#fff;background:#127f8c}
+.agent-card-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.7rem;margin:0;padding:0;list-style:none}
+.agent-grid-card{display:grid;align-content:start;gap:.6rem;padding:.85rem;border:1px solid #dfeaed;border-top:3px solid #168b99;border-radius:12px;background:#fbfdfd}
+.agent-grid-card.is-suspended{border-top-color:#e0a23a}
+.agent-grid-card.is-closed{border-top-color:#a3adb3}
+.agent-grid-card header{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem}
+.agent-grid-sales{display:grid;gap:.1rem;padding:.55rem .65rem;border-radius:9px;background:#eef7f8}
+.agent-grid-sales span{color:#5d7480;font-size:.6rem;font-weight:700}
+.agent-grid-sales strong{color:#17384f;font-size:1.05rem;font-weight:800;font-variant-numeric:tabular-nums}
+.agent-grid-sales small{color:#8a979f;font-size:.6rem;font-weight:600}
+.agent-grid-card dl{display:grid;grid-template-columns:1fr 1fr;gap:.45rem .7rem;margin:0}
+.agent-grid-card dl>div{display:grid;gap:.05rem;min-width:0}
+.agent-grid-card dt{color:#6d818d;font-size:.58rem;font-weight:700}
+.agent-grid-card dd{margin:0;color:#17384f;font-size:.74rem;font-weight:750;font-variant-numeric:tabular-nums}
+.agent-grid-top-customer{margin:0;padding-top:.45rem;border-top:1px solid #e5ecef;color:#6d818d;font-size:.6rem}
+.agent-grid-top-customer a{color:#168b99;font-weight:700}
+.agent-grid-profile{justify-self:stretch;padding:.5rem;border-radius:8px;color:#fff;background:#127f8c;font-size:.66rem;font-weight:750;text-align:center;text-decoration:none}
+.agent-grid-profile:hover{background:#0e6a75}
+.agent-card-empty{margin:0;padding:2rem;text-align:center}
+.agent-card-totals{display:flex;flex-wrap:wrap;gap:.4rem 1.1rem;padding:.65rem .8rem;border:1px solid #dfeaed;border-radius:10px;background:#f4f8f9;color:#5d7480;font-size:.64rem}
+.agent-card-totals b{color:#17384f;font-variant-numeric:tabular-nums}
+@media(max-width:900px){.agent-view-switch{justify-self:start}}
+@media(max-width:560px){.agent-view-switch{display:grid;grid-template-columns:1fr 1fr}.agent-card-grid{grid-template-columns:1fr}}
+
+/* คีย์ลัด วันนี้ / งวดนี้ / เดือนนี้ */
+.agent-table-shortcuts{display:flex;min-width:0;flex-direction:column;gap:.25rem}
+.agent-table-shortcuts>span{color:#5c7280;font-size:.6rem;font-weight:700}
+.agent-table-shortcuts>div{display:flex;flex-wrap:wrap;gap:.35rem}
+.agent-table-shortcuts button{min-height:38px;margin:0;padding:0 .9rem;border:1px solid #b9dee0;border-radius:9px;color:#127f8c;background:#fff;box-shadow:none;font-size:.66rem;font-weight:750;cursor:pointer}
+.agent-table-shortcuts button:hover:not(:disabled){background:#eef8f9}
+.agent-table-shortcuts button[aria-pressed="true"]{border-color:#127f8c;color:#fff;background:#127f8c}
+.agent-table-shortcuts button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:560px){.agent-table-shortcuts>div{display:grid;grid-template-columns:repeat(3,1fr)}}
+/* การ์ดแถวละ 5 บนจอกว้าง หน้าละ 10 Agent จึงพอดี 2 แถว */
+@media(max-width:1280px){.agent-card-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:860px){.agent-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.agent-card-grid{grid-template-columns:1fr}}

@@ -140,6 +140,8 @@ enum AuditAction {
   /// Owner ถามผู้ช่วย AI — บันทึกว่ามีข้อมูลสรุปออกไปยังผู้ให้บริการภายนอก
   /// เก็บเฉพาะ metadata ไม่เก็บเนื้อคำถามและคำตอบ (D-5 ยังไม่ปิด)
   ASSISTANT_QUERY
+  /// Owner ลบบัญชีผู้ใช้ (ลบจริงหรือซ่อนเมื่อมีประวัติ)
+  DELETE
 }
 
 // ---------------------------------------------------------------- tenancy
@@ -151,8 +153,7 @@ model Organization {
   timezone String  @default("Asia/Bangkok")
   isActive Boolean @default(true)
 
-  /// ตัวนับเลขบิล เพิ่มแบบ atomic ด้วย UPDATE ... RETURNING ตอนยืนยันบิล
-  /// ใช้ตัวนับระดับองค์กรเพื่อให้เลขบิลไม่ซ้ำข้ามรอบ
+  /// ตัวนับเลขบิลเดิม (legacy) — ระบบปัจจุบันใช้ AgentBillCounter ราย Agent/เดือน
   billSequence    Int      @default(0)
   /// สถานะข้อมูลจำลองระดับองค์กร ทุกบัญชีในองค์กรเห็นค่าเดียวกัน
   mockDataEnabled Boolean  @default(false)
@@ -175,6 +176,7 @@ model Organization {
   directMessages         DirectMessage[]
   directMessageFiles     DirectMessageAttachment[]
   restrictedNumbers      RestrictedNumber[]
+  agentBillCounters      AgentBillCounter[]
 
   @@map("organizations")
 }
@@ -208,6 +210,10 @@ model User {
   /// เวลาที่เห็นผู้ใช้คนนี้ครั้งล่าสุด ใช้บอกสถานะออนไลน์ในหน้าสนทนา
   /// อัปเดตเมื่อผู้ใช้เรียกข้อมูลแชท ไม่ใช่ presence แบบ realtime
   lastSeenAt DateTime?
+
+  /// เวลาที่ Owner ลบบัญชี บัญชีที่มีประวัติจะถูกซ่อนแทนการลบจริง
+  /// เพื่อให้บิล รายงาน และ Audit ที่อ้างถึงยังถูกต้อง ชื่อผู้ใช้เดิมจึงไม่ถูกนำกลับมาใช้
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -283,6 +289,7 @@ model Agent {
 
   bills       Bill[]
   settlements Settlement[]
+  billCounters AgentBillCounter[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -351,6 +358,8 @@ model Draw {
   cutoffAt DateTime
 
   status   DrawStatus @default(OPEN)
+  /// ตัวนับเลขบิลเดิมระดับงวด (legacy) — เก็บไว้เพื่อรองรับฐานข้อมูลรุ่นก่อน
+  billSequence Int @default(0)
   /// งวดที่ระบบสร้างสำหรับโหมดข้อมูลจำลอง ลบได้โดยไม่แตะข้อมูลจริง
   isMock   Boolean    @default(false)
   lockedAt DateTime?
@@ -411,10 +420,15 @@ model Bill {
   drawId  String
   draw    Draw   @relation(fields: [drawId], references: [id])
 
-  /// เลขบิลที่ออกตอนยืนยัน — null ขณะยังเป็น Draft
-  billNumber String?
-  /// ชื่อบิลหรือรหัสอ้างอิงลูกค้า
-  title      String
+  /// รหัสภายในที่ออกตอนยืนยัน ไม่แสดงแก่ผู้ใช้
+  /// รูปแบบ: รหัส Agent + ประเภทหวย + DDMMYY + ลำดับ 4 หลัก
+  billNumber   String?
+  /// เลขบิลที่ผู้ใช้เห็น นับแยกตาม Agent และเริ่มใหม่จาก 1 ทุกเดือน (เวลาไทย)
+  drawSequence  Int?
+  /// เดือนของเลขบิล รูปแบบ YYYY-MM ตาม Asia/Bangkok
+  sequencePeriod String?
+  /// ชื่อลูกค้า
+  title        String
 
   status BillStatus @default(DRAFT)
 
@@ -447,6 +461,7 @@ model Bill {
   payment     BillPayment?
 
   @@unique([organizationId, billNumber])
+  @@unique([agentId, sequencePeriod, drawSequence])
   @@index([organizationId, createdAt])
   @@index([organizationId, drawId, status])
   @@index([organizationId, agentId, drawId])
@@ -454,6 +469,25 @@ model Bill {
   @@index([organizationId, status, createdAt])
   @@index([organizationId, agentId, status, createdAt])
   @@map("bills")
+}
+
+/// ตัวนับเลขบิลราย Agent/เดือน ใช้ upsert แบบ atomic ตอนยืนยันบิล
+/// เพื่อให้ Agent แต่ละคนเริ่มที่บิล 1 ทุกเดือนและไม่มีเลขซ้ำเมื่อกดยืนยันพร้อมกัน
+model AgentBillCounter {
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  agentId String
+  agent   Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  /// YYYY-MM ตามเวลา Asia/Bangkok
+  period       String
+  lastSequence Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@id([agentId, period])
+  @@index([organizationId, period])
+  @@map("agent_bill_counters")
 }
 
 model BillItem {
@@ -471,8 +505,8 @@ model BillItem {
   number String
   stake  Decimal @db.Decimal(18, 2)
 
-  /// อัตราจ่าย ณ เวลายืนยันบิล — ใช้ตัวนี้คำนวณเสมอ ห้ามอ่านจาก PrizeType.payoutRate
-  /// นี่คือสิ่งที่ทำให้ "คำนวณซ้ำได้" ตามหลักการในเอกสารบทที่ 1
+  /// อัตราจ่ายที่ใช้คำนวณ — เริ่มจากเรต ณ เวลายืนยัน และอาจถูกปรับย้อนหลัง
+  /// เมื่อประกาศ/ยกเลิกเลขอั้นก่อนคำนวณผล บิลที่ SETTLED แล้วจะไม่ถูกแก้
   payoutRateSnapshot Decimal @db.Decimal(12, 4)
 
   /// เติมหลังอนุมัติผล

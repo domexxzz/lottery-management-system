@@ -47,6 +47,7 @@ export async function resetDatabase(): Promise<void> {
     "bill_payments",
     "settlements",
     "results",
+    "agent_bill_counters",
     "bill_items",
     "bills",
     "draws",

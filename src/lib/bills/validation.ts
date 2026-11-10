@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { MAX_STAKE_PER_ITEM, MIN_STAKE_PER_ITEM } from "./betting";
 import type { MatchRule } from "@prisma/client";
 
 /**
@@ -40,6 +41,7 @@ export type ValidationIssue = {
     | "NUMBER_NOT_NUMERIC"
     | "NUMBER_WRONG_LENGTH"
     | "STAKE_NOT_POSITIVE"
+    | "STAKE_BELOW_MINIMUM"
     | "STAKE_OVER_ITEM_LIMIT"
     | "DUPLICATE_ITEM"
     | "NUMBER_CLOSED"
@@ -156,6 +158,24 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
         itemIndex: index,
         code: "STAKE_NOT_POSITIVE",
         message: `รายการที่ ${index + 1}: ยอดเดิมพันต้องมากกว่า 0`,
+      });
+      continue;
+    }
+
+    if (item.stake.lessThan(MIN_STAKE_PER_ITEM)) {
+      issues.push({
+        itemIndex: index,
+        code: "STAKE_BELOW_MINIMUM",
+        message: `รายการที่ ${index + 1}: ยอดเดิมพันขั้นต่ำ ${MIN_STAKE_PER_ITEM.toLocaleString("th-TH")} บาท`,
+      });
+      continue;
+    }
+
+    if (item.stake.greaterThan(MAX_STAKE_PER_ITEM)) {
+      issues.push({
+        itemIndex: index,
+        code: "STAKE_OVER_ITEM_LIMIT",
+        message: `รายการที่ ${index + 1}: ยอดเดิมพันต่อรายการต้องไม่เกิน ${MAX_STAKE_PER_ITEM.toLocaleString("th-TH")} บาท`,
       });
       continue;
     }

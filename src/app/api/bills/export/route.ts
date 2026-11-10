@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { getActor } from "@/lib/auth/context";
 import { exportBetBills } from "@/lib/bills/service";
 import { parseHistoryFilter } from "@/lib/bills/history-filter";
+import { resolveHistoryScope } from "@/lib/bills/history-scope";
 import { BET_STATUS_LABEL, betStatusOf, drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
 import { csvFile, csvHeaders } from "@/lib/csv";
 import { AppError } from "@/lib/errors";
+import { visibleBillNumber } from "@/lib/bills/numbering";
 
 export const dynamic = "force-dynamic";
 
@@ -17,19 +19,22 @@ export async function GET(request: Request) {
 
   const filter = parseHistoryFilter(Object.fromEntries(new URL(request.url).searchParams));
   try {
+    // ใช้ขอบเขตงวดเดียวกับหน้าเว็บ ไฟล์จึงตรงกับที่เห็นบนจอ
+    const scope = await resolveHistoryScope(actor, filter);
     const bills = await exportBetBills(actor, {
       tab: filter.tab,
       lotteryType: filter.lotteryType,
       query: filter.query,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      drawId: filter.drawId || undefined,
+      drawId: scope.drawId || undefined,
+      drawWhere: scope.drawWhere,
       agentId: filter.agentId || undefined,
     });
     const csv = csvFile(
       ["เลขบิล", "ลูกค้า", "Agent", "ประเภทหวย", "งวด", "วันที่ทำรายการ", "จำนวนเลข", "ยอดเดิมพัน", "เงินรางวัล", "สถานะ"],
       bills.map((bill) => [
-        bill.billNumber ?? "",
+        visibleBillNumber(bill.drawSequence),
         bill.title,
         `${bill.agent.code} ${bill.agent.name}`,
         lotteryLabel(bill.draw.lotteryType),

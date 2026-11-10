@@ -179,7 +179,7 @@ const customerDetail = define({
       {
         draw_name: string;
         cutoff_at: Date;
-        bill_number: string | null;
+        draw_sequence: number | null;
         stake: unknown;
         payout: unknown;
         items: unknown;
@@ -187,7 +187,7 @@ const customerDetail = define({
     >`
       SELECT d."name" AS draw_name,
              d."cutoffAt" AS cutoff_at,
-             b."billNumber" AS bill_number,
+             b."drawSequence" AS draw_sequence,
              b."totalStake" AS stake,
              b."totalPayout" AS payout,
              (SELECT COUNT(*) FROM ${table("bill_items")} bi WHERE bi."billId" = b."id") AS items
@@ -204,7 +204,7 @@ const customerDetail = define({
       rows: rows.map((row) => ({
         drawName: sanitizeLabel(row.draw_name),
         cutoffAt: row.cutoff_at.toISOString(),
-        billNumber: row.bill_number,
+        billNumber: row.draw_sequence === null ? "บิลร่าง" : `บิล ${row.draw_sequence}`,
         items: num(row.items),
         spend: money(row.stake),
         winnings: money(row.payout),

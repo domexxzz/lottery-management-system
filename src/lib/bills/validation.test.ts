@@ -98,16 +98,28 @@ describe("ยอดเดิมพัน", () => {
     expect(codes(issues)).toContain("STAKE_NOT_POSITIVE");
   });
 
-  test("ปฏิเสธยอดเกินวงเงินต่อรายการของประเภทรางวัล", () => {
+  test("ปฏิเสธยอดเดิมพันต่ำกว่า 5 บาท", () => {
+    const issues = run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("4.99") }] });
+    expect(codes(issues)).toContain("STAKE_BELOW_MINIMUM");
+  });
+
+  test("ยอมรับยอดเดิมพันขั้นต่ำ 5 บาท", () => {
+    expect(run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("5") }] })).toEqual([]);
+  });
+
+  test("ปฏิเสธยอดเกิน 1,000 บาทต่อรายการ", () => {
     const issues = run({
-      items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("5000.01") }],
+      items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("1000.01") }],
     });
     expect(codes(issues)).toContain("STAKE_OVER_ITEM_LIMIT");
   });
 
-  test("ยอมรับยอดที่เท่ากับวงเงินพอดี", () => {
+  test("ยอมรับยอดต่อรายการ 1,000 บาท และยอดรวมทั้งบิลเกิน 1,000 บาทได้", () => {
     expect(
-      run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("5000") }] }),
+      run({ items: [
+        { prizeTypeId: THREE_TOP.id, number: "123", stake: d("1000") },
+        { prizeTypeId: THREE_TOP.id, number: "456", stake: d("1000") },
+      ] }),
     ).toEqual([]);
   });
 });
@@ -205,10 +217,10 @@ describe("วงเงิน Agent", () => {
     ).toEqual([]);
   });
 
-  test("ไม่จำกัดวงเงินเมื่อค่าเป็น null", () => {
+  test("ไม่จำกัดวงเงิน Agent เมื่อค่าเป็น null แต่ยังอยู่ภายใต้เพดานต่อรายการ", () => {
     expect(
       run({
-        items: [{ prizeTypeId: THREE_TOD.id, number: "123", stake: d("999999") }],
+        items: [{ prizeTypeId: THREE_TOD.id, number: "123", stake: d("1000") }],
         creditLimit: null,
         perNumberLimit: null,
       }),

@@ -47,8 +47,12 @@ export function itemPayout(stake: Prisma.Decimal, payoutRateSnapshot: Prisma.Dec
   return toMoney(stake.times(payoutRateSnapshot));
 }
 
-/** อัตราจ่ายเลขอั้นเท่ากับครึ่งหนึ่งของอัตราปกติ เก็บได้สูงสุด 4 ตำแหน่งตาม schema */
-export function reducedPayoutRate(payoutRate: Prisma.Decimal): Prisma.Decimal {
+/**
+ * อัตราจ่ายเลขอั้น โดยค่าเริ่มต้นเท่ากับครึ่งหนึ่งของอัตราปกติ
+ * รหัส 5 และ 6 (2 ตัวบน/ล่าง) เป็นกติกาธุรกิจเฉพาะ: อัตราปกติ 75 อั้นแล้วจ่าย 38
+ */
+export function reducedPayoutRate(payoutRate: Prisma.Decimal, prizeTypeCode?: number): Prisma.Decimal {
+  if (prizeTypeCode === 5 || prizeTypeCode === 6) return new Prisma.Decimal(38);
   return payoutRate.dividedBy(2).toDecimalPlaces(4, ROUNDING);
 }
 

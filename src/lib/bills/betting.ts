@@ -29,6 +29,12 @@ export type BetGroup = {
   prizeTypes: BetPrizeType[];
 };
 
+/** ยอดเดิมพันสูงสุดของเลขหนึ่งรายการ ส่วนยอดรวมทั้งบิลไม่จำกัดด้วยค่านี้ */
+export const MAX_STAKE_PER_ITEM = 1_000;
+
+/** ยอดเดิมพันขั้นต่ำของเลขหนึ่งรายการ ทั้งจากปุ่มลัดและการกรอกเอง */
+export const MIN_STAKE_PER_ITEM = 5;
+
 /** รหัสธุรกิจของประเภทที่ต้องแตกเลขสลับทุกชุดเป็นคนละรายการ */
 const SWAP_PRIZE_CODES = new Set([10, 11]);
 
@@ -101,7 +107,7 @@ export function addEntries(
 
     const key = entryKey(addition.prizeTypeId, addition.number, rule.matchRule);
     const existing = next.find((entry) => entryKey(entry.prizeTypeId, entry.number, rule.matchRule) === key);
-    if (existing) existing.stake += addition.stake;
+    if (existing) existing.stake = Math.min(existing.stake + addition.stake, MAX_STAKE_PER_ITEM);
     else next.push({ ...addition });
   }
   return next;
@@ -144,9 +150,12 @@ export function buildEntries(input: {
 
 /** จัดกลุ่มแท็บ: 2 ตัว, 3 ตัว, เลขวิ่ง, 4 ตัว และกลุ่มหลักอื่นที่มีใน Rulebook */
 export function groupPrizeTypes(prizeTypes: readonly BetPrizeType[]): BetGroup[] {
-  const running = prizeTypes.filter((prizeType) => prizeType.matchRule === "CONTAINS_DIGIT");
+  // รหัส 10/11 เคยถูกเก็บเป็นประเภทรางวัล "สลับ" แต่ในหน้าขายจริง
+  // สลับเป็นเพียงปุ่มช่วยแตกเลขให้ประเภทที่เลือก (เช่น บน/ล่าง) ไม่ใช่รางวัลอีกประเภทหนึ่ง
+  const selectablePrizeTypes = prizeTypes.filter((prizeType) => !SWAP_PRIZE_CODES.has(prizeType.code));
+  const running = selectablePrizeTypes.filter((prizeType) => prizeType.matchRule === "CONTAINS_DIGIT");
   const byDigits = new Map<number, BetPrizeType[]>();
-  for (const prizeType of prizeTypes) {
+  for (const prizeType of selectablePrizeTypes) {
     if (prizeType.matchRule === "CONTAINS_DIGIT") continue;
     byDigits.set(prizeType.digits, [...(byDigits.get(prizeType.digits) ?? []), prizeType]);
   }

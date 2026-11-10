@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- private signed previews require the authenticated redirect route */
 
 import { useMemo, useRef, useState } from "react";
+import { visibleBillNumber } from "@/lib/bills/numbering";
 import { useRouter } from "next/navigation";
 import type { AttachmentStatus, AttachmentType, BillStatus } from "@prisma/client";
 import { AppDropdown } from "../../AppDropdown";
@@ -30,7 +31,7 @@ type DuplicateOccurrence = {
   originalName: string;
   createdAt: string;
   uploadedBy: { displayName: string };
-  bill: { id: string; billNumber: string | null; title: string; agent: { code: string; name: string } };
+  bill: { id: string; drawSequence: number | null; title: string; agent: { code: string; name: string } };
 };
 
 type Payment = {
@@ -259,7 +260,7 @@ export function EvidenceManager({
       {hasCorrectedPending && <button type="button" className="resubmit-button" onClick={resubmit}>ส่งหลักฐานที่แก้ไขแล้วเข้าตรวจใหม่</button>}
 
       {selectedPreview && <div className="evidence-modal" role="dialog" aria-modal="true" aria-label="ตัวอย่างหลักฐาน" onClick={() => setSelectedPreview(null)}><div onClick={(event) => event.stopPropagation()}><header><strong>{TYPE_LABEL[selectedPreview.type]}</strong><button type="button" onClick={() => setSelectedPreview(null)} aria-label="ปิด">ปิด</button></header><img src={`/api/attachments/${selectedPreview.id}/file`} alt={selectedPreview.originalName} /><footer><span>{selectedPreview.originalName}</span><a href={`/api/attachments/${selectedPreview.id}/file?download=1`}>ดาวน์โหลดต้นฉบับที่จัดเก็บ</a></footer></div></div>}
-      {duplicateHistory && <div className="duplicate-history-modal" role="dialog" aria-modal="true" onClick={() => setDuplicateHistory(null)}><section onClick={(event) => event.stopPropagation()}><header><div><p className="page-eyebrow">Duplicate Evidence History</p><h2>ประวัติรูปที่เหมือนกัน</h2><small>พบทั้งหมด {duplicateHistory.rows.length} ครั้ง</small></div><button type="button" onClick={() => setDuplicateHistory(null)}>ปิด</button></header><div className="duplicate-history-list">{duplicateHistory.rows.map((row) => <article key={row.id} className={row.id === duplicateHistory.attachmentId ? "is-current" : undefined}><img src={`/api/attachments/${row.id}/file`} alt={row.originalName} /><div><strong>{row.bill.billNumber ?? "บิลร่าง"} · {row.bill.title}</strong><span>{TYPE_LABEL[row.type]} · Agent {row.bill.agent.code} {row.bill.agent.name}</span><small>แนบโดย {row.uploadedBy.displayName} · {new Date(row.createdAt).toLocaleString("th-TH")}</small>{row.id === duplicateHistory.attachmentId && <b>รูปปัจจุบัน</b>}</div><a href={`/bills/${row.bill.id}#customer-evidence-heading`}>ดูบิล</a></article>)}</div></section></div>}
+      {duplicateHistory && <div className="duplicate-history-modal" role="dialog" aria-modal="true" onClick={() => setDuplicateHistory(null)}><section onClick={(event) => event.stopPropagation()}><header><div><p className="page-eyebrow">Duplicate Evidence History</p><h2>ประวัติรูปที่เหมือนกัน</h2><small>พบทั้งหมด {duplicateHistory.rows.length} ครั้ง</small></div><button type="button" onClick={() => setDuplicateHistory(null)}>ปิด</button></header><div className="duplicate-history-list">{duplicateHistory.rows.map((row) => <article key={row.id} className={row.id === duplicateHistory.attachmentId ? "is-current" : undefined}><img src={`/api/attachments/${row.id}/file`} alt={row.originalName} /><div><strong>{visibleBillNumber(row.bill.drawSequence)} · {row.bill.title}</strong><span>{TYPE_LABEL[row.type]} · Agent {row.bill.agent.code} {row.bill.agent.name}</span><small>แนบโดย {row.uploadedBy.displayName} · {new Date(row.createdAt).toLocaleString("th-TH")}</small>{row.id === duplicateHistory.attachmentId && <b>รูปปัจจุบัน</b>}</div><a href={`/bills/${row.bill.id}#customer-evidence-heading`}>ดูบิล</a></article>)}</div></section></div>}
     </section>
   );
 }

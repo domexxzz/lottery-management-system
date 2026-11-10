@@ -15,11 +15,12 @@ import {
 const top3: BetPrizeType = { id: "p1", code: 1, name: "3 ตัวบน", digits: 3, matchRule: "EXACT", payoutRate: "900" };
 const tod3: BetPrizeType = { id: "p2", code: 2, name: "3 ตัวโต๊ด", digits: 3, matchRule: "PERMUTATION", payoutRate: "150" };
 const top2: BetPrizeType = { id: "p5", code: 5, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", payoutRate: "90" };
+const bottom2: BetPrizeType = { id: "p6", code: 6, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", payoutRate: "75" };
 const swap3: BetPrizeType = { id: "p10", code: 10, name: "3 ตัวสลับ", digits: 3, matchRule: "EXACT", payoutRate: "100" };
 const swap2: BetPrizeType = { id: "p11", code: 11, name: "2 ตัวสลับ", digits: 2, matchRule: "EXACT", payoutRate: "75" };
 const runTop: BetPrizeType = { id: "p8", code: 8, name: "วิ่งบน", digits: 1, matchRule: "CONTAINS_DIGIT", payoutRate: "3.2" };
 const top4: BetPrizeType = { id: "p12", code: 12, name: "4 ตัวบน", digits: 4, matchRule: "EXACT", payoutRate: "6000" };
-const rules = new Map([top3, tod3, top2, swap3, swap2, runTop, top4].map((rule) => [rule.id, rule]));
+const rules = new Map([top3, tod3, top2, bottom2, swap3, swap2, runTop, top4].map((rule) => [rule.id, rule]));
 
 describe("permutations", () => {
   test("เลข 3 หลักไม่ซ้ำได้ 6 แบบ ตามลำดับในโพยตัวอย่าง", () => {
@@ -46,6 +47,15 @@ describe("buildEntries", () => {
     const entries = buildEntries({ numberValue: "483", stake: 50, selected: [top3, tod3], reverse: true });
     expect(entries.filter((entry) => entry.prizeTypeId === "p1")).toHaveLength(6);
     expect(entries.filter((entry) => entry.prizeTypeId === "p2")).toHaveLength(1);
+  });
+
+  test("ปุ่มสลับแตกเลขให้ทุกประเภทที่เลือก โดยยังเก็บเป็นประเภทบนและล่าง", () => {
+    expect(buildEntries({ numberValue: "25", stake: 10, selected: [top2, bottom2], reverse: true })).toEqual([
+      { prizeTypeId: "p5", number: "25", stake: 10 },
+      { prizeTypeId: "p5", number: "52", stake: 10 },
+      { prizeTypeId: "p6", number: "25", stake: 10 },
+      { prizeTypeId: "p6", number: "52", stake: 10 },
+    ]);
   });
 
   test("ข้ามตัวเลือกที่จำนวนหลักไม่ตรงกับเลขที่กด", () => {
@@ -93,6 +103,15 @@ describe("addEntries", () => {
     expect(second).toEqual([{ prizeTypeId: "p1", number: "483", stake: 70 }]);
   });
 
+  test("เพิ่มเลขเดิมซ้ำได้ไม่เกิน 1,000 บาทต่อรายการ", () => {
+    const result = addEntries(
+      [{ prizeTypeId: "p1", number: "483", stake: 900 }],
+      [{ prizeTypeId: "p1", number: "483", stake: 500 }],
+      rules,
+    );
+    expect(result).toEqual([{ prizeTypeId: "p1", number: "483", stake: 1000 }]);
+  });
+
   test("รางวัลโต๊ดถือว่าเลขสลับหลักเป็นเลขเดียวกัน", () => {
     const merged = addEntries(
       [{ prizeTypeId: "p2", number: "483", stake: 10 }],
@@ -120,10 +139,11 @@ describe("addEntries", () => {
 
 describe("groupPrizeTypes", () => {
   test("เรียงแท็บเป็น 2 ตัว, 3 ตัว, เลขวิ่ง, 4 ตัว", () => {
-    const groups = groupPrizeTypes([top4, runTop, tod3, top3, top2]);
+    const groups = groupPrizeTypes([top4, runTop, swap3, swap2, tod3, top3, top2]);
     expect(groups.map((group) => group.label)).toEqual(["2 ตัว", "3 ตัว", "เลขวิ่ง", "4 ตัว"]);
     expect(groups[1]?.prizeTypes.map((prizeType) => prizeType.id)).toEqual(["p1", "p2"]);
     expect(groups[2]?.digits).toBe(1);
+    expect(groups.flatMap((group) => group.prizeTypes).some((prizeType) => prizeType.code === 10 || prizeType.code === 11)).toBe(false);
   });
 });
 

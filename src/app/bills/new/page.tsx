@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { BetSlip, type SlipRepresentative, type SlipRestriction } from "./BetSlip";
 import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
+import { billSequencePeriod } from "@/lib/bills/numbering";
 import "./new-bill.css";
 import "./bet-slip.css";
 
@@ -33,6 +34,7 @@ export default async function NewBillPage() {
   if (actor.mustChangePassword) redirect("/change-password");
   if (!can(actor.role, "bill.create")) redirect("/bills");
 
+  const sequencePeriod = billSequencePeriod(new Date());
   const drawSelect = { id: true, name: true, drawDate: true, lotteryType: true, cutoffAt: true, status: true } as const;
   const [openDraws, prizeTypes, representatives, ownAgent] = await Promise.all([
     prisma.draw.findMany({
@@ -56,10 +58,27 @@ export default async function NewBillPage() {
             OR: [{ agent: null }, { agent: { status: "ACTIVE" } }],
           },
           orderBy: [{ role: "asc" }, { displayName: "asc" }],
-          select: { id: true, displayName: true, role: true, agent: { select: { code: true, commissionRate: true } } },
+          select: {
+            id: true,
+            displayName: true,
+            role: true,
+            agent: {
+              select: {
+                code: true,
+                commissionRate: true,
+                billCounters: { where: { period: sequencePeriod }, select: { lastSequence: true }, take: 1 },
+              },
+            },
+          },
         }),
     actor.agentId
-      ? prisma.agent.findUnique({ where: { id: actor.agentId }, select: { commissionRate: true } })
+      ? prisma.agent.findUnique({
+          where: { id: actor.agentId },
+          select: {
+            commissionRate: true,
+            billCounters: { where: { period: sequencePeriod }, select: { lastSequence: true }, take: 1 },
+          },
+        })
       : Promise.resolve(null),
   ]);
 
@@ -88,6 +107,7 @@ export default async function NewBillPage() {
     roleLabel: ROLE_LABEL[user.role],
     agentCode: user.agent?.code ?? null,
     commissionRate: user.agent ? user.agent.commissionRate.toFixed(4) : null,
+    nextBillSequence: (user.agent?.billCounters[0]?.lastSequence ?? 0) + 1,
   })) ?? null;
 
   return (
@@ -111,6 +131,7 @@ export default async function NewBillPage() {
           restrictions={restrictions}
           representatives={slipRepresentatives}
           ownCommissionRate={ownAgent ? ownAgent.commissionRate.toFixed(4) : null}
+          ownNextBillSequence={(ownAgent?.billCounters[0]?.lastSequence ?? 0) + 1}
         />
       )}
     </main>

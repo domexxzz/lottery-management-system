@@ -40,10 +40,10 @@ describe("EXACT — เลขตรงกันทุกหลัก", () => {
 });
 
 describe("PERMUTATION — โต๊ด", () => {
-  test("สลับตำแหน่งถือว่าถูก", () => {
-    expect(win("321", "123", "PERMUTATION")).toBe(true);
-    expect(win("213", "123", "PERMUTATION")).toBe(true);
-    expect(win("132", "123", "PERMUTATION")).toBe(true);
+  test("เลข 3 ตัวโต๊ดถูกครบทุกลำดับของเลขชุดเดียวกัน", () => {
+    for (const number of ["123", "132", "213", "231", "312", "321"]) {
+      expect(win(number, "123", "PERMUTATION")).toBe(true);
+    }
   });
 
   test("ตรงกันพอดีก็ถูก", () => {

@@ -1,3 +1,5 @@
+import { MIN_STAKE_PER_ITEM } from "./betting";
+
 /**
  * ตรวจระดับช่องกรอก ใช้ได้ทั้งฝั่ง client และ server
  *
@@ -24,6 +26,7 @@ export function checkStakeField(value: string): string | null {
 
   if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return "ต้องเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง";
   if (Number(trimmed) <= 0) return "ต้องมากกว่า 0";
+  if (Number(trimmed) < MIN_STAKE_PER_ITEM) return `ขั้นต่ำ ${MIN_STAKE_PER_ITEM} บาท`;
   return null;
 }
 

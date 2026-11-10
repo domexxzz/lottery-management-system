@@ -14,13 +14,16 @@ export type RestrictionRow = {
   normalRate: string;
 };
 
-export type RestrictionPrizeOption = { id: string; name: string; digits: number; payoutRate: string };
+export type RestrictionPrizeOption = { id: string; code: number; name: string; digits: number; payoutRate: string };
 
-function halfRate(rate: string | undefined): string {
-  if (!rate) return "-";
-  const value = Number(rate) / 2;
-  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)));
-}
+type RestrictionScope =
+  | "THREE_TOP"
+  | "THREE_TOD"
+  | "THREE_BOTH"
+  | "TWO_TOP"
+  | "TWO_BOTTOM"
+  | "TWO_BOTH"
+  | `TYPE:${string}`;
 
 function RemoveButton({ id }: { id: string }) {
   const [state, action, pending] = useActionState(removeRestrictionAction, INITIAL);
@@ -33,7 +36,7 @@ function RemoveButton({ id }: { id: string }) {
   );
 }
 
-/** ตั้งเลขเต็ม (ปิดรับ) และเลขอั้น (จ่ายลด) ของงวดที่ยังเปิดรับ */
+/** ตั้งเลขอั้น (จ่ายลด) ของงวดที่ยังเปิดรับ */
 export function RestrictionManager({
   drawId,
   editable,
@@ -46,52 +49,85 @@ export function RestrictionManager({
   rows: RestrictionRow[];
 }) {
   const [state, action, pending] = useActionState(addRestrictionAction, INITIAL);
-  const [kind, setKind] = useState<"CLOSED" | "REDUCED_RATE">("CLOSED");
-  const [prizeTypeId, setPrizeTypeId] = useState(prizeTypes[0]?.id ?? "");
-  const selected = prizeTypes.find((prizeType) => prizeType.id === prizeTypeId);
+  const threeTop = prizeTypes.find((prizeType) => prizeType.code === 1);
+  const threeTod = prizeTypes.find((prizeType) => prizeType.code === 2);
+  const twoTop = prizeTypes.find((prizeType) => prizeType.code === 5);
+  const twoBottom = prizeTypes.find((prizeType) => prizeType.code === 6);
+  const scopedCodes = new Set([1, 2, 5, 6]);
+  const otherPrizeTypes = prizeTypes.filter((prizeType) => !scopedCodes.has(prizeType.code));
+  const [scope, setScope] = useState<RestrictionScope>(
+    threeTop ? "THREE_TOP" : twoTop ? "TWO_TOP" : `TYPE:${prizeTypes[0]?.id ?? ""}`,
+  );
+  const selected = scope.startsWith("TYPE:")
+    ? prizeTypes.find((prizeType) => prizeType.id === scope.slice(5))
+    : scope === "THREE_TOD"
+      ? threeTod
+      : scope === "TWO_TOP"
+        ? twoTop
+        : scope === "TWO_BOTTOM"
+          ? twoBottom
+          : scope === "TWO_BOTH"
+            ? twoTop
+            : threeTop;
+  const scopeOptions: { value: RestrictionScope; label: string }[] = [
+    ...(threeTop && threeTod ? [
+      { value: "THREE_TOP" as const, label: "เฉพาะ 3 ตัวบน" },
+      { value: "THREE_TOD" as const, label: "เฉพาะ 3 ตัวโต๊ด" },
+      { value: "THREE_BOTH" as const, label: "ทั้ง 3 ตัวบนและโต๊ด" },
+    ] : []),
+    ...(twoTop && twoBottom ? [
+      { value: "TWO_TOP" as const, label: "เฉพาะ 2 ตัวบน" },
+      { value: "TWO_BOTTOM" as const, label: "เฉพาะ 2 ตัวล่าง" },
+      { value: "TWO_BOTH" as const, label: "ทั้ง 2 ตัวบนและล่าง" },
+    ] : []),
+    ...otherPrizeTypes.map((prizeType) => ({ value: `TYPE:${prizeType.id}` as const, label: prizeType.name })),
+  ];
 
   return (
-    <section className="restriction-manager" aria-labelledby="restriction-heading">
-      <h2 id="restriction-heading">เลขเต็ม / เลขอั้น</h2>
-      <p className="muted">เลขเต็มจะปิดรับทันที ส่วนเลขอั้นยังรับได้และจ่ายครึ่งหนึ่งของอัตราปกติ มีผลเฉพาะโพยที่ยืนยันหลังจากนี้</p>
-
+    <section className="restriction-manager" aria-label="กำหนดเลขอั้น">
       {editable ? (
         <form action={action} className="restriction-form">
           <input type="hidden" name="drawId" value={drawId} />
+          <input type="hidden" name="restrictionScope" value={scope} />
+          <input type="hidden" name="kind" value="REDUCED_RATE" />
           <label>
-            ประเภท
-            <select name="kind" value={kind} onChange={(event) => setKind(event.target.value === "REDUCED_RATE" ? "REDUCED_RATE" : "CLOSED")}>
-              <option value="CLOSED">เลขเต็ม (ปิดรับ)</option>
-              <option value="REDUCED_RATE">เลขอั้น (จ่ายลด)</option>
-            </select>
-          </label>
-          <label>
-            รางวัล
-            <select name="prizeTypeId" value={prizeTypeId} onChange={(event) => setPrizeTypeId(event.target.value)}>
-              {prizeTypes.map((prizeType) => <option key={prizeType.id} value={prizeType.id}>{prizeType.name}</option>)}
+            ขอบเขต
+            <select value={scope} onChange={(event) => setScope(event.target.value as RestrictionScope)}>
+              {scopeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
           <label>
             เลข
             <input name="number" inputMode="numeric" pattern="\d*" maxLength={selected?.digits ?? 6} placeholder={"0".repeat(selected?.digits ?? 3)} required />
           </label>
-          {kind === "REDUCED_RATE" && (
-            <div className="restriction-auto-rate" role="status">
-              <span>อัตราเลขอั้น</span>
-              <strong>{halfRate(selected?.payoutRate)}</strong>
-              <small>ครึ่งหนึ่งจากอัตราปกติ {selected?.payoutRate ?? "-"}</small>
-            </div>
-          )}
           <button type="submit" disabled={pending}>{pending ? "กำลังบันทึก…" : "บันทึก"}</button>
           {state.error && <p className="error" role="alert">{state.error}</p>}
           {state.message && <p className="success" role="status">{state.message}</p>}
         </form>
       ) : (
-        <p className="muted">งวดนี้ปิดรับแล้ว แก้ไขเลขเต็ม/เลขอั้นไม่ได้</p>
+        <p className="muted">งวดนี้ปิดรับแล้ว แก้ไขเลขอั้นไม่ได้</p>
       )}
 
+      {(threeTop && threeTod) || (twoTop && twoBottom) ? (
+        <details className="restriction-examples">
+          <summary>ดูตัวอย่างขอบเขตเลขอั้น</summary>
+          {threeTop && threeTod && <><strong>ตัวอย่างเลข 123</strong>
+          <ul>
+            <li><b>เฉพาะ 3 ตัวบน</b><span>อั้นเฉพาะเลขตรง 123 · โต๊ดไม่ถูกอั้น</span></li>
+            <li><b>เฉพาะ 3 ตัวโต๊ด</b><span>อั้นทั้ง 123, 132, 213, 231, 312, 321 · ตัวบนไม่ถูกอั้น</span></li>
+            <li><b>ทั้งบนและโต๊ด</b><span>อั้นเลขตรง 123 และเลขโต๊ดครบทุกลำดับพร้อมกัน</span></li>
+          </ul></>}
+          {twoTop && twoBottom && <><strong>ตัวอย่างเลข 25</strong>
+          <ul>
+            <li><b>เฉพาะ 2 ตัวบน</b><span>อั้นเฉพาะ 2 ตัวบนเลข 25 · ตัวล่างไม่ถูกอั้น</span></li>
+            <li><b>เฉพาะ 2 ตัวล่าง</b><span>อั้นเฉพาะ 2 ตัวล่างเลข 25 · ตัวบนไม่ถูกอั้น</span></li>
+            <li><b>ทั้งบนและล่าง</b><span>อั้นเลข 25 ทั้ง 2 ตัวบนและ 2 ตัวล่างพร้อมกัน</span></li>
+          </ul></>}
+        </details>
+      ) : null}
+
       {rows.length === 0 ? (
-        <p className="muted">ยังไม่มีเลขเต็มหรือเลขอั้น</p>
+        <p className="muted">ยังไม่มีเลขอั้น</p>
       ) : (
         <div className="table-wrap">
           <table>
@@ -107,7 +143,7 @@ export function RestrictionManager({
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id}>
-                  <td><span className={`status-pill ${row.kind === "CLOSED" ? "danger" : "warning"}`}>{row.kind === "CLOSED" ? "เลขเต็ม" : "เลขอั้น"}</span></td>
+                  <td><span className={`status-pill ${row.kind === "CLOSED" ? "danger" : "warning"}`}>{row.kind === "CLOSED" ? "ปิดรับ (รายการเดิม)" : "เลขอั้น"}</span></td>
                   <td>{row.prizeTypeName}</td>
                   <td><strong>{row.number}</strong></td>
                   <td className="num">{row.kind === "CLOSED" ? "ปิดรับ" : `${row.payoutRate} (ปกติ ${row.normalRate})`}</td>

@@ -32,9 +32,9 @@ export function SaveAllResultsForm({ drawId, formId, editableCount }: { drawId: 
   return (
     <form id={formId} action={formAction} className="bulk-result-save-bar">
       <input type="hidden" name="drawId" value={drawId} />
-      <div><strong>กรอกผลให้ครบแล้วบันทึกพร้อมกัน</strong><small>ระบบจะตรวจทุกแถวก่อน หากมีแถวผิดจะยังไม่บันทึกรายการใด</small></div>
+      <div><strong>กรอกผลให้ครบแล้วบันทึกพร้อมกัน</strong><small>ระบบจะตรวจทุกแถวก่อน หากมีแถวผิดจะยังไม่บันทึกรายการใด · เมื่อผลครบทุกรางวัลจะคำนวณการเงินให้ทันที</small></div>
       <button type="submit" disabled={pending || editableCount === 0}>
-        {pending ? "กำลังบันทึก..." : `✓ บันทึกผลทั้งหมด (${editableCount})`}
+        {pending ? "กำลังบันทึกและคำนวณ..." : `✓ บันทึกผลทั้งหมดและคำนวณ (${editableCount})`}
       </button>
       <Feedback state={state} />
     </form>
@@ -74,7 +74,7 @@ export function EnterResultForm({
         required
       />
       <button type="submit" disabled={pending} className="result-save-button">
-        {pending ? "กำลังบันทึก..." : "✓ บันทึกและยืนยันผล"}
+        {pending ? "กำลังบันทึก..." : "✓ บันทึกผลและคำนวณ"}
       </button>
       <Feedback state={state} />
     </form>
@@ -179,10 +179,11 @@ export function CalculateForm({ drawId }: { drawId: string }) {
     <form action={formAction}>
       <input type="hidden" name="drawId" value={drawId} />
       <button type="submit" disabled={pending}>
-        {pending ? "กำลังคำนวณ..." : "คำนวณ Settlement"}
+        {pending ? "กำลังคำนวณ..." : "คำนวณใหม่"}
       </button>
       <p className="muted">
-        คำนวณซ้ำได้ ผลลัพธ์เท่าเดิมเสมอ เพราะอ่านอัตราจ่ายที่ล็อกไว้ตอนยืนยันบิล
+        ระบบคำนวณให้อัตโนมัติเมื่อบันทึกผลครบ ใช้ปุ่มนี้เมื่อต้องการคำนวณซ้ำ ผลลัพธ์เท่าเดิมเสมอ
+        เพราะอ่านอัตราจ่ายที่ล็อกไว้ตอนยืนยันบิล
       </p>
       <Feedback state={state} />
     </form>

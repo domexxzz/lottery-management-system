@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireActor } from "@/lib/auth/context";
+import { requireActor, type Actor } from "@/lib/auth/context";
+import { can } from "@/lib/auth/permissions";
 import {
   approveResult,
   enterResult,
   enterResultsBatch,
+  listResults,
   proposeResultCorrection,
   rejectResult,
 } from "@/lib/results/service";
@@ -15,13 +17,59 @@ import {
   reconcileSettlement,
 } from "@/lib/settlement/service";
 import { AppError } from "@/lib/errors";
-import { addRestriction, removeRestriction } from "@/lib/draws/restrictions";
+import {
+  addRestriction,
+  addScopedRestriction,
+  removeRestriction,
+  type RestrictionScope,
+} from "@/lib/draws/restrictions";
 
 export type ActionState = { error: string | null; message: string | null };
 
 function fail(error: unknown): ActionState {
   if (error instanceof AppError) return { error: error.message, message: null };
   throw error;
+}
+
+type AutoSettle =
+  | { kind: "calculated"; agents: number }
+  | { kind: "incomplete" }
+  | { kind: "skipped" }
+  | { kind: "failed"; error: string };
+
+/**
+ * คำนวณการเงินต่อทันทีหลังบันทึกผล ผู้ใช้กดครั้งเดียวจบ ไม่ต้องกดปุ่มคำนวณแยก
+ *
+ * คำนวณเฉพาะเมื่อทุกประเภทรางวัลของงวดมีผลที่ยืนยันแล้ว
+ * ถ้าคำนวณตอนผลยังไม่ครบ บิลที่แทงรางวัลที่ยังไม่ลงผลจะถูกตัดสินเป็น "ไม่ถูกรางวัล" ก่อนเวลา
+ */
+async function settleWhenResultsComplete(actor: Actor, drawId: string): Promise<AutoSettle> {
+  if (!can(actor.role, "settlement.calculate")) return { kind: "skipped" };
+  const { prizeTypes, approvedByPrizeType } = await listResults(actor, drawId);
+  if (prizeTypes.length === 0 || prizeTypes.some((pt) => !approvedByPrizeType.has(pt.id))) {
+    return { kind: "incomplete" };
+  }
+  try {
+    const previews = await calculateSettlement(actor, drawId);
+    return { kind: "calculated", agents: previews.length };
+  } catch (error) {
+    if (error instanceof AppError) return { kind: "failed", error: error.message };
+    throw error;
+  }
+}
+
+/** ข้อความหลังบันทึกผล รวมผลการคำนวณการเงินอัตโนมัติ */
+function savedState(saved: string, settle: AutoSettle): ActionState {
+  switch (settle.kind) {
+    case "calculated":
+      return { error: null, message: `${saved} และคำนวณการเงินแล้ว (${settle.agents} Agent)` };
+    case "failed":
+      return { error: `${saved} แต่คำนวณการเงินไม่สำเร็จ: ${settle.error}`, message: null };
+    case "incomplete":
+      return { error: null, message: `${saved} · ระบบจะคำนวณการเงินให้เมื่อผลครบทุกรางวัล` };
+    case "skipped":
+      return { error: null, message: saved };
+  }
 }
 
 export async function enterResultAction(
@@ -43,11 +91,13 @@ export async function enterResultAction(
     return fail(error);
   }
 
+  if (!autoApproved) {
+    revalidatePath(`/draws/${drawId}`);
+    return { error: null, message: "บันทึกผลแล้ว" };
+  }
+  const settle = await settleWhenResultsComplete(actor, drawId);
   revalidatePath(`/draws/${drawId}`);
-  return {
-    error: null,
-    message: autoApproved ? "บันทึกและยืนยันผลแล้ว" : "บันทึกผลแล้ว",
-  };
+  return savedState("บันทึกและยืนยันผลแล้ว", settle);
 }
 
 export async function enterResultsBatchAction(
@@ -67,15 +117,22 @@ export async function enterResultsBatchAction(
   const results = [...grouped].map(([prizeTypeId, values]) => ({ prizeTypeId, values }));
 
   let count = 0;
+  let autoApproved = false;
   try {
     const outcome = await enterResultsBatch(actor, { drawId, results });
     count = outcome.count;
+    autoApproved = outcome.autoApproved;
   } catch (error) {
     return fail(error);
   }
 
+  if (!autoApproved) {
+    revalidatePath(`/draws/${drawId}`);
+    return { error: null, message: `บันทึกผลแล้ว ${count} รายการ รอผู้ตรวจยืนยัน` };
+  }
+  const settle = await settleWhenResultsComplete(actor, drawId);
   revalidatePath(`/draws/${drawId}`);
-  return { error: null, message: `บันทึกและยืนยันผลแล้ว ${count} รายการ` };
+  return savedState(`บันทึกและยืนยันผลแล้ว ${count} รายการ`, settle);
 }
 
 export async function approveResultAction(
@@ -91,8 +148,10 @@ export async function approveResultAction(
     return fail(error);
   }
 
+  // อนุมัติผลรายการสุดท้าย (หรืออนุมัติการแก้ผล) แล้วคำนวณการเงินต่อทันที
+  const settle = await settleWhenResultsComplete(actor, drawId);
   revalidatePath(`/draws/${drawId}`);
-  return { error: null, message: "อนุมัติผลแล้ว" };
+  return savedState("อนุมัติผลแล้ว", settle);
 }
 
 export async function rejectResultAction(
@@ -193,17 +252,22 @@ export async function addRestrictionAction(_prev: ActionState, formData: FormDat
   const actor = await requireActor();
   const drawId = String(formData.get("drawId") ?? "");
   const kind = formData.get("kind") === "REDUCED_RATE" ? "REDUCED_RATE" : "CLOSED";
+  const scope = String(formData.get("restrictionScope") ?? "");
   try {
-    await addRestriction(actor, {
-      drawId,
-      prizeTypeId: String(formData.get("prizeTypeId") ?? ""),
-      number: String(formData.get("number") ?? ""),
-      kind,
-    });
+    const number = String(formData.get("number") ?? "");
+    if (scope.startsWith("TYPE:")) {
+      await addRestriction(actor, { drawId, prizeTypeId: scope.slice(5), number, kind });
+    } else {
+      const allowedScopes: RestrictionScope[] = ["THREE_TOP", "THREE_TOD", "THREE_BOTH", "TWO_TOP", "TWO_BOTTOM", "TWO_BOTH"];
+      if (!allowedScopes.includes(scope as RestrictionScope)) return { error: "กรุณาเลือกขอบเขตเลขอั้น", message: null };
+      await addScopedRestriction(actor, { drawId, scope: scope as RestrictionScope, number, kind });
+    }
   } catch (error) {
     return fail(error);
   }
   revalidatePath(`/draws/${drawId}`);
+  revalidatePath("/prize-types");
+  revalidatePath("/bills");
   revalidatePath("/bills/new");
   return { error: null, message: kind === "CLOSED" ? "บันทึกเลขเต็มแล้ว" : "บันทึกเลขอั้นแล้ว" };
 }
@@ -213,6 +277,8 @@ export async function removeRestrictionAction(_prev: ActionState, formData: Form
   try {
     const { drawId } = await removeRestriction(actor, String(formData.get("restrictionId") ?? ""));
     revalidatePath(`/draws/${drawId}`);
+    revalidatePath("/prize-types");
+    revalidatePath("/bills");
     revalidatePath("/bills/new");
   } catch (error) {
     return fail(error);

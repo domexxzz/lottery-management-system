@@ -5,7 +5,6 @@ import { getActor, orgScope } from "@/lib/auth/context";
 import { prisma } from "@/lib/db";
 import { byAgent, byDraw, byPrizeType, drawSummary } from "@/lib/reports/service";
 import { DrawPicker } from "./DrawPicker";
-import { AgentReports } from "./AgentReports";
 import { ReportFinancialCharts } from "./ReportFinancialCharts";
 import { ReportsAnalyticsDashboard } from "./ReportsAnalyticsDashboard";
 import "./reports.css";
@@ -44,12 +43,10 @@ export default async function ReportsPage({
   const actor = await getActor();
   if (!actor) redirect("/login");
   if (actor.mustChangePassword) redirect("/change-password");
+  if (actor.role === "AGENT") redirect("/bills");
 
   const query = await searchParams;
   const { draw: drawParam } = query;
-  if (actor.role === "AGENT") {
-    return <AgentReports actor={actor} filters={{ drawId: query.draw, dateFrom: query.dateFrom, dateTo: query.dateTo, settlement: query.settlement, view: query.view }} />;
-  }
 
   const draws = await prisma.draw.findMany({
     where: orgScope(actor),
@@ -144,7 +141,6 @@ export default async function ReportsPage({
 
         <ReportsAnalyticsDashboard
           selectedDrawId={selectedDrawId}
-          exportHref={`/api/reports/${selectedId}/agents`}
           summary={{ gross: summary.gross.toNumber(), billCount: summary.billCount, itemCount: summary.itemCount }}
           draws={trendRows.map((draw) => ({ id: draw.drawId, code: reportDate.format(draw.cutoffAt), date: reportInputDate.format(draw.cutoffAt), name: draw.drawName, href: `/draws/${draw.drawId}`, gross: draw.gross.toNumber(), payout: draw.payout.toNumber(), commission: draw.commission.toNumber(), net: draw.net.toNumber(), bills: draw.billCount, items: draw.itemCount, winners: draw.winnerCount }))}
           agents={agents.map((agent) => ({ id: agent.agentId, code: agent.agentCode, name: agent.agentName, href: `/agents/${agent.agentId}`, gross: agent.gross.toNumber(), payout: agent.payout.toNumber(), commission: agent.commission.toNumber(), net: agent.net.toNumber(), bills: agent.billCount, items: agent.itemCount, winners: agent.winnerCount }))}

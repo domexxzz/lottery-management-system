@@ -24,11 +24,35 @@ describe("หน้าแทงเลข: placeBill", () => {
     const bill = await prisma.bill.findUniqueOrThrow({ where: { id: placed.billId }, include: { items: true } });
     expect(bill.status).toBe("CONFIRMED");
     expect(bill.billNumber).toBe(placed.billNumber);
+    expect(bill.drawSequence).toBe(1);
+    expect(placed.drawSequence).toBe(1);
     expect(bill.totalStake.toFixed(2)).toBe("100.00");
     expect(bill.items.every((item) => item.payoutRateSnapshot.equals(f.prizeTypes.threeTop.payoutRate))).toBe(true);
 
     const audits = await prisma.auditEvent.findMany({ where: { entityId: bill.id }, select: { action: true } });
     expect(audits.map((audit) => audit.action).sort()).toEqual(["CONFIRM", "CREATE"]);
+  });
+
+  test("เลขบิลนับต่อราย Agent ในเดือนเดียวกันแม้เปลี่ยนงวด และ Agent อื่นเริ่มที่ 1", async () => {
+    const item = [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }];
+    const first = await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ลูกค้า 1", items: item });
+    const second = await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ลูกค้า 2", items: item });
+    const otherDraw = await prisma.draw.create({
+      data: {
+        organizationId: f.org.id,
+        name: "งวดใหม่",
+        opensAt: new Date(Date.now() - 60_000),
+        cutoffAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const continued = await placeBill(f.actors.AGENT1, { drawId: otherDraw.id, title: "ลูกค้า 3", items: item });
+    const otherAgent = await placeBill(f.actors.AGENT2, { drawId: otherDraw.id, title: "ลูกค้า 4", items: item });
+
+    expect([first.drawSequence, second.drawSequence, continued.drawSequence, otherAgent.drawSequence]).toEqual([1, 2, 3, 1]);
+    expect(first.billNumber).toMatch(/^A00101\d{6}0001$/);
+    expect(second.billNumber).toMatch(/^A00101\d{6}0002$/);
+    expect(continued.billNumber).toMatch(/^A00101\d{6}0003$/);
+    expect(otherAgent.billNumber).toMatch(/^A00201\d{6}0001$/);
   });
 
   test("ข้อใดไม่ผ่าน rollback ทั้งหมด ไม่มีบิลร่างค้าง", async () => {
@@ -81,6 +105,42 @@ describe("เลขเต็มและเลขอั้น", () => {
       title: "ลูกค้า",
       items: [{ prizeTypeId: f.prizeTypes.threeTod.id, number: "213", stake: "10" }],
     })).rejects.toThrow(/เลขเต็ม/);
+  });
+
+  test("กำหนดเลขอั้นภายหลังแล้วปรับอัตราของบิลเดิมที่ยังไม่ตรวจผล", async () => {
+    const placed = await placeBill(f.actors.AGENT1, {
+      drawId: f.draw.id,
+      title: "บิลก่อนประกาศเลขอั้น",
+      items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }],
+    });
+
+    await addRestriction(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTop.id,
+      number: "123",
+      kind: "REDUCED_RATE",
+    });
+
+    const item = await prisma.billItem.findFirstOrThrow({ where: { billId: placed.billId } });
+    expect(item.payoutRateSnapshot.equals(f.prizeTypes.threeTop.payoutRate.dividedBy(2))).toBe(true);
+  });
+
+  test("เลขอั้นโต๊ดที่ประกาศภายหลังปรับบิลเดิมทุกลำดับของเลขชุดเดียวกัน", async () => {
+    const placed = await placeBill(f.actors.AGENT1, {
+      drawId: f.draw.id,
+      title: "โต๊ดก่อนประกาศ",
+      items: [{ prizeTypeId: f.prizeTypes.threeTod.id, number: "213", stake: "10" }],
+    });
+
+    await addRestriction(f.actors.ADMIN, {
+      drawId: f.draw.id,
+      prizeTypeId: f.prizeTypes.threeTod.id,
+      number: "123",
+      kind: "REDUCED_RATE",
+    });
+
+    const item = await prisma.billItem.findFirstOrThrow({ where: { billId: placed.billId } });
+    expect(item.payoutRateSnapshot.equals(f.prizeTypes.threeTod.payoutRate.dividedBy(2))).toBe(true);
   });
 
   test("Agent ตั้งเลขเต็มหรือเลขอั้นไม่ได้", async () => {

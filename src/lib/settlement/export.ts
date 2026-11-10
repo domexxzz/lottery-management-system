@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { NotFoundError } from "@/lib/errors";
+import { visibleBillNumber } from "@/lib/bills/numbering";
 
 /**
  * ไฟล์สำหรับกระทบยอดด้วยมือ (LOT-22)
@@ -51,9 +52,9 @@ export async function reconciliationCsv(actor: Actor, drawId: string): Promise<s
   const [bills, results] = await Promise.all([
     prisma.bill.findMany({
       where: { drawId: draw.id, status: { in: ["LOCKED", "SETTLED"] } },
-      orderBy: [{ agent: { code: "asc" } }, { billNumber: "asc" }],
+      orderBy: [{ agent: { code: "asc" } }, { drawSequence: "asc" }],
       select: {
-        billNumber: true,
+        drawSequence: true,
         title: true,
         agent: { select: { code: true, name: true } },
         items: {
@@ -88,7 +89,7 @@ export async function reconciliationCsv(actor: Actor, drawId: string): Promise<s
     for (const item of bill.items) {
       rows.push(
         [
-          bill.billNumber ?? "",
+          visibleBillNumber(bill.drawSequence),
           bill.title,
           bill.agent.code,
           bill.agent.name,

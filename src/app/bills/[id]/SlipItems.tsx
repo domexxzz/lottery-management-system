@@ -11,7 +11,8 @@ export type SlipItemRow = {
   rate: string | null;
   status: "DRAFT" | "PENDING" | "WON" | "LOST" | "CANCELLED";
   statusLabel: string;
-  profit: number | null;
+  /** ผลได้เสีย = ยอดจ่ายรางวัลเต็ม (เดิมพัน × อัตราจ่าย) ไม่หักอะไร; null = รอผล */
+  prize: number | null;
 };
 
 const PAGE = 50;
@@ -20,17 +21,12 @@ function baht(value: number): string {
   return value.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function signed(value: number): string {
-  const text = baht(Math.abs(value));
-  return value > 0 ? `+${text}` : value < 0 ? `-${text}` : text;
-}
-
 /**
  * รายการเลขในบิล สลับตาราง/การ์ดและค้นหาเลขได้ทันทีโดยไม่โหลดหน้าใหม่
  * แสดงครั้งละ 50 รายการ บิลใหญ่จึงไม่ทำให้หน้าหน่วง
  */
-export function SlipItems({ rows, totalStake, net }: { rows: SlipItemRow[]; totalStake: number; net: number | null }) {
-  const [view, setView] = useState<"table" | "card">("table");
+export function SlipItems({ rows, totalStake, prizeTotal }: { rows: SlipItemRow[]; totalStake: number; prizeTotal: number | null }) {
+  const [view, setView] = useState<"table" | "card">("card");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(PAGE);
 
@@ -83,7 +79,7 @@ export function SlipItems({ rows, totalStake, net }: { rows: SlipItemRow[]; tota
                   <td className="num">{baht(row.stake)}</td>
                   <td className="num">{row.rate === null ? "—" : `${row.rate} เท่า`}</td>
                   <td><span className={`slip-status slip-status-${row.status.toLowerCase()}`}>{row.statusLabel}</span></td>
-                  <td className={`num ${row.profit !== null && row.profit > 0 ? "is-plus" : row.profit !== null && row.profit < 0 ? "is-minus" : ""}`}>{row.profit === null ? "รอผล" : signed(row.profit)}</td>
+                  <td className={`num ${row.prize !== null && row.prize > 0 ? "is-plus" : ""}`}>{row.prize === null ? "รอผล" : baht(row.prize)}</td>
                 </tr>
               ))}
             </tbody>
@@ -93,7 +89,7 @@ export function SlipItems({ rows, totalStake, net }: { rows: SlipItemRow[]; tota
                   <th scope="row" colSpan={3}>รวม {rows.length} รายการ</th>
                   <td className="num"><strong>{baht(totalStake)}</strong></td>
                   <td colSpan={2} />
-                  <td className={`num ${net !== null && net > 0 ? "is-plus" : net !== null && net < 0 ? "is-minus" : ""}`}><strong>{net === null ? "รอผล" : signed(net)}</strong></td>
+                  <td className={`num ${prizeTotal !== null && prizeTotal > 0 ? "is-plus" : ""}`}><strong>{prizeTotal === null ? "รอผล" : baht(prizeTotal)}</strong></td>
                 </tr>
               </tfoot>
             )}
@@ -103,13 +99,24 @@ export function SlipItems({ rows, totalStake, net }: { rows: SlipItemRow[]; tota
         <ol className="slip-items">
           {visible.map((row) => (
             <li key={row.id} className={`slip-item is-${row.status.toLowerCase()}`}>
-              <div className="slip-item-number"><strong>{row.number}</strong><span>{row.prizeTypeName}</span></div>
-              <dl>
-                <div><dt>เดิมพัน</dt><dd>{baht(row.stake)}</dd></div>
-                <div><dt>อัตราจ่าย</dt><dd>{row.rate === null ? "—" : `${row.rate} เท่า`}</dd></div>
-                <div><dt>ผลได้เสีย</dt><dd className={row.profit !== null && row.profit > 0 ? "is-plus" : row.profit !== null && row.profit < 0 ? "is-minus" : ""}>{row.profit === null ? "รอผล" : signed(row.profit)}</dd></div>
-              </dl>
-              <span className={`slip-status slip-status-${row.status.toLowerCase()}`}>{row.statusLabel}</span>
+              <header className="slip-item-head">
+                <strong>ลำดับ {row.order}</strong>
+                <span className={`slip-status slip-status-${row.status.toLowerCase()}`}>{row.statusLabel}</span>
+              </header>
+              <div className="slip-item-body">
+                <div className="slip-item-number">
+                  <strong>{row.number}</strong>
+                  <span>{row.prizeTypeName}</span>
+                </div>
+                <dl>
+                  <div><dt>อัตราจ่าย</dt><dd>{row.rate === null ? "—" : `${row.rate} เท่า`}</dd></div>
+                  <div><dt>ผลรางวัล</dt><dd>{row.prize === null ? "รอผล" : row.statusLabel}</dd></div>
+                </dl>
+              </div>
+              <footer className="slip-item-foot">
+                <span>ราคาแทง <strong>{baht(row.stake)} บาท</strong></span>
+                <span>ผลได้เสีย <strong className={row.prize !== null && row.prize > 0 ? "is-plus" : ""}>{row.prize === null ? "รอผล" : `${baht(row.prize)} บาท`}</strong></span>
+              </footer>
             </li>
           ))}
         </ol>

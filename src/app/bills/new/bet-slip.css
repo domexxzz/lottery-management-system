@@ -71,6 +71,8 @@
 .bs-field select, .bs-list .customer-combobox > input { width: 100%; min-height: 44px; border: 1px solid #c8dbef; border-radius: 10px; color: var(--bs-text); background: #fff; font-size: .95rem; }
 .bs-list .customer-name-field { margin: 0; font-size: .88rem; font-weight: 600; }
 .bs-list .customer-field-hint { font-size: .75rem; }
+.bs-sequence-field output { display: flex; align-items: center; min-height: 44px; padding: 0 .85rem; border: 1px solid #c8dbef; border-radius: 10px; color: var(--bs-blue); background: var(--bs-soft); font-size: 1rem; font-weight: 800; }
+.bs-sequence-field small { color: var(--bs-muted); font-size: .74rem; font-weight: 500; }
 .bs-entries { display: grid; flex: 1; align-content: start; gap: .5rem; max-height: min(52vh, 460px); margin: 0; padding: .5rem 1.1rem 1rem; overflow-y: auto; list-style: none; scrollbar-width: thin; }
 .bs-empty { display: grid; justify-items: center; gap: .2rem; padding: 2rem .5rem; border: 1px dashed #bcd3ec; border-radius: 12px; color: var(--bs-muted); text-align: center; }
 .bs-empty strong { color: var(--bs-text); }
@@ -83,7 +85,8 @@
 .bs-badge-d4, .bs-badge-d5, .bs-badge-d6 { color: #6a3fb8; background: #efe8ff; }
 .bs-entry-main { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; }
 .bs-entry-number { color: var(--bs-text); font-size: 1.2rem; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
-.bs-entry-reduced { color: var(--bs-amber); font-size: .72rem; font-style: normal; }
+.bs-entry-reduced { color: #d5263f; font-size: .72rem; font-style: normal; font-weight: 750; }
+.bs-entry.is-restricted .bs-entry-number { color: #d5263f; }
 .bs-entry-stake { color: var(--bs-blue); font-size: .95rem; font-weight: 700; white-space: nowrap; }
 .bs-entry-stake small { color: var(--bs-muted); font-weight: 500; }
 .bs-entry-input { width: 96px; min-height: 34px; padding: 0 .5rem; border: 1px solid var(--bs-blue); border-radius: 8px; text-align: right; font-size: .95rem; }

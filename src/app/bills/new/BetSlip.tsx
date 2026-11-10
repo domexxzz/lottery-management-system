@@ -7,6 +7,8 @@ import {
   compactRate,
   entryKey,
   groupPrizeTypes,
+  MAX_STAKE_PER_ITEM,
+  MIN_STAKE_PER_ITEM,
   type BetEntry,
   type BetPrizeType,
 } from "@/lib/bills/betting";
@@ -16,7 +18,7 @@ import { ThaiFlag } from "../ThaiFlag";
 
 const INITIAL: ActionState = { error: null };
 const CHIPS = [5, 10, 20, 50, 100, 500, 1000] as const;
-const MAX_STAKE = 10_000_000;
+const MAX_STAKE = MAX_STAKE_PER_ITEM;
 
 export type SlipDraw = {
   id: string;
@@ -42,6 +44,8 @@ export type SlipRepresentative = {
   agentCode: string | null;
   /** อัตราคอมมิชชันเป็นเปอร์เซ็นต์ null = ยังไม่มี Agent (ระบบจะสร้างให้และคอมเป็น 0) */
   commissionRate: string | null;
+  /** ตัวอย่างเลขถัดไปของ Agent ในเดือนปัจจุบัน เลขจริงถูกจองตอนยืนยัน */
+  nextBillSequence: number;
 };
 
 type Notice = { tone: "info" | "error"; text: string } | null;
@@ -100,6 +104,7 @@ export function BetSlip({
   prizeTypes,
   restrictions,
   representatives,
+  ownNextBillSequence,
 }: {
   draws: SlipDraw[];
   prizeTypes: BetPrizeType[];
@@ -107,6 +112,7 @@ export function BetSlip({
   /** null สำหรับ Agent ซึ่งสร้างบิลให้ตัวเองเท่านั้น */
   representatives: SlipRepresentative[] | null;
   ownCommissionRate: string | null;
+  ownNextBillSequence: number;
 }) {
   const [placeState, placeAction, placing] = useActionState(placeBillAction, INITIAL);
   const pending = placing;
@@ -121,13 +127,18 @@ export function BetSlip({
 
   const [representativeId, setRepresentativeId] = useState("");
   const representative = representatives?.find((item) => item.id === representativeId);
+  const previewBillSequence = representatives === null
+    ? ownNextBillSequence
+    : representative?.nextBillSequence ?? null;
 
   const [groupKey, setGroupKey] = useState(groups.find((item) => item.digits === 3)?.key ?? groups[0]?.key ?? "");
   const group = groups.find((item) => item.key === groupKey) ?? groups[0];
   const [selectedByGroup, setSelectedByGroup] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(groups.map((item) => [item.key, item.prizeTypes[0] ? [item.prizeTypes[0].id] : []])),
   );
+  const [reverseByGroup, setReverseByGroup] = useState<Record<string, boolean>>({});
   const selectedIds = group ? selectedByGroup[group.key] ?? [] : [];
+  const reverse = group ? reverseByGroup[group.key] ?? false : false;
 
   const [amount, setAmount] = useState(10);
   const [digits, setDigits] = useState("");
@@ -180,11 +191,11 @@ export function BetSlip({
       setNotice({ tone: "error", text: "เลือกประเภทอย่างน้อย 1 รายการก่อนกดเลข" });
       return;
     }
-    if (amount <= 0) {
-      setNotice({ tone: "error", text: "ระบุจำนวนเงินก่อนกดเลข" });
+    if (amount < MIN_STAKE_PER_ITEM) {
+      setNotice({ tone: "error", text: `จำนวนเงินเดิมพันขั้นต่ำ ${MIN_STAKE_PER_ITEM} บาท` });
       return;
     }
-    const built = buildEntries({ numberValue, stake: amount, selected, reverse: false });
+    const built = buildEntries({ numberValue, stake: amount, selected, reverse });
     const blocked = built.filter((entry) => restrictionOf(entry)?.kind === "CLOSED");
     const accepted = built.filter((entry) => restrictionOf(entry)?.kind !== "CLOSED");
     setEntries((current) => addEntries(current, accepted, rules));
@@ -200,7 +211,7 @@ export function BetSlip({
           : `เพิ่มเลข ${numberValue} แล้ว ${accepted.length} รายการ`,
       });
     }
-  }, [group, selectedIds, amount, restrictionOf, rules]);
+  }, [group, selectedIds, amount, reverse, restrictionOf, rules]);
 
   // เก็บค่าล่าสุดใน ref ด้วย เพราะการกดเลขครบหลักต้องเพิ่มรายการทันทีครั้งเดียว
   // ห้ามทำ side effect ใน state updater ซึ่ง React อาจเรียกซ้ำใน Strict Mode
@@ -258,7 +269,11 @@ export function BetSlip({
 
   function finishEdit(index: number) {
     setEditing(null);
-    setEntries((current) => current.filter((entry, i) => i !== index || entry.stake > 0));
+    setEntries((current) => current
+      .map((entry, i) => i === index && entry.stake > 0 && entry.stake < MIN_STAKE_PER_ITEM
+        ? { ...entry, stake: MIN_STAKE_PER_ITEM }
+        : entry)
+      .filter((entry, i) => i !== index || entry.stake > 0));
   }
 
   const needsRepresentative = representatives !== null && !representativeId;
@@ -266,7 +281,7 @@ export function BetSlip({
     { ok: !needsRepresentative, label: "เลือกผู้รับบิล", hidden: representatives === null },
     { ok: title.trim().length > 0, label: "ระบุลูกค้า" },
     { ok: entries.length > 0, label: "เพิ่มตัวเลขลงบิล" },
-    { ok: entries.length > 0 && entries.every((entry) => entry.stake > 0), label: "จำนวนเงินครบทุกรายการ" },
+    { ok: entries.length > 0 && entries.every((entry) => entry.stake >= MIN_STAKE_PER_ITEM), label: `จำนวนเงินขั้นต่ำ ${MIN_STAKE_PER_ITEM} บาททุกรายการ` },
   ].filter((check) => !check.hidden);
   const ready = isOpen && checks.every((check) => check.ok) && !pending;
 
@@ -319,6 +334,13 @@ export function BetSlip({
           </header>
 
           <div className="bs-list-fields">
+            <label className="bs-field bs-sequence-field">
+              <span>เลขบิล</span>
+              <output aria-live="polite" aria-label="เลขบิลถัดไป อ่านอย่างเดียว">
+                {previewBillSequence === null ? "เลือก Agent ก่อน" : `บิล ${previewBillSequence}`}
+              </output>
+              <small>ระบบกำหนดอัตโนมัติ แก้ไขไม่ได้</small>
+            </label>
             {representatives !== null && (
               <label className="bs-field">
                 <span>ผู้รับบิล / Agent</span>
@@ -332,7 +354,7 @@ export function BetSlip({
             )}
             <CustomerNameCombobox
               names={customerNames}
-              label="ลูกค้า / รหัสอ้างอิง"
+              label="ชื่อลูกค้า"
               value={title}
               onValueChange={setTitle}
               disabled={!isOpen || needsRepresentative}
@@ -351,7 +373,7 @@ export function BetSlip({
               const rule = rules.get(entry.prizeTypeId);
               const restriction = restrictionOf(entry);
               return (
-                <li key={`${entry.prizeTypeId}:${entry.number}`} className="bs-entry">
+                <li key={`${entry.prizeTypeId}:${entry.number}`} className={`bs-entry ${restriction?.kind === "REDUCED_RATE" ? "is-restricted" : ""}`}>
                   <span className="bs-entry-main">
                     <span className={`bs-badge bs-badge-${badgeKey(rule)}`}>{rule?.name ?? "-"}</span>
                     <span className="bs-entry-number">{entry.number}</span>
@@ -361,6 +383,8 @@ export function BetSlip({
                     <input
                       className="bs-entry-input"
                       inputMode="numeric"
+                      min={MIN_STAKE_PER_ITEM}
+                      max={MAX_STAKE}
                       aria-label={`จำนวนเงิน ${entry.number}`}
                       autoFocus
                       value={entry.stake || ""}
@@ -413,6 +437,17 @@ export function BetSlip({
                   {prizeType.name}
                 </button>
               ))}
+              {group.digits > 1 && (
+                <button
+                  type="button"
+                  aria-pressed={reverse}
+                  className="bs-option"
+                  onClick={() => setReverseByGroup((current) => ({ ...current, [group.key]: !reverse }))}
+                  disabled={!isOpen}
+                >
+                  ⇄ สลับเลข
+                </button>
+              )}
             </div>
           </div>
 
@@ -420,19 +455,22 @@ export function BetSlip({
             <h3 className="bs-step-title"><span>2</span>กำหนดจำนวนเงิน</h3>
             <div className="bs-amount">
               <div className="bs-stepper">
-                <button type="button" className="bs-minus" onClick={() => setAmount((value) => Math.max(0, value - 1))} disabled={!isOpen} aria-label="ลดจำนวนเงิน">−</button>
+                <button type="button" className="bs-minus" onClick={() => setAmount((value) => Math.max(MIN_STAKE_PER_ITEM, value - 1))} disabled={!isOpen} aria-label="ลดจำนวนเงิน">−</button>
                 <input
                   aria-label="จำนวนเงินต่อรายการ"
                   inputMode="numeric"
+                  min={MIN_STAKE_PER_ITEM}
+                  max={MAX_STAKE}
                   value={amount}
                   disabled={!isOpen}
                   onChange={(event) => setAmount(Math.min(Number(event.target.value.replace(/\D/g, "")) || 0, MAX_STAKE))}
+                  onBlur={() => setAmount((value) => Math.max(MIN_STAKE_PER_ITEM, value))}
                 />
-                <button type="button" className="bs-plus" onClick={() => setAmount((value) => Math.min(value + 1, MAX_STAKE))} disabled={!isOpen} aria-label="เพิ่มจำนวนเงิน">+</button>
+                <button type="button" className="bs-plus" onClick={() => setAmount((value) => Math.min(Math.max(MIN_STAKE_PER_ITEM, value + 1), MAX_STAKE))} disabled={!isOpen} aria-label="เพิ่มจำนวนเงิน">+</button>
               </div>
-              <div className="bs-chips" aria-label="ชิปเพิ่มจำนวนเงิน">
+              <div className="bs-chips" aria-label="เลือกจำนวนเงิน">
                 {CHIPS.map((chip) => (
-                  <button key={chip} type="button" className={`bs-chip bs-chip-${chip}`} onClick={() => setAmount((value) => Math.min(value + chip, MAX_STAKE))} disabled={!isOpen} aria-label={`เพิ่ม ${chip} บาท`}>
+                  <button key={chip} type="button" className={`bs-chip bs-chip-${chip}`} onClick={() => setAmount(chip)} disabled={!isOpen} aria-label={`ตั้งจำนวนเงินเป็น ${chip} บาท`}>
                     {chip >= 1000 ? "1K" : chip}
                   </button>
                 ))}

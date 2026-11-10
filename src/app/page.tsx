@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getActor } from "@/lib/auth/context";
 import { ManagementDashboard } from "./ManagementDashboard";
-import { AgentDashboard } from "./AgentDashboard";
 import { AdminDashboard } from "./AdminDashboard";
 
 function DashboardLoading() {
@@ -32,6 +31,7 @@ export default async function HomePage({
   const actor = await getActor();
   if (!actor) redirect("/login");
   if (actor.mustChangePassword) redirect("/change-password");
+  if (actor.role === "AGENT") redirect("/bills");
   const query = await searchParams;
   const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
 
@@ -47,7 +47,6 @@ export default async function HomePage({
     <Suspense fallback={<DashboardLoading />}>
       {actor.role === "ADMIN" && <AdminDashboard actor={actor} filters={filters} />}
       {(actor.role === "GODMODE" || actor.role === "OWNER") && <ManagementDashboard actor={actor} filters={filters} />}
-      {actor.role === "AGENT" && <AgentDashboard actor={actor} drawId={first(query.drawId)} />}
     </Suspense>
   );
 }

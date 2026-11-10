@@ -9,10 +9,12 @@ import { AppError } from "@/lib/errors";
  *
  * หลักการที่ห้ามหย่อน
  *
- * 1. ตัวตนใน Telegram ไม่ใช่ตัวตนในระบบ
- *    ทุกการกดปุ่มต้องสืบกลับไปถึงผู้ใช้จริงที่ผูกบัญชีไว้
- *    ถ้าผูกไม่ได้ ให้ปฏิเสธ ไม่ใช่ทำแทนด้วยบัญชีบอท
- *    เพราะ Audit ที่บอกว่า "บอททำ" เท่ากับไม่มีผู้รับผิดชอบ
+ * 1. ใครกดต้องสืบกลับได้เสมอ
+ *    คนที่ผูกบัญชีไว้ ทำในนามตัวเอง
+ *    สมาชิกกลุ่มที่ยังไม่ผูก กดได้เฉพาะในกลุ่มที่ตั้งไว้ (TELEGRAM_CHAT_ID)
+ *    ระบบทำในนาม Owner ขององค์กรนั้น และเก็บเลขบัญชีกับชื่อ Telegram ของคนกด
+ *    ไว้ใน requestId ของ Audit ทุกแถว จึงยังตามได้ว่าใครเป็นคนกด
+ *    กดจากแชทอื่น (เช่นข้อความที่ถูกส่งต่อ) และยังไม่ผูก จะถูกปฏิเสธ
  *
  * 2. สิทธิ์ตรวจสอบที่ชั้น service เหมือนเดิมทุกประการ
  *    ไม่มีทางลัดสำหรับ Telegram การกดปุ่มเรียก reviewAttachment ตัวเดียว
@@ -83,16 +85,23 @@ export type ActionOutcome = {
  * คืน null เมื่อยังไม่ผูก หรือผูกกับบัญชีที่ถูกระงับ
  * ผู้ใช้บทบาท AGENT ที่ผูกไว้ก็ผ่านตรงนี้ได้ แต่จะไปตกที่ด่านสิทธิ์ของ service
  */
-async function actorFromTelegram(telegramUserId: string): Promise<Actor | null> {
+const USER_SELECT = {
+  id: true,
+  organizationId: true,
+  role: true,
+  displayName: true,
+  mustChangePassword: true,
+} as const;
+
+/** ร่องรอยของคนกดที่เก็บลง Audit (requestId) เช่น "telegram:8627938804 สมชาย (@somchai)" */
+function telegramTrace(telegramUserId: string, name: string | undefined): string {
+  return `telegram:${telegramUserId}${name ? ` ${name}` : ""}`.slice(0, 190);
+}
+
+async function actorFromTelegram(telegramUserId: string, trace: string): Promise<Actor | null> {
   const user = await prisma.user.findFirst({
     where: { telegramUserId, status: "ACTIVE" },
-    select: {
-      id: true,
-      organizationId: true,
-      role: true,
-      displayName: true,
-      mustChangePassword: true,
-    },
+    select: USER_SELECT,
   });
   if (!user) return null;
 
@@ -103,7 +112,39 @@ async function actorFromTelegram(telegramUserId: string): Promise<Actor | null> 
     displayName: user.displayName,
     agentId: null,
     mustChangePassword: user.mustChangePassword,
-    requestId: undefined,
+    requestId: trace,
+    ipAddress: undefined,
+  };
+}
+
+/**
+ * สมาชิกกลุ่มที่ยังไม่ผูกบัญชี: ทำในนาม Owner ขององค์กรที่เป็นเจ้าของบิล
+ *
+ * หาองค์กรจากตัวบิล/ไฟล์ที่ปุ่มชี้ ไม่ใช่จากคนกด เพราะคนกดไม่มีบัญชีในระบบ
+ * ปุ่มกดได้เฉพาะในกลุ่มที่ตั้งไว้ ซึ่งบอทส่งหลักฐานขององค์กรนั้นเท่านั้น
+ */
+async function groupDelegate(action: EvidenceAction, name: string, trace: string): Promise<Actor | null> {
+  const target = action.scope === "bill"
+    ? await prisma.bill.findUnique({ where: { id: action.billId }, select: { organizationId: true } })
+    : await prisma.billAttachment.findUnique({ where: { id: action.attachmentId }, select: { organizationId: true } });
+  if (!target) return null;
+
+  const owner = await prisma.user.findFirst({
+    where: { organizationId: target.organizationId, role: "OWNER", status: "ACTIVE" },
+    orderBy: { createdAt: "asc" },
+    select: USER_SELECT,
+  });
+  if (!owner) return null;
+
+  return {
+    userId: owner.id,
+    organizationId: owner.organizationId,
+    role: owner.role,
+    // ชื่อที่ขึ้นในแชทเป็นชื่อคนกดจริง ส่วน Audit ผูกกับ Owner และเก็บชื่อคนกดไว้ใน requestId
+    displayName: name,
+    agentId: null,
+    mustChangePassword: false,
+    requestId: trace,
     ipAddress: undefined,
   };
 }
@@ -130,11 +171,20 @@ async function pendingOfBill(actor: Actor, billId: string): Promise<string[]> {
 
 export async function handleEvidenceAction(input: {
   telegramUserId: string;
+  /** ชื่อใน Telegram ของคนกด ใช้แสดงผลและบันทึก Audit */
+  telegramName?: string | undefined;
+  /** กดจากกลุ่มที่ตั้งไว้ใน TELEGRAM_CHAT_ID — สมาชิกที่ยังไม่ผูกบัญชีกดได้เฉพาะกรณีนี้ */
+  fromConfiguredGroup?: boolean;
   action: EvidenceAction;
   /** เหตุผลที่ตีกลับ จำเป็นเมื่อ kind เป็น reject */
   reason?: string | undefined;
 }): Promise<ActionOutcome> {
-  const actor = await actorFromTelegram(input.telegramUserId);
+  const trace = telegramTrace(input.telegramUserId, input.telegramName);
+  const actor =
+    (await actorFromTelegram(input.telegramUserId, trace)) ??
+    (input.fromConfiguredGroup
+      ? await groupDelegate(input.action, input.telegramName || `Telegram ${input.telegramUserId}`, trace)
+      : null);
 
   if (!actor) {
     return {

@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useRef, useState } from "react";
 import { AppDropdown } from "../../AppDropdown";
+import { MIN_STAKE_PER_ITEM } from "@/lib/bills/betting";
 import { checkNumberField, checkRowComplete, checkStakeField } from "@/lib/bills/fieldChecks";
 import { createBillAction, type ActionState } from "../actions";
 
@@ -247,6 +248,7 @@ export function BillForm({
                   <input
                     name="stake"
                     inputMode="decimal"
+                    min={MIN_STAKE_PER_ITEM}
                     maxLength={20}
                     value={row.stake}
                     onChange={(e) => updateRow(i, { stake: e.target.value })}

@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { ChartTabs } from "./ChartTabs";
 import { DashboardIcon, type DashboardIconName } from "./DashboardIcon";
 import "./owner-business-charts.css";
 
 type FinanceRow = { label: string; gross: number; payout: number; commission: number; net: number };
+type AgentFinanceRow = FinanceRow & { agentId: string };
 type VolumeRow = { label: string; bills: number; average: number };
 type View = "finance" | "agents" | "volume";
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -15,10 +17,8 @@ const TABS = [
   { id: "volume", label: "จำนวนบิล", icon: "bill" },
 ] as const;
 
-export function OwnerBusinessCharts({ draws, agents, volume }: { draws: FinanceRow[]; agents: FinanceRow[]; volume: VolumeRow[] }) {
+export function OwnerBusinessCharts({ draws, agents, volume }: { draws: FinanceRow[]; agents: AgentFinanceRow[]; volume: VolumeRow[] }) {
   const [view, setView] = useState<View>("finance");
-  const rows = view === "agents" ? agents : draws;
-  const maxFinance = Math.max(...rows.flatMap((row) => [row.gross, row.payout, Math.abs(row.net)]), 1);
   const maxBills = Math.max(...volume.map((row) => row.bills), 1);
   const maxAverage = Math.max(...volume.map((row) => row.average), 1);
   const total = draws.reduce((sum, row) => ({ gross: sum.gross + row.gross, payout: sum.payout + row.payout, commission: sum.commission + row.commission, net: sum.net + row.net }), { gross: 0, payout: 0, commission: 0, net: 0 });
@@ -39,7 +39,7 @@ export function OwnerBusinessCharts({ draws, agents, volume }: { draws: FinanceR
       </div>}
       <FinanceSmallMultiples rows={draws}/>
     </>}
-    {view === "agents" && <><div className="owner-view-title"><strong>ผลงาน Agent</strong><span>เรียงตามยอดขายสูงสุด</span></div><FinanceBars rows={agents} max={maxFinance} agent/></>}
+    {view === "agents" && <><div className="owner-view-title"><strong>ผลงาน Agent · Top 5</strong><span>เรียงตามยอดขายสูงสุด</span><Link href="/agents" className="owner-all-agents">ดู Agent ทั้งหมด →</Link></div><AgentTopList rows={agents}/></>}
     {view === "volume" && (volume.length ? <div className="owner-volume-chart">{volume.map((row) => <article key={row.label}><div><strong>{row.label}</strong><span>{row.bills} บิล</span></div><div className="volume-bars"><span><i style={{ width: `${row.bills / maxBills * 100}%` }}/></span><span className="average"><i style={{ width: `${row.average / maxAverage * 100}%` }}/></span></div><b>{MONEY.format(row.average)}<small>บาทเฉลี่ย/บิล</small></b></article>)}</div> : <p className="empty-state">ไม่พบบิลตามตัวกรองที่เลือก</p>)}
     </div>
   </article>;
@@ -87,7 +87,17 @@ function FinanceSmallMultiples({ rows }: { rows: FinanceRow[] }) {
   </section>;
 }
 
-function FinanceBars({ rows, max, agent = false }: { rows: FinanceRow[]; max: number; agent?: boolean }) {
-  if (rows.length === 0) return <p className="empty-state">ยังไม่มี Settlement สำหรับแสดงกราฟจริง</p>;
-  return <div className="owner-finance-bars">{rows.map((row) => <article key={row.label}><header><strong>{row.label}</strong><small>{agent ? "ผลงานสะสม" : "Settlement จริง"}</small></header><div className="finance-metrics"><div><span>ยอดขาย</span><i><b className="gross" style={{ width: `${row.gross / max * 100}%` }}/></i><strong>{MONEY.format(row.gross)}<span className="money-unit">&nbsp;บาท</span></strong></div><div><span>จ่ายรางวัล</span><i><b className="payout" style={{ width: `${row.payout / max * 100}%` }}/></i><strong>{MONEY.format(row.payout)}<span className="money-unit">&nbsp;บาท</span></strong></div><div><span>สุทธิ</span><i><b className={row.net < 0 ? "net negative" : "net"} style={{ width: `${Math.abs(row.net) / max * 100}%` }}/></i><strong className={row.net < 0 ? "negative" : "positive"}>{MONEY.format(row.net)}<span className="money-unit">&nbsp;บาท</span></strong></div></div></article>)}</div>;
+/** Top 5 Agent: ยอดขาย ถูกรางวัล และค่าคอม เป็นตัวเลขตรง ๆ พร้อมปุ่มเข้าโปรไฟล์ */
+function AgentTopList({ rows }: { rows: AgentFinanceRow[] }) {
+  if (rows.length === 0) return <p className="empty-state">ยังไม่มี Settlement สำหรับแสดงผลงาน Agent</p>;
+  return <ol className="owner-agent-top">{rows.map((row, index) => <li key={row.agentId}>
+    <span className="owner-agent-rank" aria-label={`อันดับ ${index + 1}`}>{index + 1}</span>
+    <div className="owner-agent-name"><strong>{row.label}</strong><small>ผลงานสะสม</small></div>
+    <dl>
+      <div><dt>ยอดขาย</dt><dd>{MONEY.format(row.gross)}<span className="money-unit">&nbsp;บาท</span></dd></div>
+      <div><dt>ถูกรางวัล</dt><dd className="is-payout">{MONEY.format(row.payout)}<span className="money-unit">&nbsp;บาท</span></dd></div>
+      <div><dt>ค่าคอม</dt><dd className="is-commission">{MONEY.format(row.commission)}<span className="money-unit">&nbsp;บาท</span></dd></div>
+    </dl>
+    <Link href={`/agents/${row.agentId}`} className="owner-agent-profile">ดูโปรไฟล์</Link>
+  </li>)}</ol>;
 }

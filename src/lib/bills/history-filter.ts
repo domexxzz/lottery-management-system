@@ -9,8 +9,22 @@ export type HistoryParams = {
   to?: string;
   draw?: string;
   agent?: string;
+  scope?: string;
   page?: string;
 };
+
+/**
+ * ขอบเขตงวดของหน้าประวัติ
+ * - current: งวดที่ยังปิดงานไม่เสร็จ (เปิดรับ / ปิดรับแล้ว / รอผล) เป็นค่าเริ่มต้น
+ * - past: งวดที่จบแล้ว (ตรวจผลแล้ว / ปิดบัญชีแล้ว)
+ * - all: ทุกงวด
+ */
+export type DrawScope = "current" | "past" | "all";
+export const DRAW_SCOPES: readonly DrawScope[] = ["current", "past", "all"];
+
+export function readDrawScope(value: string | undefined): DrawScope {
+  return value === "past" || value === "all" ? value : "current";
+}
 
 export type ParsedHistoryFilter = {
   tab: BetTab;
@@ -22,6 +36,7 @@ export type ParsedHistoryFilter = {
   dateTo: Date | undefined;
   drawId: string;
   agentId: string;
+  scope: DrawScope;
   page: number;
 };
 
@@ -46,6 +61,7 @@ export function parseHistoryFilter(params: HistoryParams): ParsedHistoryFilter {
     dateTo: bangkokBoundary(to, true),
     drawId: (params.draw ?? "").trim(),
     agentId: (params.agent ?? "").trim(),
+    scope: readDrawScope(params.scope),
     page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
   };
 }
@@ -60,6 +76,7 @@ export function historyHref(base: string, filter: ParsedHistoryFilter, override:
     to: filter.to,
     draw: filter.drawId,
     agent: filter.agentId,
+    scope: filter.scope === "current" ? "" : filter.scope,
     page: filter.page > 1 ? String(filter.page) : "",
   };
   for (const [key, value] of Object.entries(override)) values[key] = String(value);

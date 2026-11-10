@@ -3,6 +3,7 @@ import { getActor } from "@/lib/auth/context";
 import { csvFile, csvHeaders } from "@/lib/csv";
 import { AppError } from "@/lib/errors";
 import { getAgentReport } from "@/lib/reports/agent-report";
+import { visibleBillNumber } from "@/lib/bills/numbering";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
       csv = csvFile(["รหัส", "ประเภทรางวัล", "รายการ", "ถูกรางวัล", "ยอดขาย", "จ่ายรางวัล"], report.prizes.map((row) => [String(row.code), row.name, String(row.count), String(row.winners), row.gross.toFixed(2), row.payout.toFixed(2)]));
       name = "agent-prize-report.csv";
     } else if (report.selectedView === "bills") {
-      csv = csvFile(["เลขบิล", "ชื่อบิล", "งวด", "รายการ", "ยอดขาย", "จ่ายรางวัล", "วันที่สร้าง", "สถานะ"], report.bills.map((bill) => [bill.billNumber ?? "", bill.title, bill.draw.name, String(bill._count.items), bill.totalStake.toFixed(2), bill.totalPayout.toFixed(2), bill.createdAt.toISOString(), bill.status]));
+      csv = csvFile(["เลขบิล", "ชื่อลูกค้า", "งวด", "รายการ", "ยอดขาย", "จ่ายรางวัล", "วันที่สร้าง", "สถานะ"], report.bills.map((bill) => [visibleBillNumber(bill.drawSequence), bill.title, bill.draw.name, String(bill._count.items), bill.totalStake.toFixed(2), bill.totalPayout.toFixed(2), bill.createdAt.toISOString(), bill.status]));
       name = "agent-bill-report.csv";
     } else if (report.selectedView === "settlements") {
       csv = csvFile(["งวด", "วันที่ปิดรับ", "ยอดขาย", "จ่ายรางวัล", "คอมมิชชัน", "สุทธิ", "สถานะ"], report.settlements.map((row) => [row.drawName, row.cutoffAt.toISOString(), row.gross.toFixed(2), row.payout.toFixed(2), row.commission?.toFixed(2) ?? "", row.net?.toFixed(2) ?? "", STATUS[row.settlementStatus] ?? row.settlementStatus]));

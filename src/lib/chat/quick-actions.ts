@@ -13,7 +13,12 @@ export type QuickAction = {
   label: string;
   /** คำถามที่ส่งจริง — เขียนเต็มเพื่อให้โมเดลตอบตรงจุด */
   prompt: string;
+  /** ตอบจากคู่มือในระบบโดยไม่ใช้โมเดล จึงกดได้แม้ยังไม่ได้ตั้งค่าผู้ช่วย */
+  offline?: boolean;
 };
+
+/** แนะนำการใช้งานระบบ — ตอบจากคู่มือที่สร้างจากสิทธิ์และเมนูจริง (system-guide.ts) */
+export const GUIDE_ACTION: QuickAction = { label: "แนะนำระบบ", prompt: "แนะนำระบบ", offline: true };
 
 /** ปุ่มพื้นฐานมีทุกสถานะ เพื่อให้ Owner กลับมาดูงานค้างและความครบถ้วนได้เสมอ */
 const PENDING_WORK: QuickAction = {
@@ -88,6 +93,6 @@ const NO_DRAW: QuickAction[] = [
 ];
 
 export function quickActionsFor(drawStatus: string | null): QuickAction[] {
-  if (drawStatus === null) return [...NO_DRAW, PENDING_WORK, CHECK_DATA];
-  return [...(BY_STATUS[drawStatus] ?? []), PENDING_WORK, CHECK_DATA].slice(0, 4);
+  if (drawStatus === null) return [...NO_DRAW, PENDING_WORK, CHECK_DATA, GUIDE_ACTION];
+  return [...[...(BY_STATUS[drawStatus] ?? []), PENDING_WORK, CHECK_DATA].slice(0, 4), GUIDE_ACTION];
 }
