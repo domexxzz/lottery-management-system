@@ -32,7 +32,7 @@ type DuplicateOccurrence = {
 const typeLabel = { ORDER_EVIDENCE: "หลักฐานการสั่งซื้อ", PAYMENT_EVIDENCE: "หลักฐานการชำระเงิน", OTHER: "หลักฐานอื่น" } as const;
 const statusLabel = { PENDING: "รอตรวจสอบ", VERIFIED: "ตรวจสอบผ่าน", REJECTED: "ถูกตีกลับ" } as const;
 
-export function ReviewQueue({ items, emptyTitle = "ไม่มีหลักฐานตามตัวกรองนี้", emptyDescription = "เมื่อ Agent ส่งบิลพร้อมหลักฐาน รายการจะปรากฏที่นี่" }: { items: ReviewItem[]; emptyTitle?: string; emptyDescription?: string }) {
+export function ReviewQueue({ items, canDelete = false, emptyTitle = "ไม่มีหลักฐานตามตัวกรองนี้", emptyDescription = "เมื่อ Agent ส่งบิลพร้อมหลักฐาน รายการจะปรากฏที่นี่" }: { items: ReviewItem[]; canDelete?: boolean; emptyTitle?: string; emptyDescription?: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<ReviewItem | null>(null);
@@ -88,6 +88,21 @@ export function ReviewQueue({ items, emptyTitle = "ไม่มีหลัก�
     setDuplicateHistory({ attachmentId: item.id, rows: body.data });
   }
 
+  async function deleteEvidence(item: ReviewItem) {
+    if (!window.confirm(`ลบหลักฐาน “${item.originalName}” ถาวรใช่หรือไม่? ระบบจะเก็บประวัติการลบไว้ใน Audit Log`)) return;
+    setBusy(item.id);
+    setError(null);
+    const response = await fetch(`/api/attachments/${item.id}`, { method: "DELETE" });
+    setBusy(null);
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+      setError(body?.error?.message ?? "ลบหลักฐานไม่สำเร็จ");
+      return;
+    }
+    if (preview?.id === item.id) setPreview(null);
+    router.refresh();
+  }
+
   const billGroups = useMemo(() => {
     const grouped = new Map<string, { bill: ReviewItem["bill"]; items: ReviewItem[] }>();
     for (const item of items) {
@@ -120,7 +135,7 @@ export function ReviewQueue({ items, emptyTitle = "ไม่มีหลัก�
             {item.duplicateCount > 1 && <div className="duplicate-review-alert"><strong>รูปนี้เคยปรากฏ {item.duplicateCount} ครั้ง</strong><button type="button" onClick={() => loadDuplicateHistory(item)}>ดูว่าซ้ำกับรูปไหน</button></div>}
             {item.payment && <section className="payment-summary"><strong>ยอดชำระ <b>{Number(item.payment.amount).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท</b></strong><div><span>{item.payment.paymentMethod}</span><span>แนบเมื่อ {new Date(item.payment.paidAt).toLocaleString("th-TH")}</span></div>{item.payment.note && <p>{item.payment.note}</p>}</section>}
             {item.rejectionReason && <p className="review-reason"><strong>เหตุผลที่ตีกลับ:</strong> {item.rejectionReason}</p>}
-            <div className="review-actions"><a href={`/api/attachments/${item.id}/file?download=1`}>ดาวน์โหลด</a>{item.status === "PENDING" && <button type="button" className="danger-button" disabled={busy !== null} onClick={() => reject(item)}>ตีกลับ</button>}</div>
+            <div className="review-actions"><a href={`/api/attachments/${item.id}/file?download=1`}>ดาวน์โหลด</a>{item.status === "PENDING" && <button type="button" className="danger-button" disabled={busy !== null} onClick={() => reject(item)}>ตีกลับ</button>}{canDelete && <button type="button" className="danger-button" disabled={busy !== null} onClick={() => deleteEvidence(item)}>{busy === item.id ? "กำลังลบ..." : "ลบหลักฐาน"}</button>}</div>
           </div>
         </article>)}</div>
       </section>;

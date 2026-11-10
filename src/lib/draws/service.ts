@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { getStorageProvider } from "@/lib/storage/provider";
+import type { PrivateObjectStorage } from "@/lib/storage/types";
 import { nextOfficialDrawDate, officialDrawCutoffAt, officialDrawName, parseBangkokDateTimeLocal } from "./schedule";
 
 export type DrawInput = {
@@ -187,6 +189,104 @@ export async function lockDrawManually(actor: Actor, drawId: string): Promise<Lo
     reason: "ปิดงวดด้วยมือโดยผู้ดูแล",
     requestId: actor.requestId,
   });
+}
+
+export type DeleteDrawOutcome = {
+  drawId: string;
+  drawName: string;
+  billsDeleted: number;
+  attachmentsDeleted: number;
+  resultsDeleted: number;
+  settlementsDeleted: number;
+};
+
+/**
+ * ลบงวดถาวรพร้อมข้อมูลลูกทั้งหมด โดยสงวน Audit Log ไว้ตรวจสอบย้อนหลัง
+ *
+ * ความสัมพันธ์ Bill/Result/Settlement ไม่ได้ตั้ง onDelete: Cascade เพราะระบบปกติ
+ * ต้องห้ามลบโดยอุบัติเหตุ จึงลบอย่างชัดเจนภายใน transaction นี้เท่านั้น
+ * ไฟล์หลักฐานอยู่คนละระบบกับ PostgreSQL จึงลบหลัง transaction สำเร็จ
+ */
+export async function deleteDrawPermanently(
+  actor: Actor,
+  drawId: string,
+  storage: PrivateObjectStorage = getStorageProvider(),
+): Promise<DeleteDrawOutcome> {
+  requirePermission(actor, "draw.delete");
+
+  const outcome = await prisma.$transaction(async (tx) => {
+    const draw = await tx.draw.findFirst({
+      where: { id: drawId, ...orgScope(actor) },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        opensAt: true,
+        cutoffAt: true,
+        bills: {
+          select: {
+            id: true,
+            attachments: { select: { id: true, storageKey: true } },
+          },
+        },
+        _count: { select: { results: true, settlements: true, restrictedNumbers: true } },
+      },
+    });
+    if (!draw) throw new NotFoundError("ไม่พบงวด");
+
+    const storageKeys = draw.bills.flatMap((bill) => bill.attachments.map((item) => item.storageKey));
+    const billIds = draw.bills.map((bill) => bill.id);
+    const attachmentsDeleted = storageKeys.length;
+
+    const settlements = await tx.settlement.deleteMany({ where: { drawId: draw.id } });
+    const results = await tx.result.deleteMany({ where: { drawId: draw.id } });
+    if (billIds.length > 0) await tx.bill.deleteMany({ where: { id: { in: billIds } } });
+    await tx.restrictedNumber.deleteMany({ where: { drawId: draw.id } });
+    await tx.draw.delete({ where: { id: draw.id } });
+
+    await writeAudit(tx, {
+      organizationId: actor.organizationId,
+      actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
+      action: "DELETE",
+      entityType: "Draw",
+      entityId: draw.id,
+      before: {
+        name: draw.name,
+        status: draw.status,
+        opensAt: draw.opensAt.toISOString(),
+        cutoffAt: draw.cutoffAt.toISOString(),
+        bills: billIds.length,
+        attachments: attachmentsDeleted,
+        results: draw._count.results,
+        settlements: draw._count.settlements,
+        restrictedNumbers: draw._count.restrictedNumbers,
+      },
+      reason: "Owner ลบงวดและข้อมูลที่เกี่ยวข้องถาวร",
+    });
+
+    return {
+      storageKeys,
+      result: {
+        drawId: draw.id,
+        drawName: draw.name,
+        billsDeleted: billIds.length,
+        attachmentsDeleted,
+        resultsDeleted: results.count,
+        settlementsDeleted: settlements.count,
+      },
+    };
+  });
+
+  await Promise.all(outcome.storageKeys.map(async (storageKey) => {
+    try {
+      await storage.delete(storageKey);
+    } catch (error) {
+      console.error("Draw deleted but evidence object cleanup failed", { storageKey, error });
+    }
+  }));
+  return outcome.result;
 }
 
 /**

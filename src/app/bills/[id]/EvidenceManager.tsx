@@ -74,6 +74,7 @@ export function EvidenceManager({
   initialItems,
   billTotalStake,
   canUpload,
+  canDelete,
   maxFiles,
   maxFileSizeMb,
 }: {
@@ -83,6 +84,7 @@ export function EvidenceManager({
   initialPayment: Payment;
   billTotalStake: string;
   canUpload: boolean;
+  canDelete: boolean;
   maxFiles: number;
   maxFileSizeMb: number;
 }) {
@@ -204,7 +206,7 @@ export function EvidenceManager({
           <div className="evidence-actions">
             <button type="button" className="secondary-button" onClick={() => setSelectedPreview(item)}>ดูรูป</button>
             <a href={`/api/attachments/${item.id}/file?download=1`}>ดาวน์โหลด</a>
-            {canUpload && billStatus === "DRAFT" && <button type="button" className="danger-button" onClick={() => remove(item)}>ลบ</button>}
+            {(canDelete || (canUpload && billStatus === "DRAFT")) && <button type="button" className="danger-button" onClick={() => remove(item)}>ลบ</button>}
             {canUpload && item.status === "REJECTED" && billStatus !== "SETTLED" && billStatus !== "CANCELLED" && <button type="button" onClick={() => { setReplacement(item); replacementInput.current?.click(); }}>เปลี่ยนไฟล์</button>}
           </div>
         </div>

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { getActor } from "@/lib/auth/context";
 import { AppShell } from "./AppShell";
-import { isMockDataEnabled } from "@/lib/mock-data";
 import "./globals.css";
 import "./home.css";
 import "./premium-theme.css";
@@ -29,15 +28,12 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const actor = await getActor();
-  const mockDataEnabled = actor
-    ? await isMockDataEnabled(actor.organizationId)
-    : false;
 
   return (
     <html lang="th" className={sarabun.variable} data-theme="light">
       <body>
         {actor !== null && !actor.mustChangePassword ? (
-          <AppShell displayName={actor.displayName} role={actor.role} mockDataEnabled={mockDataEnabled}>
+          <AppShell displayName={actor.displayName} role={actor.role}>
             {children}
           </AppShell>
         ) : (

@@ -16,6 +16,8 @@ import {
 } from "./validation";
 import { assertBillEvidenceReady } from "@/lib/evidence/service";
 import { billSequencePeriod, buildInternalBillNumber } from "./numbering";
+import { getStorageProvider } from "@/lib/storage/provider";
+import type { PrivateObjectStorage } from "@/lib/storage/types";
 
 export type ItemInput = {
   prizeTypeId: string;
@@ -667,6 +669,111 @@ export async function getBill(actor: Actor, billId: string) {
 
   if (!bill) throw new NotFoundError("ไม่พบบิล");
   return bill;
+}
+
+export type DeleteBillOutcome = {
+  billId: string;
+  title: string;
+  attachmentsDeleted: number;
+  settlementReset: boolean;
+};
+
+/**
+ * Owner/Godmode ลบบิลถาวรได้ทุกสถานะ
+ *
+ * ถ้างวดเคยคำนวณ Settlement แล้ว ต้องล้างผลคำนวณทั้งงวดและย้อนสถานะบิลที่เหลือ
+ * เป็น LOCKED เพื่อไม่ให้รายงานแสดงยอดเก่าที่รวมบิลซึ่งถูกลบไปแล้ว
+ */
+export async function deleteBillPermanently(
+  actor: Actor,
+  billId: string,
+  storage: PrivateObjectStorage = getStorageProvider(),
+): Promise<DeleteBillOutcome> {
+  requirePermission(actor, "bill.delete");
+
+  const outcome = await prisma.$transaction(async (tx) => {
+    const bill = await tx.bill.findFirst({
+      where: { id: billId, organizationId: actor.organizationId },
+      select: {
+        id: true,
+        organizationId: true,
+        title: true,
+        billNumber: true,
+        drawSequence: true,
+        status: true,
+        totalStake: true,
+        totalPayout: true,
+        drawId: true,
+        agentId: true,
+        _count: { select: { items: true } },
+        attachments: { select: { id: true, storageKey: true } },
+      },
+    });
+    if (!bill) throw new NotFoundError("ไม่พบบิล");
+
+    const settlementCount = await tx.settlement.count({ where: { drawId: bill.drawId } });
+    const settlementReset = settlementCount > 0 || bill.status === "SETTLED";
+    if (settlementReset) {
+      await tx.settlement.deleteMany({ where: { drawId: bill.drawId } });
+      await tx.billItem.updateMany({
+        where: { bill: { drawId: bill.drawId } },
+        data: { isWinner: false, payout: new Prisma.Decimal(0) },
+      });
+      await tx.bill.updateMany({
+        where: { drawId: bill.drawId, status: "SETTLED" },
+        data: { status: "LOCKED", totalPayout: new Prisma.Decimal(0) },
+      });
+      const approvedResults = await tx.result.count({ where: { drawId: bill.drawId, status: "APPROVED" } });
+      await tx.draw.update({
+        where: { id: bill.drawId },
+        data: { status: approvedResults > 0 ? "RESULT_PENDING" : "LOCKED", closedAt: null },
+      });
+    }
+
+    await tx.bill.delete({ where: { id: bill.id } });
+    await writeAudit(tx, {
+      organizationId: bill.organizationId,
+      actorId: actor.userId,
+      requestId: actor.requestId,
+      ipAddress: actor.ipAddress,
+      action: "DELETE",
+      entityType: "Bill",
+      entityId: bill.id,
+      before: {
+        title: bill.title,
+        billNumber: bill.billNumber,
+        drawSequence: bill.drawSequence,
+        status: bill.status,
+        drawId: bill.drawId,
+        agentId: bill.agentId,
+        totalStake: bill.totalStake.toFixed(2),
+        totalPayout: bill.totalPayout.toFixed(2),
+        items: bill._count.items,
+        attachments: bill.attachments.length,
+      },
+      after: { settlementReset },
+      reason: "Owner ลบบิลถาวร",
+    });
+
+    return {
+      storageKeys: bill.attachments.map((item) => item.storageKey),
+      result: {
+        billId: bill.id,
+        title: bill.title,
+        attachmentsDeleted: bill.attachments.length,
+        settlementReset,
+      },
+    };
+  });
+
+  await Promise.all(outcome.storageKeys.map(async (storageKey) => {
+    try {
+      await storage.delete(storageKey);
+    } catch (error) {
+      console.error("Bill deleted but evidence object cleanup failed", { storageKey, error });
+    }
+  }));
+  return outcome.result;
 }
 
 // ---------------------------------------------------------------- โพยของ Agent

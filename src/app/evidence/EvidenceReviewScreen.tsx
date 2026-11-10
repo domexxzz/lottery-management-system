@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { AttachmentStatus, AttachmentType } from "@prisma/client";
 import type { Actor } from "@/lib/auth/context";
+import { can } from "@/lib/auth/permissions";
 import { listEvidenceReviewQueue } from "@/lib/evidence/service";
 import { EvidenceFilters } from "./EvidenceFilters";
 import { ReviewQueue } from "./ReviewQueue";
@@ -44,7 +45,7 @@ export async function EvidenceReviewScreen({ actor, params, mode }: { actor: Act
     <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">{verified ? "Verified Evidence" : "Evidence Review"}</p><h1>{verified ? "หลักฐานที่ตรวจแล้ว" : "ตรวจหลักฐานจากลูกค้า"}</h1><p>{verified ? "เก็บหลักฐานที่ตรวจสอบผ่านแล้วสำหรับเปิดดูและตรวจสอบย้อนหลัง" : "แสดงเฉพาะหลักฐานที่รอตรวจสอบหรือถูกตีกลับ เพื่อให้คิวงานชัดเจน"}</p></div><span className="review-total">{result.total} บิล</span></header>
     <nav className="evidence-view-switcher" aria-label="มุมมองหลักฐาน"><Link className={!verified ? "active" : undefined} href="/evidence">รอตรวจ / ตีกลับ</Link><Link className={verified ? "active" : undefined} href="/evidence/verified">ตรวจแล้ว</Link></nav>
     <EvidenceFilters mode={mode}/>
-    <ReviewQueue items={serialized} emptyTitle={verified ? "ยังไม่มีหลักฐานที่ตรวจแล้ว" : "ไม่มีหลักฐานที่รอตรวจหรือตีกลับ"} emptyDescription={verified ? "หลักฐานที่ Admin ตรวจผ่านจะถูกเก็บและแสดงในหน้านี้" : "คิวตรวจว่างแล้ว หลักฐานที่ตรวจผ่านสามารถดูได้ในหน้าหลักฐานที่ตรวจแล้ว"}/>
+    <ReviewQueue items={serialized} canDelete={can(actor.role, "evidence.delete")} emptyTitle={verified ? "ยังไม่มีหลักฐานที่ตรวจแล้ว" : "ไม่มีหลักฐานที่รอตรวจหรือตีกลับ"} emptyDescription={verified ? "หลักฐานที่ Admin ตรวจผ่านจะถูกเก็บและแสดงในหน้านี้" : "คิวตรวจว่างแล้ว หลักฐานที่ตรวจผ่านสามารถดูได้ในหน้าหลักฐานที่ตรวจแล้ว"}/>
     {pages > 1 && <nav className="review-pagination" aria-label="หน้ารายการ"><Link aria-disabled={page <= 1} href={page <= 1 ? buildPageLink(1) : buildPageLink(page - 1)}>ก่อนหน้า</Link><span>หน้า {page} จาก {pages}</span><Link aria-disabled={page >= pages} href={page >= pages ? buildPageLink(pages) : buildPageLink(page + 1)}>ถัดไป</Link></nav>}
   </section></main>;
 }

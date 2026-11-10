@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActor } from "@/lib/auth/context";
-import { createDraw, lockDrawManually } from "@/lib/draws/service";
+import { createDraw, deleteDrawPermanently, lockDrawManually } from "@/lib/draws/service";
 import { AppError } from "@/lib/errors";
 
 export type ActionState = { error: string | null; message: string | null };
@@ -59,6 +59,29 @@ export async function lockDrawAction(
     return {
       error: null,
       message: `ปิดงวด "${outcome.drawName}" แล้ว · ล็อกบิล ${outcome.billsLocked} ใบ · ยกเลิกร่างค้าง ${outcome.draftsCancelled} ใบ`,
+    };
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message, message: null };
+    throw error;
+  }
+}
+
+export async function deleteDrawAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireActor();
+  const drawId = String(formData.get("drawId") ?? "");
+
+  try {
+    const outcome = await deleteDrawPermanently(actor, drawId);
+    revalidatePath("/draws");
+    revalidatePath("/draws/all");
+    revalidatePath("/bills");
+    revalidatePath("/reports");
+    return {
+      error: null,
+      message: `ลบงวด “${outcome.drawName}” แล้ว พร้อมบิล ${outcome.billsDeleted} ใบและหลักฐาน ${outcome.attachmentsDeleted} ไฟล์`,
     };
   } catch (error) {
     if (error instanceof AppError) return { error: error.message, message: null };

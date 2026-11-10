@@ -22,6 +22,14 @@ describe("Admin เป็นผู้ปฏิบัติงานและผ�
     expect(can("OWNER", "agent.manage")).toBe(true);
     expect(can("OWNER", "system.override")).toBe(false);
   });
+
+  test("Owner ลบงวด บิล และหลักฐานได้ แต่ Admin กับ Agent ลบไม่ได้", () => {
+    for (const permission of ["draw.delete", "bill.delete", "evidence.delete"] as const) {
+      expect(can("OWNER", permission)).toBe(true);
+      expect(can("ADMIN", permission)).toBe(false);
+      expect(can("AGENT", permission)).toBe(false);
+    }
+  });
 });
 
 describe("การแก้ผลที่ประกาศแล้วต้องใช้สองคน", () => {

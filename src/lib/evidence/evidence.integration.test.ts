@@ -178,6 +178,27 @@ describe("private bill evidence with real MinIO", () => {
     await expect(deleteDraftAttachment(f.actors.AGENT1, first.id)).rejects.toThrow(/บิลยังเป็นร่าง/);
     await expect(reviewAttachment(f.actors.AGENT1, first.id, "VERIFIED")).rejects.toThrow(/ไม่มีสิทธิ์/);
   });
+
+  test("Owner ลบหลักฐานที่ยืนยันแล้วได้ แต่ Admin และ Agent ลบไม่ได้", async () => {
+    const billId = await draft();
+    const uploaded = await uploadBillAttachment(f.actors.AGENT1, billId, {
+      type: "ORDER_EVIDENCE",
+      fileName: "owner-delete.png",
+      declaredMimeType: "image/png",
+      bytes: await image("#115577"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const stored = await prisma.billAttachment.findUniqueOrThrow({ where: { id: uploaded.id } });
+    await confirmBill(f.actors.AGENT1, billId);
+
+    await expect(deleteDraftAttachment(f.actors.AGENT1, uploaded.id)).rejects.toThrow(/บิลยังเป็นร่าง/);
+    await expect(deleteDraftAttachment(f.actors.ADMIN, uploaded.id)).rejects.toThrow(/บิลยังเป็นร่าง|ไม่มีสิทธิ์/);
+
+    await deleteDraftAttachment(f.actors.OWNER, uploaded.id);
+    expect(await prisma.billAttachment.findUnique({ where: { id: uploaded.id } })).toBeNull();
+    expect(await getStorageProvider().objectExists(stored.storageKey)).toBe(false);
+    expect(await prisma.auditEvent.count({ where: { entityType: "BillAttachment", entityId: uploaded.id, action: "FILE_DELETED" } })).toBe(1);
+  });
 });
 
 /*

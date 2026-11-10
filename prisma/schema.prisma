@@ -155,8 +155,6 @@ model Organization {
 
   /// ตัวนับเลขบิลเดิม (legacy) — ระบบปัจจุบันใช้ AgentBillCounter ราย Agent/เดือน
   billSequence    Int      @default(0)
-  /// สถานะข้อมูลจำลองระดับองค์กร ทุกบัญชีในองค์กรเห็นค่าเดียวกัน
-  mockDataEnabled Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -360,8 +358,6 @@ model Draw {
   status   DrawStatus @default(OPEN)
   /// ตัวนับเลขบิลเดิมระดับงวด (legacy) — เก็บไว้เพื่อรองรับฐานข้อมูลรุ่นก่อน
   billSequence Int @default(0)
-  /// งวดที่ระบบสร้างสำหรับโหมดข้อมูลจำลอง ลบได้โดยไม่แตะข้อมูลจริง
-  isMock   Boolean    @default(false)
   lockedAt DateTime?
   closedAt DateTime?
 
@@ -375,7 +371,6 @@ model Draw {
 
   @@index([organizationId, name])
   @@index([organizationId, status])
-  @@index([organizationId, isMock])
   @@index([organizationId, cutoffAt])
   @@index([status, cutoffAt])
   @@map("draws")

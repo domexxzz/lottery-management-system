@@ -132,25 +132,6 @@ async function main() {
     });
   }
 
-  // รอบตัวอย่างที่ยังเปิดรับ ปิดรับอีก 7 วันข้างหน้า
-  const now = new Date();
-  const cutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const exampleDraw = await prisma.draw.findFirst({
-    where: { organizationId: org.id, name: "งวดตัวอย่าง 1" },
-    select: { id: true },
-  });
-  if (!exampleDraw) {
-    await prisma.draw.create({
-      data: {
-      organizationId: org.id,
-      name: "งวดตัวอย่าง 1",
-      opensAt: now,
-      cutoffAt: cutoff,
-      status: "OPEN",
-      },
-    });
-  }
-
   const counts = {
     organizations: await prisma.organization.count(),
     users: await prisma.user.count(),

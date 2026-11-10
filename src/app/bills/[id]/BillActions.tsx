@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import {
   cancelBillAction,
   confirmBillAction,
+  deleteBillAction,
   requestCancelAction,
   type ActionState,
 } from "../actions";
@@ -71,6 +72,24 @@ export function RequestCancelForm({ billId }: { billId: string }) {
       )}
       <button type="submit" className="danger-button" disabled={pending}>
         {pending ? "กำลังส่งคำขอ..." : "เสนอยกเลิกให้ผู้มีอำนาจอนุมัติ"}
+      </button>
+    </form>
+  );
+}
+
+export function DeleteBillForm({ billId, billLabel, attachmentCount }: { billId: string; billLabel: string; attachmentCount: number }) {
+  const [state, formAction, pending] = useActionState(deleteBillAction, INITIAL);
+
+  return (
+    <form className="delete-bill-form" action={formAction} onSubmit={(event) => {
+      const evidence = attachmentCount > 0 ? ` และลบหลักฐาน ${attachmentCount} ไฟล์` : "";
+      if (!window.confirm(`ลบ${billLabel}ถาวร${evidence}ใช่ไหม? หากงวดนี้เคยคำนวณแล้ว ระบบจะยกเลิกยอดสรุปเพื่อให้คำนวณใหม่`)) event.preventDefault();
+    }}>
+      <input type="hidden" name="billId" value={billId} />
+      {state.error !== null && <p className="error" role="alert">{state.error}</p>}
+      <p className="notice">การลบจะนำรายการเลขและหลักฐานออกถาวร แต่ยังเก็บ Audit Log ไว้ตรวจสอบย้อนหลัง</p>
+      <button type="submit" className="danger-button" disabled={pending}>
+        {pending ? "กำลังลบบิล..." : "ลบบิลถาวร"}
       </button>
     </form>
   );

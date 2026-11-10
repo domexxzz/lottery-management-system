@@ -18,6 +18,7 @@ export default async function DrawsPage() {
   const draws = await listDraws(actor, null);
   const latestDraws = draws.slice(0, 5);
   const canManage = can(actor.role, "draw.manage");
+  const canDelete = can(actor.role, "draw.delete");
   const canEnterResults = can(actor.role, "result.enter");
   const canReviewResults = can(actor.role, "result.approve") && !canEnterResults;
   const existingDrawNames = new Set(draws.map((draw) => draw.name));
@@ -67,7 +68,7 @@ export default async function DrawsPage() {
             <div><p className="page-eyebrow">Recent Draws</p><h2 id="latest-draws-heading">5 งวดล่าสุด</h2><p>เรียงตามลำดับที่กดสร้าง จากใหม่ไปเก่า</p></div>
             <Link className="draw-view-all" href="/draws/all">ดูงวดทั้งหมด ({draws.length}) →</Link>
           </div>
-          <DrawTable draws={latestDraws} canEnterResults={canEnterResults} canReviewResults={canReviewResults} canManage={canManage} />
+          <DrawTable draws={latestDraws} canEnterResults={canEnterResults} canReviewResults={canReviewResults} canManage={canManage} canDelete={canDelete} />
           {draws.length > 5 && <p className="draw-list-note">หน้านี้แสดงเฉพาะ 5 งวดล่าสุด เพื่อให้ค้นหางานปัจจุบันได้ง่ายขึ้น</p>}
         </section>
       </section>

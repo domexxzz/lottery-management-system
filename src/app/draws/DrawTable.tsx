@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { DashboardIcon } from "../DashboardIcon";
-import { LockDrawForm } from "./DrawForms";
+import { DeleteDrawForm, LockDrawForm } from "./DrawForms";
 import { DrawReviewButton } from "./DrawReviewButton";
 import type { listDraws } from "@/lib/draws/service";
 import {
@@ -28,13 +28,15 @@ export function DrawTable({
   canEnterResults,
   canReviewResults,
   canManage,
+  canDelete,
 }: {
   draws: DrawRow[];
   canEnterResults: boolean;
   canReviewResults: boolean;
   canManage: boolean;
+  canDelete: boolean;
 }) {
-  const columnCount = 5 + Number(canEnterResults) + Number(canReviewResults) + Number(canManage);
+  const columnCount = 5 + Number(canEnterResults) + Number(canReviewResults) + Number(canManage || canDelete);
 
   return <div className="table-wrap"><table className="draw-list-table">
     <thead>
@@ -46,7 +48,7 @@ export function DrawTable({
         <th scope="col">สถานะ</th>
         {canEnterResults && <th scope="col">กรอกผลรางวัล</th>}
         {canReviewResults && <th scope="col">ตรวจผลรางวัล</th>}
-        {canManage && <th scope="col">การจัดการ</th>}
+        {(canManage || canDelete) && <th scope="col">การจัดการ</th>}
       </tr>
     </thead>
     <tbody>
@@ -79,7 +81,10 @@ export function DrawTable({
               <span aria-hidden="true">…</span> รอกรอกผล
             </button> : <DrawReviewButton href={`/draws/${draw.id}#result-entry-list`} drawName={draw.name} label={draw.status === "RESULT_PENDING" ? "ตรวจผลรางวัล" : "ดูผลรางวัล"} />}
           </td>}
-          {canManage && <td>{draw.status === "OPEN" && <LockDrawForm drawId={draw.id} />}</td>}
+          {(canManage || canDelete) && <td><div className="draw-management-actions">
+            {canManage && draw.status === "OPEN" && <LockDrawForm drawId={draw.id} />}
+            {canDelete && <DeleteDrawForm drawId={draw.id} drawName={draw.name} billCount={draw._count.bills} />}
+          </div></td>}
         </tr>;
       })}
     </tbody>

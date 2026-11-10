@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { defaultOfficialDrawWindow, officialDrawName, parseBangkokDateTimeLocal, toBangkokDateTimeLocal } from "@/lib/draws/schedule";
 import { AppDropdown } from "../AppDropdown";
-import { createDrawAction, lockDrawAction, type ActionState } from "./actions";
+import { createDrawAction, deleteDrawAction, lockDrawAction, type ActionState } from "./actions";
 import { DateTimePicker } from "@/components/calendar";
 
 const INITIAL: ActionState = { error: null, message: null };
@@ -111,6 +111,24 @@ export function LockDrawForm({ drawId }: { drawId: string }) {
       {state.message !== null && <p role="status">{state.message}</p>}
       <button type="submit" disabled={pending}>
         {pending ? "กำลังปิดงวด..." : "ปิดงวดตอนนี้"}
+      </button>
+    </form>
+  );
+}
+
+export function DeleteDrawForm({ drawId, drawName, billCount }: { drawId: string; drawName: string; billCount: number }) {
+  const [state, formAction, pending] = useActionState(deleteDrawAction, INITIAL);
+
+  return (
+    <form className="delete-draw-form" action={formAction} onSubmit={(event) => {
+      const detail = billCount > 0 ? ` รวมบิล ${billCount} ใบและหลักฐานทั้งหมด` : "";
+      if (!window.confirm(`ลบงวด “${drawName}” ถาวร${detail}ใช่ไหม? การดำเนินการนี้ย้อนกลับจากหน้าเว็บไม่ได้`)) event.preventDefault();
+    }}>
+      <input type="hidden" name="drawId" value={drawId} />
+      {state.error !== null && <p className="error" role="alert">{state.error}</p>}
+      {state.message !== null && <p role="status">{state.message}</p>}
+      <button type="submit" className="danger-button" disabled={pending}>
+        {pending ? "กำลังลบ..." : "ลบงวด"}
       </button>
     </form>
   );

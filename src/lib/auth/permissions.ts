@@ -12,6 +12,7 @@ export const PERMISSIONS = [
   "bill.viewOwn",
   "bill.create",
   "bill.confirm",
+  "bill.delete",
   "bill.editBeforeCutoff",
   "bill.proposeChangeAfterCutoff",
   "bill.approveChangeAfterCutoff",
@@ -26,10 +27,12 @@ export const PERMISSIONS = [
   "audit.viewOwn",
   "agent.manage",
   "draw.manage",
+  "draw.delete",
   "user.manage",
   "evidence.view",
   "evidence.upload",
   "evidence.review",
+  "evidence.delete",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -53,6 +56,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "bill.viewOwn",
     "bill.create",
     "bill.confirm",
+    "bill.delete",
     "bill.editBeforeCutoff",
     "bill.proposeChangeAfterCutoff",
     "bill.approveChangeAfterCutoff",
@@ -67,10 +71,12 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "audit.viewOwn",
     "agent.manage",
     "draw.manage",
+    "draw.delete",
     "user.manage",
     "evidence.view",
     "evidence.upload",
     "evidence.review",
+    "evidence.delete",
   ],
   ADMIN: [
     "report.viewAllAgents",

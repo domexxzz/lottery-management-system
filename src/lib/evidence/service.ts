@@ -4,6 +4,7 @@ import { Prisma, type AttachmentStatus, type AttachmentType } from "@prisma/clie
 import { prisma } from "@/lib/db";
 import { writeAudit, type TxClient } from "@/lib/audit";
 import { billScope, requirePermission, type Actor } from "@/lib/auth/context";
+import { can } from "@/lib/auth/permissions";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { getStorageConfig } from "@/lib/storage/config";
 import { getStorageProvider } from "@/lib/storage/provider";
@@ -345,15 +346,21 @@ export async function deleteDraftAttachment(
   attachmentId: string,
   storage: PrivateObjectStorage = getStorageProvider(),
 ): Promise<void> {
-  requirePermission(actor, "evidence.upload");
+  const ownerDelete = can(actor.role, "evidence.delete");
+  if (ownerDelete) requirePermission(actor, "evidence.delete");
+  else requirePermission(actor, "evidence.upload");
   const attachment = await attachmentForActor(actor, attachmentId);
-  if (!canManageDraftEvidence({ role: actor.role, billStatus: attachment.bill.status })) {
+  if (!ownerDelete && !canManageDraftEvidence({ role: actor.role, billStatus: attachment.bill.status })) {
     throw new ConflictError("ลบหลักฐานได้เฉพาะตอนบิลยังเป็นร่าง");
   }
   const replaced = await prisma.billAttachment.findFirst({ where: { replacesId: attachment.id }, select: { id: true } });
-  if (replaced) throw new ConflictError("ลบหลักฐานเวอร์ชันเก่าที่มีไฟล์แทนแล้วไม่ได้");
+  if (replaced && !ownerDelete) throw new ConflictError("ลบหลักฐานเวอร์ชันเก่าที่มีไฟล์แทนแล้วไม่ได้");
 
   await prisma.$transaction(async (tx) => {
+    if (ownerDelete) {
+      // ตัดความสัมพันธ์เวอร์ชันใหม่ก่อน เพื่อให้ Owner ลบหลักฐานเก่าได้โดยไม่ชน unique FK
+      await tx.billAttachment.updateMany({ where: { replacesId: attachment.id }, data: { replacesId: null } });
+    }
     await tx.billAttachment.delete({ where: { id: attachment.id } });
     await writeAudit(tx, {
       organizationId: attachment.organizationId,
@@ -364,7 +371,7 @@ export async function deleteDraftAttachment(
       entityType: "BillAttachment",
       entityId: attachment.id,
       before: { billId: attachment.billId, type: attachment.type, checksum: attachment.checksum },
-      reason: "ลบหลักฐานจากบิลร่าง",
+      reason: ownerDelete ? "Owner ลบหลักฐานถาวร" : "ลบหลักฐานจากบิลร่าง",
     });
   });
   try {

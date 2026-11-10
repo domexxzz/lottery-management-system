@@ -8,6 +8,7 @@ import {
   cancelBill,
   confirmBill,
   createDraftBill,
+  deleteBillPermanently,
   placeBill,
   replaceDraftItems,
   requestCancelAfterCutoff,
@@ -138,6 +139,26 @@ export async function cancelBillAction(
 
   revalidatePath(`/bills/${billId}`);
   return { error: null };
+}
+
+export async function deleteBillAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireActor();
+  const billId = String(formData.get("billId") ?? "");
+
+  try {
+    await deleteBillPermanently(actor, billId);
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath("/bills");
+  revalidatePath("/draws");
+  revalidatePath("/reports");
+  redirect("/bills");
 }
 
 const PlaceSchema = z.object({

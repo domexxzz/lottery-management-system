@@ -53,24 +53,6 @@
   .dashboard-topbar .account-popover { position: fixed; top: 66px; right: 9px; color: #17364d; }
   .system-state { min-width: 0; padding: 0; border: 0; color: #dffcf3; background: transparent; }
   .system-state .online-dot { width: 8px; height: 8px; box-shadow: 0 0 0 3px rgb(75 220 172 / 16%); }
-  .mock-data-control {
-    min-width: 118px !important;
-    min-height: 38px !important;
-    padding: 4px 6px 4px 8px !important;
-    gap: 5px !important;
-    border-color: rgb(165 235 211 / 28%) !important;
-    color: #eafff8;
-    background: rgb(255 255 255 / 9%) !important;
-    box-shadow: none !important;
-  }
-  .mock-data-control > div { min-width: 0; }
-  .mock-data-control strong { overflow: hidden; color: #effff9; font-size: 10px !important; text-overflow: ellipsis; white-space: nowrap; }
-  .mock-data-control small { display: none; }
-  .mock-data-state { display: inline !important; color: #aaf3d5 !important; font-size: 9px !important; }
-  .mock-data-control button { width: 32px !important; min-width: 32px !important; height: 20px !important; min-height: 20px !important; }
-  .mock-data-control button > span { width: 14px !important; height: 14px !important; }
-  .mock-data-control button[aria-checked="true"] > span { transform: translateX(12px) !important; }
-
   .mobile-bottom-nav {
     position: fixed;
     z-index: 1200;
@@ -493,7 +475,6 @@
 }
 
 @media (max-width: 380px) {
-  .mock-data-control { min-width: 104px !important; }
   .dashboard-shell .app-page :is(.page-hero-copy h1,.dashboard-intro h1,.analytics-hero h1,.users-hero h1,.agents-map-title h1,.report-hero h1) { font-size: 20px !important; }
   .welcome-actions { grid-template-columns: 1fr; }
   .dashboard-shell .filter-fields { grid-template-columns: 1fr; }

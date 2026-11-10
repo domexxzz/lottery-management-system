@@ -29,6 +29,7 @@ export default async function AllDrawsPage({ searchParams }: { searchParams: Pro
     && (!status || getDrawDisplayStatus(draw) === status)
   ));
   const canManage = can(actor.role, "draw.manage");
+  const canDelete = can(actor.role, "draw.delete");
   const canEnterResults = can(actor.role, "result.enter");
   const canReviewResults = can(actor.role, "result.approve") && !canEnterResults;
 
@@ -37,7 +38,7 @@ export default async function AllDrawsPage({ searchParams }: { searchParams: Pro
       <p><Link href="/draws">← กลับหน้าจัดการงวด</Link></p>
       <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">All Draws</p><h1 id="all-draws-heading">งวดทั้งหมด</h1><p>ดูประวัติและดำเนินการกับทุกงวด เรียงตามวันที่เปิดรับจากใหม่ไปเก่า</p></div><span className="draw-total-badge">{draws.length} / {allDraws.length} งวด</span></header>
       <AllDrawFilters draws={allDraws.map((draw) => ({ id: draw.id, name: draw.name, status: getDrawDisplayStatus(draw) }))} />
-      <DrawTable draws={draws} canEnterResults={canEnterResults} canReviewResults={canReviewResults} canManage={canManage} />
+      <DrawTable draws={draws} canEnterResults={canEnterResults} canReviewResults={canReviewResults} canManage={canManage} canDelete={canDelete} />
     </section>
   </main>;
 }

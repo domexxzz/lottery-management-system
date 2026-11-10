@@ -6,7 +6,7 @@ import { can } from "@/lib/auth/permissions";
 import { getBill } from "@/lib/bills/service";
 import { canTransition } from "@/lib/bills/lifecycle";
 import { NotFoundError } from "@/lib/errors";
-import { CancelForm, ConfirmButton, RequestCancelForm } from "./BillActions";
+import { CancelForm, ConfirmButton, DeleteBillForm, RequestCancelForm } from "./BillActions";
 import { EvidenceManager } from "./EvidenceManager";
 import { SlipDetail } from "./SlipDetail";
 import "./evidence.css";
@@ -56,6 +56,8 @@ export default async function BillDetailPage({
     bill.cancelRequestedById === null &&
     can(actor.role, "bill.proposeChangeAfterCutoff") &&
     !can(actor.role, "bill.approveChangeAfterCutoff");
+  const canDeleteBill = can(actor.role, "bill.delete");
+  const canDeleteEvidence = can(actor.role, "evidence.delete");
 
   const evidenceConfig = getStorageConfig();
   const [attachmentDetails, settlement] = await Promise.all([
@@ -118,6 +120,7 @@ export default async function BillDetailPage({
             billId={bill.id}
             billStatus={bill.status}
             canUpload={can(actor.role, "evidence.upload")}
+            canDelete={canDeleteEvidence}
             maxFiles={evidenceConfig.maxFilesPerBill}
             maxFileSizeMb={Math.round(evidenceConfig.maxFileSizeBytes / 1024 / 1024)}
             billTotalStake={bill.totalStake.toFixed(2)}
@@ -147,7 +150,7 @@ export default async function BillDetailPage({
           />
         </details>
 
-        {(canConfirm || canRequestCancel || canCancel) && (
+        {(canConfirm || canRequestCancel || canCancel || canDeleteBill) && (
           <details className="slip-panel slip-collapse" open={canConfirm}>
             <summary>
               <span>จัดการบิล</span>
@@ -157,6 +160,7 @@ export default async function BillDetailPage({
               {canConfirm && <ConfirmButton billId={bill.id} evidenceReady={evidenceReady} evidenceMessage={evidenceMessage} />}
               {canRequestCancel && <RequestCancelForm billId={bill.id} />}
               {canCancel && <CancelForm billId={bill.id} label={afterCutoff ? "อนุมัติและยกเลิกบิล" : "ยกเลิกบิล"} />}
+              {canDeleteBill && <DeleteBillForm billId={bill.id} billLabel={`บิล ${bill.drawSequence ?? "ร่าง"}`} attachmentCount={activeEvidence.length} />}
             </div>
           </details>
         )}

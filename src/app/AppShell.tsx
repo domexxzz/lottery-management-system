@@ -3,7 +3,6 @@ import { SidebarNav } from "./SidebarNav";
 import { logoutAction } from "./logout-action";
 import { DashboardIcon } from "./DashboardIcon";
 import { AccountMenu, MobileNavigation, SystemStatus } from "./ShellControls";
-import { MockDataToggle } from "./MockDataToggle";
 import "./owner-chatbot.css";
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -17,12 +16,10 @@ export function AppShell({
   children,
   displayName,
   role,
-  mockDataEnabled,
 }: {
   children: React.ReactNode;
   displayName: string;
   role: Role;
-  mockDataEnabled: boolean;
 }) {
   return (
     <div className="dashboard-shell">
@@ -49,7 +46,6 @@ export function AppShell({
             <SystemStatus />
           </div>
           <div className="topbar-end">
-            <MockDataToggle initialEnabled={mockDataEnabled} canManage={role === "GODMODE" || role === "OWNER"} />
             <AccountMenu displayName={displayName} roleLabel={ROLE_LABEL[role]} />
           </div>
         </header>
