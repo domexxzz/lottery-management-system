@@ -57,7 +57,7 @@ export async function ManagementDashboard({ actor, filters }: { actor: Actor; fi
         ดูข้อมูลทั้งระบบ หรือเลือกตัวกรองเพื่อเจาะรายละเอียดที่ต้องการ
       </DashboardHeading>
       <div className="welcome-actions">
-        {(actor.role === "GODMODE" || actor.role === "OWNER") && <Link href="/analytics" className="analytics-button"><Icon name="analytics"/><strong>วิเคราะห์เชิงลึก</strong><Icon name="arrow"/></Link>}
+        {actor.role === "OWNER" && <Link href="/analytics" className="analytics-button"><Icon name="analytics"/><strong>วิเคราะห์เชิงลึก</strong><Icon name="arrow"/></Link>}
         <Link href="/audit" className="audit-shortcut"><Icon name="audit"/><strong>ประวัติการตรวจผลรางวัล</strong></Link>
       </div>
     </div>

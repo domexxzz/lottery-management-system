@@ -6,7 +6,7 @@ import { can } from "@/lib/auth/permissions";
 import { getBill } from "@/lib/bills/service";
 import { canTransition } from "@/lib/bills/lifecycle";
 import { NotFoundError } from "@/lib/errors";
-import { CancelForm, ConfirmButton, DeleteBillForm, EditBillForm, RequestCancelForm } from "./BillActions";
+import { ConfirmButton, DeleteBillForm, EditBillForm } from "./BillActions";
 import { EvidenceManager } from "./EvidenceManager";
 import { SlipDetail } from "./SlipDetail";
 import "./evidence.css";
@@ -41,20 +41,6 @@ export default async function BillDetailPage({
   }
 
   const canConfirm = canTransition(bill.status, "CONFIRMED") && can(actor.role, "bill.confirm");
-  const afterCutoff = bill.status === "LOCKED";
-
-  // หลังปิดรับ ผู้อนุมัติเท่านั้นที่ยกเลิกได้ และต้องไม่ใช่คนที่เสนอเอง
-  const canCancel =
-    afterCutoff &&
-    canTransition(bill.status, "CANCELLED") &&
-    can(actor.role, "bill.approveChangeAfterCutoff") &&
-    bill.cancelRequestedById !== actor.userId;
-
-  const canRequestCancel =
-    afterCutoff &&
-    bill.cancelRequestedById === null &&
-    can(actor.role, "bill.proposeChangeAfterCutoff") &&
-    !can(actor.role, "bill.approveChangeAfterCutoff");
   const beforeCutoff = bill.draw.status === "OPEN" && Date.now() < bill.draw.cutoffAt.getTime();
   const editableStatus = bill.status === "CONFIRMED" || bill.status === "DRAFT";
   const canEditBill = beforeCutoff && editableStatus && can(actor.role, "bill.editBeforeCutoff");
@@ -110,10 +96,7 @@ export default async function BillDetailPage({
         </header>
 
         {bill.status === "CANCELLED" && (
-          <p className="slip-alert is-danger" role="status">{bill.cancelReason === "ลบบิลก่อนปิดรับ" ? "ลบแล้ว" : "ยกเลิกแล้ว"}โดย {bill.cancelledBy?.displayName ?? "-"}{bill.cancelledAt ? ` · ${new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" }).format(bill.cancelledAt)}` : ""}</p>
-        )}
-        {bill.cancelRequestedById !== null && bill.status !== "CANCELLED" && (
-          <p className="slip-alert" role="status">มีคำขอยกเลิกจาก {bill.cancelRequestedBy?.displayName ?? "-"} · เหตุผล: {bill.cancelRequestReason} · รอผู้มีอำนาจอนุมัติ</p>
+          <p className="slip-alert is-danger" role="status">ลบแล้วโดย {bill.cancelledBy?.displayName ?? "-"}{bill.cancelledAt ? ` · ${new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" }).format(bill.cancelledAt)}` : ""}</p>
         )}
 
         <SlipDetail
@@ -215,16 +198,14 @@ export default async function BillDetailPage({
           />
         </details>
 
-        {(canConfirm || canRequestCancel || canCancel || canDeleteBill) && (
+        {(canConfirm || canDeleteBill) && (
           <details className="slip-panel slip-collapse" open={canConfirm}>
             <summary>
               <span>จัดการบิล</span>
-              <small>{canConfirm ? "ยืนยันบิลร่าง" : "ยกเลิกหรือขอยกเลิกบิล"}</small>
+              <small>{canConfirm ? "ยืนยันบิลร่าง" : "ลบบิลก่อนปิดรับ"}</small>
             </summary>
             <div className="slip-collapse-body">
               {canConfirm && <ConfirmButton billId={bill.id} evidenceReady={evidenceReady} evidenceMessage={evidenceMessage} />}
-              {canRequestCancel && <RequestCancelForm billId={bill.id} />}
-              {canCancel && <CancelForm billId={bill.id} label={afterCutoff ? "อนุมัติและยกเลิกบิล" : "ยกเลิกบิล"} />}
               {canDeleteBill && <DeleteBillForm billId={bill.id} billLabel={`บิล ${bill.drawSequence ?? "ร่าง"}`} attachmentCount={activeEvidence.length} />}
             </div>
           </details>

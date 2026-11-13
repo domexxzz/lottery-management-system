@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
-import { createDraftBill, deleteBillPermanently, replaceDraftItems } from "@/lib/bills/service";
+import { createDraftBill, replaceDraftItems, softDeleteBillBeforeCutoff } from "@/lib/bills/service";
 import { deleteDrawPermanently } from "@/lib/draws/service";
 
 let f: Fixtures;
@@ -18,29 +18,53 @@ async function draftBill() {
   return draft.billId;
 }
 
-describe("Owner ลบข้อมูลธุรกรรมแบบถาวร", () => {
-  test("ลบบิลพร้อมรายการเลขและคง Audit Log", async () => {
+describe("การลบบิลแบบเก็บประวัติ", () => {
+  test("ลบบิลแล้วคงบิล รายการเลข ผู้ลบ เวลา และ Audit Log", async () => {
     const billId = await draftBill();
+    const attachment = await prisma.billAttachment.create({
+      data: {
+        organizationId: f.org.id,
+        billId,
+        type: "ORDER_EVIDENCE",
+        storageKey: `tests/${billId}/evidence.jpg`,
+        originalName: "evidence.jpg",
+        mimeType: "image/jpeg",
+        fileSize: 128,
+        checksum: `checksum-${billId}`,
+        uploadedById: f.users.admin.id,
+      },
+    });
 
-    await expect(deleteBillPermanently(f.actors.ADMIN, billId)).rejects.toThrow(/ไม่มีสิทธิ์/);
-    const outcome = await deleteBillPermanently(f.actors.OWNER, billId);
-
-    expect(outcome.billId).toBe(billId);
-    expect(await prisma.bill.findUnique({ where: { id: billId } })).toBeNull();
-    expect(await prisma.billItem.count({ where: { billId } })).toBe(0);
+    await softDeleteBillBeforeCutoff(f.actors.ADMIN, billId);
+    const deleted = await prisma.bill.findUniqueOrThrow({ where: { id: billId } });
+    expect(deleted.status).toBe("CANCELLED");
+    expect(deleted.cancelReason).toBe("ลบบิลก่อนปิดรับ");
+    expect(deleted.cancelledById).toBe(f.users.admin.id);
+    expect(deleted.cancelledAt).toBeInstanceOf(Date);
+    expect(await prisma.billItem.count({ where: { billId } })).toBe(1);
+    expect(await prisma.billAttachment.findUnique({ where: { id: attachment.id } })).not.toBeNull();
     expect(await prisma.auditEvent.count({ where: { entityType: "Bill", entityId: billId, action: "DELETE" } })).toBe(1);
   });
 
-  test("ลบงวดพร้อมบิลและข้อมูลลูกทั้งหมด โดยไม่ให้ Admin ลบ", async () => {
-    const billId = await draftBill();
-
+  test("ไม่ลบงวดที่มีบิล และ Owner ลบได้เฉพาะงวดว่าง", async () => {
+    await draftBill();
     await expect(deleteDrawPermanently(f.actors.ADMIN, f.draw.id)).rejects.toThrow(/ไม่มีสิทธิ์/);
-    const outcome = await deleteDrawPermanently(f.actors.OWNER, f.draw.id);
+    await expect(deleteDrawPermanently(f.actors.OWNER, f.draw.id)).rejects.toThrow(/ต้องเก็บประวัติบิล/);
 
-    expect(outcome.drawId).toBe(f.draw.id);
-    expect(outcome.billsDeleted).toBe(1);
-    expect(await prisma.draw.findUnique({ where: { id: f.draw.id } })).toBeNull();
-    expect(await prisma.bill.findUnique({ where: { id: billId } })).toBeNull();
-    expect(await prisma.auditEvent.count({ where: { entityType: "Draw", entityId: f.draw.id, action: "DELETE" } })).toBe(1);
+    const emptyDraw = await prisma.draw.create({
+      data: {
+        organizationId: f.org.id,
+        name: "งวดว่าง",
+        opensAt: new Date("2027-01-01T00:00:00+07:00"),
+        cutoffAt: new Date("2027-01-15T14:00:00+07:00"),
+        drawDate: new Date("2027-01-16T00:00:00+07:00"),
+      },
+    });
+    const outcome = await deleteDrawPermanently(f.actors.OWNER, emptyDraw.id);
+
+    expect(outcome.drawId).toBe(emptyDraw.id);
+    expect(outcome.billsDeleted).toBe(0);
+    expect(await prisma.draw.findUnique({ where: { id: emptyDraw.id } })).toBeNull();
+    expect(await prisma.auditEvent.count({ where: { entityType: "Draw", entityId: emptyDraw.id, action: "DELETE" } })).toBe(1);
   });
 });

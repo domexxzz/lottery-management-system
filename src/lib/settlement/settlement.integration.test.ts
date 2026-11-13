@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
-import { confirmBill, createDraftBill, replaceDraftItems } from "@/lib/bills/service";
+import { confirmBill, createDraftBill, replaceDraftItems, softDeleteBillBeforeCutoff } from "@/lib/bills/service";
 import { lockDrawManually } from "@/lib/draws/service";
 import { approveResult, enterResult, proposeResultCorrection } from "@/lib/results/service";
 import {
@@ -203,7 +203,7 @@ describe("เส้นทางเงินเต็มเส้น", () => {
     expect(previews[0]!.payout.toFixed(2)).toBe("90000.00");
   });
 
-  test("บิลที่ยกเลิกไม่ถูกนับเข้ายอด", async () => {
+  test("บิลที่ลบแล้วไม่ถูกนับเข้ายอด", async () => {
     const { threeTop } = f.prizeTypes;
     const keep = await confirmedBill(
       f.actors.AGENT1,
@@ -213,11 +213,10 @@ describe("เส้นทางเงินเต็มเส้น", () => {
     const drop = await confirmedBill(
       f.actors.AGENT1,
       [{ prizeTypeId: threeTop.id, number: "123", stake: "500" }],
-      "ยกเลิก",
+      "ลบแล้ว",
     );
 
-    const { cancelBill } = await import("@/lib/bills/service");
-    await cancelBill(f.actors.ADMIN, drop.billId, "ทดสอบว่าไม่ถูกนับ");
+    await softDeleteBillBeforeCutoff(f.actors.ADMIN, drop.billId);
 
     await lockDrawManually(f.actors.ADMIN, f.draw.id);
     await approveResults([{ prizeTypeId: threeTop.id, value: "123" }]);

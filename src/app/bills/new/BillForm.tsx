@@ -13,7 +13,7 @@ export type PrizeOption = { id: string; code: number; name: string; digits: numb
 export type RepresentativeOption = {
   id: string;
   displayName: string;
-  role: "GODMODE" | "OWNER" | "ADMIN" | "AGENT";
+  role: "OWNER" | "ADMIN" | "AGENT";
   agent: { id: string; code: string; name: string; status: string } | null;
 };
 
@@ -184,7 +184,7 @@ export function BillForm({
             options={representatives.map((representative) => ({
               value: representative.id,
               label: representative.displayName,
-              description: `${representative.role === "GODMODE" ? "Godmode" : representative.role === "OWNER" ? "Owner" : representative.role === "ADMIN" ? "Admin" : "Agent"}${representative.agent ? ` · ${representative.agent.code}` : " · ระบบจะสร้าง Agent ให้อัตโนมัติ"}`,
+              description: `${representative.role === "OWNER" ? "Owner" : representative.role === "ADMIN" ? "Admin" : "Agent"}${representative.agent ? ` · ${representative.agent.code}` : " · ระบบจะสร้าง Agent ให้อัตโนมัติ"}`,
             }))}
           />
         </div>

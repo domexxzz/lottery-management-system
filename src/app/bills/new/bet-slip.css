@@ -236,15 +236,3 @@
 }
 
 /* ---------------------------------------------------------------- โหมดมืด */
-html[data-theme="dark"] .bet-slip { --bs-text: #e6f0fb; --bs-muted: #9fb3c9; --bs-border: #2b445c; --bs-soft: #16314b; --bs-surface: #122536; }
-html[data-theme="dark"] .bs-breadcrumb, html[data-theme="dark"] .bs-breadcrumb span:last-child { color: #c9d8e8; }
-html[data-theme="dark"] .bs-breadcrumb a { color: #8cc0ff; }
-html[data-theme="dark"] .bs-title-icon { background: #16314b; box-shadow: none; }
-html[data-theme="dark"] .bs-draw-panel { border-color: #2b445c; background: rgb(18 37 54 / 92%); box-shadow: none; }
-html[data-theme="dark"] .bs-draw-select { background: #16314b; }
-html[data-theme="dark"] .bs-draw-flag { background: #20384d; box-shadow: none; }
-html[data-theme="dark"] .bs-countdown { border-color: #2b445c; }
-html[data-theme="dark"] :is(.bs-entry, .bs-checks, .bs-digits span, .bs-field select, .bs-list .customer-combobox > input, .bs-stepper input, .bs-entry-input) { border-color: #2b445c; color: var(--bs-text); background: #0f1f2e; }
-html[data-theme="dark"] .app-page .bet-slip :is(.bs-tab, .bs-option, .bs-key, .bs-icon-button, .bs-info-links button, .bs-draft) { border-color: #2b445c; color: var(--bs-text); background: #0f1f2e; box-shadow: none; }
-html[data-theme="dark"] .app-page .bet-slip .bs-tab[aria-selected="true"], html[data-theme="dark"] .app-page .bet-slip .bs-option[aria-pressed="true"] { color: #fff; background: var(--bs-blue); }
-html[data-theme="dark"] .bs-banner { border-color: #6b5520; color: #ffe2a0; background: #2c2412; }

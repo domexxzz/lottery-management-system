@@ -233,6 +233,9 @@ export async function deleteDrawPermanently(
       },
     });
     if (!draw) throw new NotFoundError("ไม่พบงวด");
+    if (draw.bills.length > 0) {
+      throw new ConflictError("ลบงวดที่มีบิลไม่ได้ เพราะต้องเก็บประวัติบิล รายการเลข และหลักฐานไว้");
+    }
 
     const storageKeys = draw.bills.flatMap((bill) => bill.attachments.map((item) => item.storageKey));
     const billIds = draw.bills.map((bill) => bill.id);
@@ -240,7 +243,6 @@ export async function deleteDrawPermanently(
 
     const settlements = await tx.settlement.deleteMany({ where: { drawId: draw.id } });
     const results = await tx.result.deleteMany({ where: { drawId: draw.id } });
-    if (billIds.length > 0) await tx.bill.deleteMany({ where: { id: { in: billIds } } });
     await tx.restrictedNumber.deleteMany({ where: { drawId: draw.id } });
     await tx.draw.delete({ where: { id: draw.id } });
 
@@ -263,7 +265,7 @@ export async function deleteDrawPermanently(
         settlements: draw._count.settlements,
         restrictedNumbers: draw._count.restrictedNumbers,
       },
-      reason: "Owner ลบงวดและข้อมูลที่เกี่ยวข้องถาวร",
+      reason: "Owner ลบงวดว่างที่ยังไม่มีบิล",
     });
 
     return {

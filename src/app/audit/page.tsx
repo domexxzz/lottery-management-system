@@ -85,7 +85,7 @@ export default async function InspectionHistoryPage({
   const [draws, users, resultGroups, totalBillCount] = await Promise.all([
     prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true } }),
     prisma.user.findMany({
-      where: { ...scope, role: { in: ["GODMODE", "OWNER", "ADMIN", "AGENT"] } },
+      where: { ...scope, role: { in: ["OWNER", "ADMIN", "AGENT"] } },
       orderBy: { displayName: "asc" },
       select: { id: true, displayName: true, role: true },
     }),

@@ -1141,62 +1141,6 @@
 .dashboard-shell .report-stat-progress { display: block; width: 115px; height: 9px; overflow: hidden; border-radius: 99px; background: #dfe9f4; }
 .dashboard-shell .report-stat-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #0755d9, #2ca9ff); }
 
-html[data-theme="dark"] .dashboard-shell .reports-page--blue { background: radial-gradient(circle at 92% 0%, rgb(28 124 218 / 18%), transparent 28%), linear-gradient(145deg, #0d1825, #111f2d); }
-html[data-theme="dark"] .dashboard-shell .report-workspace--blue { border-color: #304b65; background: rgb(17 31 45 / 82%); }
-html[data-theme="dark"] .dashboard-shell .report-hero--blue,
-html[data-theme="dark"] .dashboard-shell .report-filter-bar--glass,
-html[data-theme="dark"] .dashboard-shell .report-financial-section,
-html[data-theme="dark"] .dashboard-shell .report-snapshot-grid > .report-panel,
-html[data-theme="dark"] .dashboard-shell .report-statistics-panel,
-html[data-theme="dark"] .dashboard-shell .report-agent-panel { border-color: #30485d; background: #162534; }
-html[data-theme="dark"] .dashboard-shell .report-hero--blue h1,
-html[data-theme="dark"] .dashboard-shell .report-panel-heading h2 { color: #edf6ff; }
-html[data-theme="dark"] .dashboard-shell .report-hero--blue p:last-child,
-html[data-theme="dark"] .dashboard-shell .report-panel-heading p { color: #afc2d3; }
-html[data-theme="dark"] .dashboard-shell .report-kpi-card--gross { border-color: #285880; background: linear-gradient(135deg, #172a3b, #17344d); }
-html[data-theme="dark"] .dashboard-shell .report-kpi-card--payout { border-color: #65542d; background: linear-gradient(135deg, #172a3b, #3a3322); }
-html[data-theme="dark"] .dashboard-shell .report-kpi-card--net { border-color: #514472; background: linear-gradient(135deg, #172a3b, #2e2846); }
-html[data-theme="dark"] .dashboard-shell .report-kpi-grid--primary .report-kpi-card::after { border-color: rgb(255 255 255 / 7%); }
-html[data-theme="dark"] .dashboard-shell .report-kpi-card--gross .report-kpi-icon,
-html[data-theme="dark"] .dashboard-shell .report-financial-chart--gross .report-financial-chart-icon { color: #a9d8ff; background: #1d4768; }
-html[data-theme="dark"] .dashboard-shell .report-kpi-card--payout .report-kpi-icon,
-html[data-theme="dark"] .dashboard-shell .report-financial-chart--payout .report-financial-chart-icon { color: #ffdc96; background: #514221; }
-html[data-theme="dark"] .dashboard-shell .report-kpi-card--net .report-kpi-icon { color: #d8c9ff; background: #44376d; }
-html[data-theme="dark"] .dashboard-shell .report-financial-chart--net .report-financial-chart-icon { color: #a8ecd9; background: #214d43; }
-html[data-theme="dark"] .dashboard-shell .report-section-icon { color: #a9d8ff; background: #1d4768; }
-html[data-theme="dark"] .dashboard-shell .report-section-icon--amber { color: #ffdc96; background: #514221; }
-html[data-theme="dark"] .dashboard-shell .report-status-pill { color: #a7ebd3; background: #21483c; }
-html[data-theme="dark"] .dashboard-shell .report-status-pill.status-open { color: #acdff8; background: #263f53; }
-html[data-theme="dark"] .dashboard-shell .report-status-pill.status-result_pending,
-html[data-theme="dark"] .dashboard-shell .report-status-pill.status-locked { color: #f5d58d; background: #503f22; }
-html[data-theme="dark"] .dashboard-shell .report-kpi-grid--primary :is(small,strong,em) { color: #e7f2fa !important; }
-html[data-theme="dark"] .dashboard-shell .report-kpi-grid--primary strong.negative { color: #ffadb6 !important; }
-html[data-theme="dark"] .dashboard-shell .report-financial-chart { border-color: #30485c; background: linear-gradient(155deg, #192a38, #152431); }
-html[data-theme="dark"] .dashboard-shell .report-financial-chart > header { border-color: #304657; }
-html[data-theme="dark"] .dashboard-shell .report-financial-chart header strong,
-html[data-theme="dark"] .dashboard-shell .report-financial-chart > footer strong { color: #edf6ff; }
-html[data-theme="dark"] .dashboard-shell .report-financial-chart header :is(small,em),
-html[data-theme="dark"] .dashboard-shell .report-financial-chart > footer span { color: #b5c7d5; }
-html[data-theme="dark"] .dashboard-shell .report-financial-plot { border-color: #33495a; background: repeating-linear-gradient(to bottom, transparent 0, transparent 47px, #2b3e4d 48px); }
-html[data-theme="dark"] .dashboard-shell .report-financial-plot > button:hover,
-html[data-theme="dark"] .dashboard-shell .report-financial-plot > button.selected { color: #d7ecff; background: #223b4d; }
-html[data-theme="dark"] .dashboard-shell .report-table th { color: #d3e2ed; background: #213545; }
-html[data-theme="dark"] .dashboard-shell .report-table td,
-html[data-theme="dark"] .dashboard-shell .report-table tbody tr:nth-child(even) td { color: #d8e5ed; background: #182936; }
-html[data-theme="dark"] .dashboard-shell .report-table tbody tr:hover td { background: #22394a; }
-html[data-theme="dark"] .dashboard-shell .report-table td a { color: #91dff1 !important; }
-html[data-theme="dark"] .dashboard-shell .report-ratio-ring::before { border-color: #344c5f; background: #182936; }
-html[data-theme="dark"] .dashboard-shell .report-ratio-ring strong,
-html[data-theme="dark"] .dashboard-shell .report-overview-values dd,
-html[data-theme="dark"] .dashboard-shell .report-overview-meta b { color: #edf6ff; }
-html[data-theme="dark"] .dashboard-shell .report-ratio-ring span,
-html[data-theme="dark"] .dashboard-shell .report-overview-values dt { color: #b5c7d5; }
-html[data-theme="dark"] .dashboard-shell .report-overview-values div { border-color: #304657; }
-html[data-theme="dark"] .dashboard-shell .report-overview-meta span { color: #b8cad7; background: #213544; }
-html[data-theme="dark"] .dashboard-shell .report-overview-note { border-color: #345773; color: #a8def7; background: #1b3a50; }
-html[data-theme="dark"] .dashboard-shell .report-overview-note small { color: #bdd1df; }
-html[data-theme="dark"] .dashboard-shell .report-stat-progress { background: #314757; }
-
 @media (max-width: 1280px) {
   .dashboard-shell .report-financial-grid { grid-template-columns: 1fr; }
   .dashboard-shell .report-financial-plot > button { min-width: 42px; }
@@ -1312,36 +1256,6 @@ html[data-theme="dark"] .dashboard-shell .report-stat-progress { background: #31
 .dashboard-shell .report-attention-item b { color: #274665; font-size: .68rem; }
 .dashboard-shell .report-attention-item small { color: #6e8298; font-size: .59rem; line-height: 1.45; }
 .dashboard-shell .report-attention-item > i { color: #3480c4; font-size: .8rem; font-style: normal; }
-
-html[data-theme="dark"] .dashboard-shell .report-health-panel,
-html[data-theme="dark"] .dashboard-shell .report-attention-panel { border-color: #30485d; background: #162534; }
-html[data-theme="dark"] .dashboard-shell .report-health-panel--critical { border-left-color: #ef7180; background: linear-gradient(135deg, #162534, #34232b); }
-html[data-theme="dark"] .dashboard-shell .report-health-panel--warning { border-left-color: #e6ad4f; background: linear-gradient(135deg, #162534, #332e20); }
-html[data-theme="dark"] .dashboard-shell .report-health-panel--healthy { border-left-color: #4bc19d; background: linear-gradient(135deg, #162534, #1b342f); }
-html[data-theme="dark"] .dashboard-shell .report-health-status { color: #ffacb5; }
-html[data-theme="dark"] .dashboard-shell .report-health-panel--warning .report-health-status { color: #f4d48f; }
-html[data-theme="dark"] .dashboard-shell .report-health-panel--healthy .report-health-status { color: #9ee5ca; }
-html[data-theme="dark"] .dashboard-shell .report-health-main h2,
-html[data-theme="dark"] .dashboard-shell .report-attention-panel h2 { color: #edf6ff; }
-html[data-theme="dark"] .dashboard-shell .report-health-main p,
-html[data-theme="dark"] .dashboard-shell .report-attention-panel > header > small { color: #b7c8d5; }
-html[data-theme="dark"] .dashboard-shell .report-health-facts > div { border-color: #354b5d; background: #1c2d3b; }
-html[data-theme="dark"] .dashboard-shell .report-health-facts dt { color: #aec0cf; }
-html[data-theme="dark"] .dashboard-shell .report-health-facts dd { color: #edf6ff; }
-html[data-theme="dark"] .dashboard-shell .report-health-facts dd.warning { color: #f4d48f; }
-html[data-theme="dark"] .dashboard-shell .report-health-panel > a { color: #91dff1 !important; }
-html[data-theme="dark"] .dashboard-shell .report-kpi-change.positive { color: #a7ebd3 !important; background: #21483c; }
-html[data-theme="dark"] .dashboard-shell .report-kpi-change.negative { color: #ffb2bd !important; background: #512d35; }
-html[data-theme="dark"] .dashboard-shell .report-attention-icon { color: #a9d8ff; background: #1d4768; }
-html[data-theme="dark"] .dashboard-shell .report-attention-item { border-color: #344a5c; color: #e7f1f8; background: #1a2b39; }
-html[data-theme="dark"] .dashboard-shell .report-attention-item:hover { border-color: #5f92b8; background: #203747; }
-html[data-theme="dark"] .dashboard-shell .report-attention-item b { color: #edf6ff; }
-html[data-theme="dark"] .dashboard-shell .report-attention-item small { color: #b8c9d6; }
-html[data-theme="dark"] .dashboard-shell .report-attention-item > i { color: #91dff1; }
-html[data-theme="dark"] .dashboard-shell .report-attention-item > span { color: #acdff8; background: #263f53; }
-html[data-theme="dark"] .dashboard-shell .report-attention-item--critical > span { color: #ffb2bd; background: #512d35; }
-html[data-theme="dark"] .dashboard-shell .report-attention-item--warning > span { color: #f5d58d; background: #503f22; }
-html[data-theme="dark"] .dashboard-shell .report-attention-item--healthy > span { color: #a7ebd3; background: #21483c; }
 
 /* Proportion chart — keep every value readable and calculate shares from the full dataset. */
 .report-viz-donut-layout {
@@ -1545,44 +1459,6 @@ html[data-theme="dark"] .dashboard-shell .report-attention-item--healthy > span 
   min-width: 2px;
   height: 100%;
   border-radius: inherit;
-}
-
-html[data-theme="dark"] .report-viz-share-panel {
-  border-color: #334b60;
-  background: #142431;
-}
-
-html[data-theme="dark"] .report-viz-share-panel > header strong,
-html[data-theme="dark"] .report-viz-share-name b,
-html[data-theme="dark"] .report-viz-share-value strong,
-html[data-theme="dark"] .report-viz-donut > div strong {
-  color: #edf6ff;
-}
-
-html[data-theme="dark"] .report-viz-share-panel > header small,
-html[data-theme="dark"] .report-viz-share-panel > header > span,
-html[data-theme="dark"] .report-viz-share-name small,
-html[data-theme="dark"] .report-viz-donut-summary > p,
-html[data-theme="dark"] .report-viz-donut > div :is(span, small) {
-  color: #afc4d4;
-}
-
-html[data-theme="dark"] .dashboard-shell .app-page button.report-viz-share-item,
-html[data-theme="dark"] .dashboard-shell .app-page .report-viz-share-item.is-other {
-  border-color: #344b5e;
-  color: #e7f1f8;
-  background: #1a2c3a;
-  background-image: none;
-}
-
-html[data-theme="dark"] .dashboard-shell .app-page button.report-viz-share-item:hover:not(:disabled),
-html[data-theme="dark"] .dashboard-shell .app-page button.report-viz-share-item.selected {
-  border-color: #569bd0;
-  background: #203e55;
-}
-
-html[data-theme="dark"] .report-viz-share-track {
-  background: #304657;
 }
 
 @media (max-width: 900px) {
@@ -1818,27 +1694,6 @@ html[data-theme="dark"] .report-viz-share-track {
 .advanced-boxplot u { position: absolute; z-index: 3; top: 9px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg); border: 2px solid #162f45; background: #fff; }
 .advanced-stat-table td:first-child { display: flex; align-items: center; gap: .4rem; }
 .advanced-stat-table td:first-child i { width: 8px; height: 8px; border-radius: 50%; }
-
-html[data-theme="dark"] .advanced-analytics { border-color: #324b60; background: #172734; }
-html[data-theme="dark"] .advanced-chart-selectors,
-html[data-theme="dark"] .advanced-metric-selector { background: #172734; }
-html[data-theme="dark"] .advanced-chart-selectors .app-dropdown-trigger,
-html[data-theme="dark"] .advanced-metric-selector [role="group"] button,
-html[data-theme="dark"] .advanced-scatter-summary span,
-html[data-theme="dark"] .advanced-boxplots > div { border-color: #344d61; color: #c0d0dc; background: #1d303f; }
-html[data-theme="dark"] .advanced-chart-selectors > label,
-html[data-theme="dark"] .advanced-metric-selector > div:first-child small,
-html[data-theme="dark"] .advanced-metric-selector [role="group"] button small { color: #aebfcb; }
-html[data-theme="dark"] .advanced-chart-selectors .app-dropdown-trigger,
-html[data-theme="dark"] .advanced-metric-selector > div:first-child strong,
-html[data-theme="dark"] .advanced-metric-selector [role="group"] button b,
-html[data-theme="dark"] .advanced-scatter-summary strong,
-html[data-theme="dark"] .advanced-boxplots header strong { color: #edf6ff; }
-html[data-theme="dark"] .advanced-analysis-note { border-color: #35556c; color: #c0d2df; background: #1d3343; }
-html[data-theme="dark"] .advanced-gridline { stroke: #31495b; }
-html[data-theme="dark"] .advanced-axis-label,
-html[data-theme="dark"] .advanced-x-label,
-html[data-theme="dark"] .advanced-axis-title { fill: #b3c5d2; }
 
 @media (max-width: 900px) {
   .advanced-chart-selectors { grid-template-columns: 1fr 1fr; }
@@ -2303,51 +2158,6 @@ html[data-theme="dark"] .advanced-axis-title { fill: #b3c5d2; }
 .business-selected-row strong.negative { color: #bf3f4c; }
 .business-selected-row a { padding: .38rem .6rem; border-radius: 8px; color: #fff; background: #1677ff; font-size: .57rem; font-weight: 850; text-decoration: none; white-space: nowrap; }
 
-html[data-theme="dark"] .advanced-analytics.business-friendly,
-html[data-theme="dark"] .advanced-analytics.business-friendly .business-friendly-heading,
-html[data-theme="dark"] .business-simple-controls { border-color: #344d61; background: #172734; }
-html[data-theme="dark"] .dashboard-shell .app-page .business-friendly-heading .report-kicker {
-  border-color: #39789d;
-  color: #b9e7ff !important;
-  background: #173f58;
-}
-html[data-theme="dark"] .dashboard-shell .app-page .business-friendly-heading .report-viz-title p { color: #b9cad6 !important; }
-html[data-theme="dark"] .business-friendly-heading .report-viz-title h2,
-html[data-theme="dark"] .business-engineer-switch b,
-html[data-theme="dark"] .business-simple-controls > label > span,
-html[data-theme="dark"] .business-primary-control > span,
-html[data-theme="dark"] .business-summary-strip strong,
-html[data-theme="dark"] .business-chart-heading strong,
-html[data-theme="dark"] .business-selected-row strong { color: #edf6ff; }
-html[data-theme="dark"] .dashboard-shell .app-page .business-engineer-switch,
-html[data-theme="dark"] .dashboard-shell .app-page .business-primary-control button,
-html[data-theme="dark"] .business-simple-controls .app-dropdown-trigger,
-html[data-theme="dark"] .dashboard-shell .app-page .business-compare-toggle,
-html[data-theme="dark"] .business-summary-strip > span,
-html[data-theme="dark"] .business-workspace .report-viz-canvas,
-html[data-theme="dark"] .business-selected-row { border-color: #344d61; color: #c4d4df; background: #1d303f; }
-html[data-theme="dark"] .business-workspace { border-color: #344d61; background: #132431; }
-html[data-theme="dark"] .customer-trend-controls,
-html[data-theme="dark"] .customer-trend-custom-ranges fieldset,
-html[data-theme="dark"] .chart-axis-builder,
-html[data-theme="dark"] .chart-axis-value-settings,
-html[data-theme="dark"] .chart-axis-controls,
-html[data-theme="dark"] .chart-axis-custom-range { border-color: #344d61; background: #1d303f; }
-html[data-theme="dark"] .chart-axis-builder-heading strong,
-html[data-theme="dark"] .chart-axis-value-heading strong { color: #edf6ff; }
-html[data-theme="dark"] .chart-axis-builder-heading small,
-html[data-theme="dark"] .chart-axis-value-heading small,
-html[data-theme="dark"] .chart-axis-builder-grid > label > span,
-html[data-theme="dark"] .chart-axis-value-settings > label > span { color: #b9cbd7; }
-html[data-theme="dark"] .chart-axis-builder .app-dropdown-trigger,
-html[data-theme="dark"] .chart-axis-value-settings .app-dropdown-trigger { border-color: #466176; color: #edf6ff; background: #152734; }
-html[data-theme="dark"] .customer-trend-controls > label > span,
-html[data-theme="dark"] .customer-trend-custom-ranges legend,
-html[data-theme="dark"] .chart-axis-controls > label > span,
-html[data-theme="dark"] .chart-axis-custom-range legend { color: #c5d9e8; }
-html[data-theme="dark"] .customer-trend-custom-ranges input,
-html[data-theme="dark"] .chart-axis-custom-range input { border-color: #466176; color: #edf6ff; background: #152734; }
-
 @media (max-width: 1100px) {
   .chart-axis-builder-grid.is-four-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .business-simple-controls { grid-template-columns: 1fr 1fr; }
@@ -2435,12 +2245,6 @@ html[data-theme="dark"] .chart-axis-custom-range input { border-color: #466176; 
 .custom-chart-result aside p { margin: 0; }
 .custom-chart-result aside small { color: #5f7690; line-height: 1.4; }
 .custom-chart-detail { display: flex; flex-direction: column; gap: .2rem; padding: .5rem; border-radius: 8px; background: #fff; }
-html[data-theme="dark"] .custom-chart-builder,html[data-theme="dark"] .custom-chart-preview,html[data-theme="dark"] .custom-chart-actions { border-color: #34546f; background: #172b3c; color: #e8f3ff; }
-html[data-theme="dark"] .custom-chart-hero,html[data-theme="dark"] .custom-axis-card,html[data-theme="dark"] .custom-axis-card.axis-y,html[data-theme="dark"] .custom-chart-result aside { background: #203c55; color: #e8f3ff; }
-html[data-theme="dark"] .custom-chart-hero h2,html[data-theme="dark"] .custom-chart-preview-heading h3 { color: #e8f3ff; }
-html[data-theme="dark"] .custom-chart-plot text,html[data-theme="dark"] .custom-chart-plot :is(.custom-chart-x-title,.custom-chart-y-title) { fill: #d5e6f5; }
-html[data-theme="dark"] .custom-axis-card header,html[data-theme="dark"] .custom-axis-card.axis-y header { background: #294969; }
-html[data-theme="dark"] .custom-chart-actions button:not(.custom-chart-create),html[data-theme="dark"] .custom-chart-detail { background: #294969; color: #e8f3ff; }
 @media(max-width:900px) { .custom-chart-axes,.custom-chart-result { grid-template-columns: 1fr; } }
 @media(max-width:600px) { .custom-chart-builder { padding: .6rem; } .custom-chart-hero h2 { font-size: 1rem; } .custom-axis-choices { grid-template-columns: 1fr; } .custom-chart-actions button:first-of-type { margin-left: 0; } .custom-chart-preview-heading { flex-direction: column; } }
 
@@ -2461,10 +2265,6 @@ html[data-theme="dark"] .custom-chart-actions button:not(.custom-chart-create),h
 .chart-advanced-error { color: #a93045; }
 .chart-advanced-error button { margin-left: .5rem; padding: .3rem .6rem; border: 1px solid currentColor; border-radius: 7px; background: transparent; color: inherit; cursor: pointer; }
 .custom-chart-kind small { display: block; margin-top: .35rem; color: #607996; font-size: .75rem; line-height: 1.5; }
-html[data-theme="dark"] .chart-question-picker,html[data-theme="dark"] .chart-advanced-section { border-color: #34546f; background: #172b3c; }
-html[data-theme="dark"] .chart-question-picker label,html[data-theme="dark"] .chart-advanced-section > summary { color: #e8f3ff; }
-html[data-theme="dark"] .chart-question-picker p,html[data-theme="dark"] .chart-advanced-section > summary span,html[data-theme="dark"] .chart-advanced-note { color: #c2d5e6; }
-html[data-theme="dark"] .chart-manual-settings > summary { color: #8bbcff; }
 @media(max-width:700px) { .chart-question-picker { align-items: stretch; flex-direction: column; gap: .4rem; margin: .7rem; } .chart-question-picker label { flex-basis: auto; } .chart-manual-settings { margin: 0 .7rem .7rem; } .chart-advanced-section > summary span { display: block; margin: .2rem 0 0 1rem; } }
 
 .chart-axis-editor-toggle { flex: 0 0 auto; min-height: 44px; padding: .55rem .9rem; border: 1px solid #84b7f8; border-radius: 10px; background: linear-gradient(125deg,#1677ff,#0755d9); color: #fff; font-size: .84rem; font-weight: 850; box-shadow: 0 5px 14px rgb(22 119 255 / 15%); cursor: pointer; }
@@ -2479,7 +2279,6 @@ html[data-theme="dark"] .chart-manual-settings > summary { color: #8bbcff; }
 .custom-axis-card h3 { font-size: 1.05rem; }
 .custom-axis-choices label { font-size: .78rem; line-height: 1.5; }
 .custom-axis-chips button { font-size: .76rem; }
-html[data-theme="dark"] .chart-axis-editor-toggle { border-color: #5797ed; color: #fff; }
 @media(max-width:850px) { .chart-question-picker:has(.chart-axis-editor-toggle) { flex-wrap: wrap; } .chart-axis-editor-toggle { width: 100%; } }
 @media(max-width:600px) { .custom-axis-fields > label { grid-template-columns: 1fr; gap: .25rem; } .business-friendly > .chart-advanced-section { margin: .7rem; } }
 /* Reports dashboard: a chart-first view with settings revealed on demand. */
@@ -2634,41 +2433,11 @@ html[data-theme="dark"] .chart-axis-editor-toggle { border-color: #5797ed; color
 @media (max-width: 1100px) { .report-dashboard-visual-grid { grid-template-columns: 1fr; }.report-dashboard-quick-summary dl { grid-template-columns: repeat(4,minmax(0,1fr)); gap: .45rem; }.report-dashboard-quick-summary dl > div { display: flex; min-width: 0; align-items: flex-start; flex-direction: column; border: 1px solid #dce9f5; border-radius: 9px; padding: .55rem; }.report-dashboard-quick-summary dd { max-width: 100%; text-align: left; }.report-dashboard-quick-summary dd small { max-width: 100%; }.dashboard-shell .app-page .report-dashboard-quick-summary > button { width: min(280px,100%); margin-inline: auto; } }
 @media (max-width: 900px) { .report-dashboard-mini-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }.report-dashboard-heading,.report-dashboard-chart-heading { align-items: stretch; flex-direction: column; }.report-dashboard-share { grid-template-columns: 1fr; justify-items: center; }.report-dashboard-share-list { width: 100%; }.report-dashboard-svg { min-width: 760px; } }
 @media (max-width: 600px) { .dashboard-shell .reports-page .report-hero--blue { padding: .8rem; }.dashboard-shell .reports-page .report-hero-actions { align-items: stretch; flex-direction: row; justify-content: space-between; }.dashboard-shell .reports-page .report-hero-actions .draw-picker { width: 100%; }.report-dashboard { padding: .8rem; }.report-dashboard-mini-kpis { grid-template-columns: 1fr 1fr; }.report-dashboard-mini-kpis > div:nth-child(2),.report-dashboard-mini-kpis > div:nth-child(3) { grid-column: 1 / -1; }.report-dashboard-mini-kpis strong { font-size: .9rem; white-space: nowrap; }.report-dashboard-presets > div { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .3rem; }.report-dashboard-presets button { flex: none; }.report-dashboard-chart-actions { align-items: stretch; }.report-dashboard-chart-actions label { width: 100%; }.report-dashboard-chart-actions select { flex: 1; }.report-dashboard-svg { min-width: 760px; min-height: 265px; }.report-dashboard-quick-summary dl { grid-template-columns: 1fr 1fr; }.report-dashboard-drawer { width: 100vw; }.report-dashboard-drawer-body--advanced { padding: .6rem; }.report-dashboard-drawer-body--advanced .custom-chart-actions { flex-wrap: wrap; } }
-html[data-theme="dark"] .report-dashboard,html[data-theme="dark"] .report-dashboard-drawer { border-color: #304b65; color: #e7f2fa; background: #172a3c; }
-html[data-theme="dark"] .report-dashboard :is(h2,h3),html[data-theme="dark"] .report-dashboard-drawer h2 { color: #eff7ff; }
-html[data-theme="dark"] .report-dashboard :is(p,small),html[data-theme="dark"] .report-dashboard-drawer :is(p,small) { color: #bed0df; }
-html[data-theme="dark"] .report-dashboard-mini-kpis > div,html[data-theme="dark"] .report-dashboard-chart-panel,html[data-theme="dark"] .report-dashboard-share-list button,html[data-theme="dark"] .report-dashboard-selection { border-color: #35526d; background: #20384e; }
-html[data-theme="dark"] .report-dashboard-mini-kpis strong,html[data-theme="dark"] .report-dashboard-share-list button,html[data-theme="dark"] .report-dashboard-selection { color: #e7f2fa; }
-html[data-theme="dark"] .report-dashboard-share-total { border-color: #3b5b77; background: #20384e; }
-html[data-theme="dark"] .report-dashboard-share-total :is(span,small),html[data-theme="dark"] .report-dashboard-share-help { color: #b9cddd; }
-html[data-theme="dark"] .report-dashboard-share-total strong,html[data-theme="dark"] .report-dashboard-share-list button b { color: #eff7ff; }
-html[data-theme="dark"] .report-dashboard-quick-summary { border-color: #35526d; background: #20384e; box-shadow: none; }
-html[data-theme="dark"] .report-dashboard-quick-summary header,html[data-theme="dark"] .report-dashboard-quick-summary dl > div { border-color: #35526d; }
-html[data-theme="dark"] .report-dashboard-quick-summary :is(h4,dd) { color: #eff7ff; }
-html[data-theme="dark"] .report-dashboard-quick-actions { border-color: #35526d; background: #20384e; }
-html[data-theme="dark"] .report-dashboard-quick-actions > span b { color: #eff7ff; }
-html[data-theme="dark"] .report-dashboard-share-list button small { color: #b9cddd; }
-html[data-theme="dark"] .dashboard-shell .app-page .report-dashboard-share-list button { border-color: #35526d; color: #e7f2fa; background: #20384e; box-shadow: none; }
-html[data-theme="dark"] .dashboard-shell .app-page .report-dashboard-share-list button:hover { border-color: #5482aa; background: #27445d; }
-html[data-theme="dark"] .report-dashboard-share-list button > strong { color: #b8d4ff; background: #173c65; }
-html[data-theme="dark"] .report-dashboard-svg text,html[data-theme="dark"] .report-dashboard-donut-caption { fill: #c2d3e3; }
-html[data-theme="dark"] .report-dashboard-donut-total { fill: #eff7ff; }
-html[data-theme="dark"] .report-dashboard-gridline { stroke: #36516b; }
-html[data-theme="dark"] .report-dashboard-presets button,html[data-theme="dark"] .report-dashboard-chart-actions :is(button,select),html[data-theme="dark"] .report-dashboard-heading-actions :is(button,a),html[data-theme="dark"] .report-dashboard-period button,html[data-theme="dark"] .report-dashboard-drawer :is(select,input[type="number"]),html[data-theme="dark"] .report-dashboard-drawer-tabs button,html[data-theme="dark"] .report-dashboard-drawer footer button { border-color: #3d5b77; color: #e7f2fa; background: #20384e; }
-html[data-theme="dark"] .report-dashboard-presets button[aria-pressed="true"],html[data-theme="dark"] .report-dashboard-drawer footer button:last-child { border-color: #408bff; color: #fff; background: #1265db; }
-html[data-theme="dark"] .report-dashboard-drawer-hint { color: #d6e8ff; background: #213d5d; }
 .dashboard-shell .report-dashboard-presets button { border: 1px solid #d6e6f7; color: #315674; background: #fff; box-shadow: none; }
 .dashboard-shell .report-dashboard-presets button[aria-pressed="true"] { border-color: #1164db; color: #fff; background: #1164db; }
 .dashboard-shell .report-dashboard-legend button { border: 0; color: #31516e; background: transparent; box-shadow: none; }
-html[data-theme="dark"] .report-dashboard-hover { border-color: #3d5b77; color: #e7f2fa; background: #20384e; }
-html[data-theme="dark"] .dashboard-shell .report-dashboard-presets button { border-color: #3d5b77; color: #e7f2fa; background: #20384e; }
-html[data-theme="dark"] .dashboard-shell .report-dashboard-presets button[aria-pressed="true"] { border-color: #408bff; color: #fff; background: #1265db; }
-html[data-theme="dark"] .dashboard-shell .report-dashboard-legend button { color: #d6e5f1; }
 .dashboard-shell .app-page .report-dashboard-presets button:not([aria-pressed="true"]),.dashboard-shell .app-page .report-dashboard-period button:not([aria-pressed="true"]) { border-color: #d6e6f7; color: #315674; background: #fff !important; }
 .dashboard-shell .app-page .report-dashboard-presets button[aria-pressed="true"],.dashboard-shell .app-page .report-dashboard-period button[aria-pressed="true"] { border-color: #1164db; color: #fff; background: #1164db !important; }
-html[data-theme="dark"] .dashboard-shell .app-page .report-dashboard-presets button:not([aria-pressed="true"]),html[data-theme="dark"] .dashboard-shell .app-page .report-dashboard-period button:not([aria-pressed="true"]) { border-color: #3d5b77; color: #e7f2fa; background: #20384e !important; }
-html[data-theme="dark"] .dashboard-shell .app-page .report-dashboard-presets button[aria-pressed="true"],html[data-theme="dark"] .dashboard-shell .app-page .report-dashboard-period button[aria-pressed="true"] { border-color: #408bff; color: #fff; background: #1265db !important; }
-html[data-theme="dark"] .report-dashboard-presets select { border-color: #3d5b77; color: #e7f2fa; background: #20384e; }
 .reports-page .report-no-data,.reports-page .report-route-error { display: flex; min-height: 300px; flex-direction: column; align-items: center; justify-content: center; gap: .65rem; text-align: center; }
 .report-no-data > span,.report-route-error > span { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 13px; color: #0755d9; background: #eaf3ff; font-size: 1.3rem; font-weight: 800; }
 .reports-page .report-no-data h1,.reports-page .report-route-error h1 { margin: 0; color: #142747; font-size: 1.35rem; }
@@ -2685,8 +2454,6 @@ html[data-theme="dark"] .report-dashboard-presets select { border-color: #3d5b77
 @media (prefers-reduced-motion: reduce) { .report-loading-line,.report-loading-cards > div,.report-loading-chart { animation: none; } }
 @media (max-width: 600px) { .report-loading-cards { grid-template-columns: 1fr; }.report-loading-cards > div { height: 80px; } }
 @media (max-width: 600px) { .report-dashboard-dates { width: 100%; min-width: 0; grid-template-columns: 1fr; margin-left: 0; } }
-html[data-theme="dark"] .reports-page :is(.report-no-data,.report-route-error) :is(h1,p) { color: #e7f2fa; }
-html[data-theme="dark"] .report-loading-line,html[data-theme="dark"] .report-loading-cards > div,html[data-theme="dark"] .report-loading-chart { background: #263f56; }
 
 /* Guided custom-chart builder */
 .custom-chart-builder--guided { display: grid; gap: 1rem; color: #173452; }
@@ -2810,10 +2577,3 @@ html[data-theme="dark"] .report-loading-line,html[data-theme="dark"] .report-loa
 .custom-preview-horizontal strong { color: #173957; font-size: .7rem; white-space: nowrap; }
 @media (max-width: 900px) { .chart-type-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.chart-axis-panels,.chart-filter-columns,.chart-display-settings { grid-template-columns: 1fr; }.custom-chart-guided-header { align-items: stretch; flex-direction: column; }.custom-chart-guided-summary { min-width: 0; }.custom-preview-pie { grid-template-columns: 1fr; }.custom-preview-pie svg { max-height: 270px; }.custom-preview-legend { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 600px) { .chart-type-grid { grid-template-columns: 1fr; }.chart-axis-panel-fields > label { grid-template-columns: 1fr; }.chart-step-nav span { font-size: 0; }.chart-step-nav span b { font-size: .72rem; }.custom-chart-guided-header,.chart-settings-step,.custom-preview-shell { border-radius: 11px; }.custom-preview-shell > header { flex-direction: column; }.custom-preview-svg { min-width: 620px; }.custom-preview-legend { grid-template-columns: 1fr; }.custom-preview-horizontal > button { grid-template-columns: 22px minmax(90px,120px) 1fr; }.custom-preview-horizontal strong { grid-column: 2 / -1; }.custom-chart-guided-actions { flex-wrap: wrap; }.custom-chart-guided-actions > div { flex-basis: 100%; }.custom-chart-guided-actions button { flex: 1; } }
-html[data-theme="dark"] :is(.custom-chart-guided-header,.chart-settings-step,.chart-axis-panel,.chart-advanced-settings,.custom-preview-shell,.custom-preview-legend > div) { border-color: #36546f; color: #e7f2fa; background: #1d3449; }
-html[data-theme="dark"] :is(.custom-chart-guided-header h2,.chart-settings-step h3,.chart-axis-panel h4,.custom-preview-shell > header h3,.custom-preview-donut-total,.custom-preview-legend strong,.custom-preview-horizontal strong) { color: #eff7ff; }
-html[data-theme="dark"] :is(.custom-chart-guided-header p,.chart-settings-step p,.chart-axis-panel p,.custom-preview-shell > header p,.custom-preview-legend small) { color: #bed0df; }
-html[data-theme="dark"] .chart-axis-panel > header { border-color: #36546f; background: #244158; }
-html[data-theme="dark"] .custom-preview-gridline { stroke: #36516b; }
-html[data-theme="dark"] .custom-preview-axis-title,html[data-theme="dark"] .custom-preview-data-label { fill: #d3e2ee; }
-html[data-theme="dark"] .custom-preview-tooltip { border-color: #45647e; color: #dcebf7; background: #20384e; }

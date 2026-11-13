@@ -140,6 +140,16 @@
 .slip-tab-lost[aria-current="page"] { background: linear-gradient(135deg, #f0606f, #c82f43); box-shadow: 0 12px 26px rgb(226 71 90 / 28%); }
 .slip-tab-cancelled[aria-current="page"] { background: linear-gradient(135deg, #f4ab36, #d17f00); box-shadow: 0 12px 26px rgb(232 148 26 / 28%); }
 
+.slip-sequence-overview { display: grid; grid-template-columns: repeat(3, minmax(150px, .7fr)) minmax(300px, 1.9fr); align-items: stretch; gap: .7rem; padding: .8rem; border: 1px solid #cfe0f3; border-radius: 16px; background: linear-gradient(135deg, #f8fbff, #eef6ff); box-shadow: 0 8px 20px rgb(20 70 130 / 6%); }
+.slip-sequence-overview > div { display: grid; align-content: center; gap: .05rem; min-width: 0; padding: .65rem .8rem; border: 1px solid #d9e7f6; border-radius: 12px; background: #fff; }
+.slip-sequence-overview span { color: var(--sb-muted); font-size: .75rem; font-weight: 650; }
+.slip-sequence-overview strong { color: var(--sb-blue); font-size: 1.18rem; font-weight: 850; font-variant-numeric: tabular-nums; }
+.slip-sequence-overview small { color: #71859c; font-size: .7rem; }
+.slip-sequence-overview .is-cancelled strong { color: #c77700; }
+.slip-sequence-overview .is-sequence strong { color: #087f8c; }
+.slip-sequence-overview p { display: grid; align-content: center; gap: .12rem; margin: 0; padding: .65rem .85rem; border-left: 3px solid #3b8df5; color: #486681; font-size: .78rem; line-height: 1.5; }
+.slip-sequence-overview p b { color: #163a60; font-size: .82rem; }
+
 .slip-filter-card { display: grid; grid-template-columns: minmax(200px, 1.2fr) minmax(300px, 1.6fr) minmax(140px, .8fr) auto; grid-template-areas: "search dates draw actions"; align-items: end; gap: .75rem; padding: 1rem 1.15rem; border: 1px solid var(--sb-border); border-radius: 16px; background: var(--sb-surface); box-shadow: 0 8px 20px rgb(20 70 130 / 6%); }
 .slip-filter-card.has-agent { grid-template-columns: minmax(190px, 1.2fr) minmax(300px, 1.6fr) minmax(130px, .8fr) minmax(130px, .8fr) auto; grid-template-areas: "search dates draw agent actions"; }
 .slip-search { grid-area: search; display: flex; min-height: 46px; align-items: center; gap: .5rem; margin: 0; padding: 0 .85rem; border: 1px solid #c8dbef; border-radius: 12px; color: #4a6a8f; background: #fff; }
@@ -344,6 +354,8 @@
   .slip-tabs { grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow-x: auto; padding-bottom: .3rem; scroll-snap-type: x mandatory; }
   .slip-tab { scroll-snap-align: start; }
   .slip-summary-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .slip-sequence-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .slip-sequence-overview p { grid-column: 1 / -1; border-top: 1px solid #d7e5f4; border-left: 0; }
   .bill-detail-toolbar { grid-template-columns: minmax(0, 1fr); }
   .bill-detail-back { justify-self: start; }
   .slip-history-cards { grid-template-columns: minmax(0, 1fr); }
@@ -356,6 +368,8 @@
   .slip-tab { grid-template-columns: 1fr; min-height: 74px; padding: .65rem .8rem; }
   .slip-tab svg { display: none; }
   .slip-tab strong { font-size: 1.3rem; }
+  .slip-sequence-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .slip-sequence-overview .is-sequence { grid-column: 1 / -1; }
   .slip-filter-card { grid-template-columns: minmax(0, 1fr); grid-template-areas: "search" "dates" "draw" "actions"; }
   .slip-filter-card.has-agent { grid-template-columns: minmax(0, 1fr); grid-template-areas: "search" "dates" "draw" "agent" "actions"; }
   .slip-filter-actions > * { flex: 1; }
@@ -381,16 +395,6 @@
 }
 
 /* ---------------------------------------------------------------- โหมดมืด */
-html[data-theme="dark"] .slip-board-page { --sb-text: #e6f0fb; --sb-muted: #9fb3c9; --sb-border: #2b445c; --sb-line: #22384d; --sb-soft: #16314b; --sb-surface: #122536; }
-html[data-theme="dark"] .slip-board-page :is(.slip-outline-button, .slip-detail, .slip-search, .slip-filter-select select, .slip-pagination nav > *, .slip-item-search input, .slip-item) { border-color: #2b445c; color: #cfe2f6; background: #0f1f2e; }
-html[data-theme="dark"] .slip-history-card { border-color: #2b445c; background: #102233; box-shadow: none; }
-html[data-theme="dark"] :is(.slip-card-head, .slip-card-identity, .slip-card-finance, .slip-card-footer, .slip-card-identity p + p, .slip-card-finance > div + div) { border-color: #2b445c; }
-html[data-theme="dark"] .slip-card-finance { background: #12283a; }
-html[data-theme="dark"] .app-page .slip-board-page :is(button.slip-clear-filter, .slip-items-more button) { border-color: #2b445c; color: #cfe2f6; background: #0f1f2e; }
-html[data-theme="dark"] .slip-board-page :is(.slip-history-table th, .slip-items-table th, .slip-items-table tfoot th, .slip-items-table tfoot td, .slip-segmented) { color: #bcd0e4; background: #16293a; }
-html[data-theme="dark"] .slip-board-page :is(.slip-history-table tbody tr:hover, .slip-items-table tbody tr:hover) { background: #15293b; }
-html[data-theme="dark"] .slip-breadcrumb a { color: #8cc0ff; }
-html[data-theme="dark"] .slip-fact-money > div + div { border-color: #2b445c; }
 
 /* แก้ไขบิลและประวัติการเปลี่ยนแปลง */
 .bill-change-zone { display: grid; gap: 14px; }

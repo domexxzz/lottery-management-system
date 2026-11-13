@@ -10,7 +10,6 @@ import {
   deleteManagedUser,
   setManagedUserPassword,
   setManagedUserStatus,
-  updateManagedUserIdentity,
 } from "@/lib/users/service";
 
 /**
@@ -99,21 +98,6 @@ export async function setUserStatusAction(_previous: UserActionState, formData: 
   if (status !== "ACTIVE" && status !== "SUSPENDED") return { error: "สถานะไม่ถูกต้อง", ok: false };
   try {
     await setManagedUserStatus(actor, userId, status, reason);
-  } catch (error) {
-    return fail(error);
-  }
-  refresh();
-  return { error: null, ok: true };
-}
-
-export async function updateUserIdentityAction(_previous: UserActionState, formData: FormData): Promise<UserActionState> {
-  const actor = await requireActor();
-  const userId = String(formData.get("userId") ?? "");
-  const login = String(formData.get("login") ?? "");
-  const displayName = String(formData.get("displayName") ?? "");
-  const reason = String(formData.get("reason") ?? "");
-  try {
-    await updateManagedUserIdentity(actor, userId, { login, displayName, reason });
   } catch (error) {
     return fail(error);
   }

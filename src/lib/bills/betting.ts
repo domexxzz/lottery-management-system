@@ -192,7 +192,7 @@ export const BET_STATUS_LABEL: Record<BetStatus, string> = {
   PENDING: "กำลังแทง",
   WON: "ถูกรางวัล",
   LOST: "ไม่ถูกรางวัล",
-  CANCELLED: "ยกเลิก",
+  CANCELLED: "ลบแล้ว",
 };
 
 type BillStatusName = "DRAFT" | "CONFIRMED" | "LOCKED" | "SETTLED" | "CANCELLED";

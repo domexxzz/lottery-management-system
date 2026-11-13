@@ -14,10 +14,10 @@ export type MenuItem = {
   roles: readonly Role[];
 };
 
-const ALL_ROLES: Role[] = ["GODMODE", "OWNER", "ADMIN", "AGENT"];
-const MANAGEMENT_ROLES: Role[] = ["GODMODE", "OWNER", "ADMIN"];
-const OWNER_ROLES: Role[] = ["GODMODE", "OWNER"];
-const AUDIT_ROLES: Role[] = ["GODMODE", "OWNER", "ADMIN"];
+const ALL_ROLES: Role[] = ["OWNER", "ADMIN", "AGENT"];
+const MANAGEMENT_ROLES: Role[] = ["OWNER", "ADMIN"];
+const OWNER_ROLES: Role[] = ["OWNER"];
+const AUDIT_ROLES: Role[] = ["OWNER", "ADMIN"];
 
 export const MENU_ITEMS: readonly MenuItem[] = [
   { href: "/", label: "ภาพรวม", icon: "home", roles: MANAGEMENT_ROLES },

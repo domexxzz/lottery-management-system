@@ -12,7 +12,7 @@ export default async function OwnerChatPage() {
   const actor = await getActor();
   if (!actor) redirect("/login");
   if (actor.mustChangePassword) redirect("/change-password");
-  if (actor.role !== "GODMODE" && actor.role !== "OWNER") redirect("/");
+  if (actor.role !== "OWNER") redirect("/");
 
   // ปุ่มลัดขึ้นกับสถานะงวดล่าสุด จึงต้องรู้สถานะก่อนเรนเดอร์
   const [latestDraw, initialConversations] = await Promise.all([

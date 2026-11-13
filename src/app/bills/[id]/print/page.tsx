@@ -115,7 +115,7 @@ export default async function PrintBillPage({
       </table>
 
       {bill.status === "CANCELLED" && (
-        <p className="sheet-void">ยกเลิก · {bill.cancelReason}</p>
+        <p className="sheet-void">ลบแล้ว · {bill.cancelReason}</p>
       )}
 
       <footer className="sheet-footer">

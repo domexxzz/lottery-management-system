@@ -10,7 +10,7 @@ import { canConverse, isStaff } from "./policy";
  * ไม่ใช่เฉพาะกรณีที่นึกออก
  */
 
-const ROLES: Role[] = ["GODMODE", "OWNER", "ADMIN", "AGENT"];
+const ROLES: Role[] = ["OWNER", "ADMIN", "AGENT"];
 
 describe("ใครคุยกับใครได้", () => {
   test("Agent คุยกันเองไม่ได้", () => {
@@ -18,7 +18,6 @@ describe("ใครคุยกับใครได้", () => {
   });
 
   test("Agent คุยกับ Owner และ Admin ได้", () => {
-    expect(canConverse("AGENT", "GODMODE")).toBe(true);
     expect(canConverse("AGENT", "OWNER")).toBe(true);
     expect(canConverse("AGENT", "ADMIN")).toBe(true);
   });
@@ -44,7 +43,6 @@ describe("ใครคุยกับใครได้", () => {
   });
 
   test("Owner และ Admin นับเป็นฝ่ายจัดการ ส่วน Agent ไม่ใช่", () => {
-    expect(isStaff("GODMODE")).toBe(true);
     expect(isStaff("OWNER")).toBe(true);
     expect(isStaff("ADMIN")).toBe(true);
     expect(isStaff("AGENT")).toBe(false);

@@ -8,7 +8,7 @@ import {
 } from "./policy";
 
 describe("ยืนยันผลในขั้นตอนเดียว", () => {
-  test.each(["GODMODE", "OWNER", "ADMIN"] as const)("%s บันทึกแล้วอนุมัติทันที", (role) => {
+  test.each(["OWNER", "ADMIN"] as const)("%s บันทึกแล้วอนุมัติทันที", (role) => {
     expect(shouldApproveResultOnEntry(role)).toBe(true);
   });
 
@@ -18,8 +18,8 @@ describe("ยืนยันผลในขั้นตอนเดียว", (
 });
 
 describe("แก้ผลที่ประกาศแล้ว", () => {
-  test.each(["GODMODE", "OWNER"] as const)("%s แก้ผลแล้วอนุมัติทันที", (role) => {
-    expect(shouldApproveCorrectionOnProposal(role)).toBe(true);
+  test("Owner แก้ผลแล้วอนุมัติทันที", () => {
+    expect(shouldApproveCorrectionOnProposal("OWNER")).toBe(true);
   });
 
   test.each(["ADMIN", "AGENT"] as const)("%s ไม่อนุมัติการแก้ผลอัตโนมัติ", (role) => {

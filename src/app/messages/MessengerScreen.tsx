@@ -17,7 +17,7 @@ type Contact = {
   id: string;
   login: string;
   displayName: string;
-  role: "GODMODE" | "OWNER" | "ADMIN" | "AGENT";
+  role: "OWNER" | "ADMIN" | "AGENT";
   hasAvatar: boolean;
   online: boolean;
 };
@@ -50,7 +50,6 @@ type Message = {
 };
 
 const ROLE_LABEL: Record<Contact["role"], string> = {
-  GODMODE: "Godmode",
   OWNER: "เจ้าของกิจการ",
   ADMIN: "ผู้ดูแลระบบ",
   AGENT: "ตัวแทน",
@@ -64,10 +63,6 @@ const ROLE_LABEL: Record<Contact["role"], string> = {
  * พิมพ์ผิดหรือไม่มีสิทธิ์ ซึ่งเป็นคนละปัญหาและแก้คนละทาง
  */
 const SEARCH_HINT: Record<Contact["role"], { placeholder: string; hint: string }> = {
-  GODMODE: {
-    placeholder: "ค้นหาชื่อ หรือชื่อผู้ใช้...",
-    hint: "คุณคุยได้กับทุกคนในองค์กร",
-  },
   OWNER: {
     placeholder: "ค้นหาชื่อ หรือชื่อผู้ใช้...",
     hint: "คุณคุยได้กับทุกคนในองค์กร พิมพ์ชื่อที่แสดง เช่น ตัวแทน กรุงเทพ หรือชื่อผู้ใช้ เช่น agent2",

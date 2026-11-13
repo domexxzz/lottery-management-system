@@ -50,8 +50,8 @@ function upstreamMessage(failure: string): string {
 export async function POST(request: Request) {
   const actor = await getActor();
   if (!actor) return NextResponse.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
-  if (actor.role !== "GODMODE" && actor.role !== "OWNER") {
-    return NextResponse.json({ error: "เฉพาะ Godmode หรือ Owner เท่านั้นที่ใช้ผู้ช่วย AI ได้" }, { status: 403 });
+  if (actor.role !== "OWNER") {
+    return NextResponse.json({ error: "เฉพาะ Owner เท่านั้นที่ใช้ผู้ช่วย AI ได้" }, { status: 403 });
   }
 
   const parsed = ownerChatRequestSchema.safeParse(await request.json().catch(() => null));

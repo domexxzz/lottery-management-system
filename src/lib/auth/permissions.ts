@@ -7,15 +7,12 @@ import type { Role } from "@prisma/client";
  * ไฟล์นี้คือแหล่งความจริงเดียวของสิทธิ์ ทั้ง UI และ API อ่านจากที่นี่
  */
 export const PERMISSIONS = [
-  "system.override",
   "report.viewAllAgents",
   "bill.viewOwn",
   "bill.create",
   "bill.confirm",
   "bill.delete",
   "bill.editBeforeCutoff",
-  "bill.proposeChangeAfterCutoff",
-  "bill.approveChangeAfterCutoff",
   "result.enter",
   "result.approve",
   "result.proposeCorrection",
@@ -42,15 +39,12 @@ export type Permission = (typeof PERMISSIONS)[number];
  *
  * หมายเหตุการตีความจากตารางในเอกสาร:
  * - Admin เป็นผู้ปฏิบัติงานและตรวจสอบ ผลที่กรอกถูกยืนยันในขั้นตอนเดียว
- * - "แก้หรือยกเลิกหลัง Cutoff: Admin เสนอหรือดำเนินการ / Owner อนุมัติ" จึงแยกเป็น
- *   propose กับ approve
  * - การแก้ผลรางวัลที่ประกาศไปแล้ว: Admin เสนอ Owner อนุมัติ
- *   แต่ Owner/Godmode แก้เองแล้วมีผลทันที พร้อมบันทึก Audit และคำนวณยอดใหม่
+ *   แต่ Owner แก้เองแล้วมีผลทันที พร้อมบันทึก Audit และคำนวณยอดใหม่
  * - แก้/ลบบิลก่อน Cutoff: Agent ทำได้เฉพาะบิลของตนเอง ส่วน Admin/Owner ทำได้ทั้งองค์กร
  *   ทุกการเปลี่ยนแปลงมีผลทันทีและต้องมี Audit ก่อน/หลัง ไม่ใช้ขั้นตอนอนุมัติซ้ำ
  */
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  GODMODE: PERMISSIONS,
   OWNER: [
     "report.viewAllAgents",
     "bill.viewOwn",
@@ -58,8 +52,6 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "bill.confirm",
     "bill.delete",
     "bill.editBeforeCutoff",
-    "bill.proposeChangeAfterCutoff",
-    "bill.approveChangeAfterCutoff",
     "result.enter",
     "result.approve",
     "result.proposeCorrection",
@@ -85,7 +77,6 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "bill.confirm",
     "bill.delete",
     "bill.editBeforeCutoff",
-    "bill.proposeChangeAfterCutoff",
     "result.enter",
     "result.approve",
     "result.proposeCorrection",
@@ -116,9 +107,4 @@ export function can(role: Role, permission: Permission): boolean {
 
 export function permissionsFor(role: Role): readonly Permission[] {
   return ROLE_PERMISSIONS[role];
-}
-
-/** Godmode เป็นผู้ดูแลระบบ ส่วน Owner ยังคงเป็นเจ้าของกิจการ */
-export function isOwnerOrGodmode(role: Role): boolean {
-  return role === "GODMODE" || role === "OWNER";
 }

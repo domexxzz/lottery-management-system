@@ -231,15 +231,109 @@ export type DrawReportRow = {
   net: Prisma.Decimal;
 };
 
-/** ข้อมูลระดับงวด × Agent สำหรับสร้างกราฟที่กรองแกน X/Y แยกกัน */
-export async function chartMatrix(actor: Actor) {
+export type ChartMatrixFilters = {
+  drawIds?: string[];
+  agentIds?: string[];
+  from?: Date;
+  to?: Date;
+  drawLimit?: number;
+  rowLimit?: number;
+};
+
+export type ChartMatrixCell = {
+  drawId: string; drawName: string; drawStatus: string; cutoffAt: string; cutoffDate: string;
+  agentId: string; agentCode: string; agentName: string; agentStatus: string;
+  gross: number; payout: number; commission: number; net: number;
+  bills: number; items: number; winners: number;
+};
+
+export type ChartMatrixResult = {
+  rows: ChartMatrixCell[];
+  meta: {
+    drawCount: number; rowCount: number; drawLimit: number; rowLimit: number;
+    hasMoreDraws: boolean; truncated: boolean; queryMs: number; cacheHit: boolean;
+  };
+};
+
+const CHART_MATRIX_DEFAULT_DRAWS = 24;
+const CHART_MATRIX_MAX_DRAWS = 60;
+const CHART_MATRIX_DEFAULT_ROWS = 5_000;
+const CHART_MATRIX_MAX_ROWS = 10_000;
+const CHART_MATRIX_CACHE_TTL_MS = 15_000;
+const CHART_MATRIX_CACHE_MAX_ENTRIES = 100;
+const chartMatrixCache = new Map<string, { expiresAt: number; result: ChartMatrixResult }>();
+
+function boundedInteger(value: number | undefined, fallback: number, maximum: number) {
+  return Math.min(maximum, Math.max(1, Math.trunc(value ?? fallback)));
+}
+
+function chartMatrixCacheKey(actor: Actor, filters: ChartMatrixFilters & { drawLimit: number; rowLimit: number }) {
+  return JSON.stringify({
+    organizationId: actor.organizationId,
+    role: actor.role,
+    agentId: actor.agentId,
+    drawIds: [...(filters.drawIds ?? [])].sort(),
+    agentIds: [...(filters.agentIds ?? [])].sort(),
+    from: filters.from?.toISOString() ?? "",
+    to: filters.to?.toISOString() ?? "",
+    drawLimit: filters.drawLimit,
+    rowLimit: filters.rowLimit,
+  });
+}
+
+function getCachedChartMatrix(key: string): ChartMatrixResult | null {
+  const cached = chartMatrixCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    chartMatrixCache.delete(key);
+    return null;
+  }
+  // ย้ายรายการที่ใช้งานล่าสุดไปท้าย Map เพื่อให้การจำกัดขนาดทำงานแบบ LRU
+  chartMatrixCache.delete(key);
+  chartMatrixCache.set(key, cached);
+  return { ...cached.result, meta: { ...cached.result.meta, queryMs: 0, cacheHit: true } };
+}
+
+function setCachedChartMatrix(key: string, result: ChartMatrixResult) {
+  chartMatrixCache.set(key, { expiresAt: Date.now() + CHART_MATRIX_CACHE_TTL_MS, result });
+  while (chartMatrixCache.size > CHART_MATRIX_CACHE_MAX_ENTRIES) {
+    const oldest = chartMatrixCache.keys().next().value as string | undefined;
+    if (!oldest) break;
+    chartMatrixCache.delete(oldest);
+  }
+}
+
+/** ข้อมูลระดับงวด × Agent สำหรับสร้างกราฟ โดยกรองที่ฐานข้อมูลก่อนรวมผล */
+export async function chartMatrix(actor: Actor, input: ChartMatrixFilters = {}): Promise<ChartMatrixResult> {
   requirePermission(actor, "bill.viewOwn");
-  const draws = await prisma.draw.findMany({
-    where: { ...orgScope(actor), bills: { some: { ...reportScope(actor), status: { in: COUNTED_STATUSES } } } },
+  const drawLimit = boundedInteger(input.drawLimit, CHART_MATRIX_DEFAULT_DRAWS, CHART_MATRIX_MAX_DRAWS);
+  const rowLimit = boundedInteger(input.rowLimit, CHART_MATRIX_DEFAULT_ROWS, CHART_MATRIX_MAX_ROWS);
+  const drawIds = [...new Set(input.drawIds ?? [])].slice(0, CHART_MATRIX_MAX_DRAWS);
+  const agentIds = [...new Set(input.agentIds ?? [])].slice(0, 250);
+  const filters = { ...input, drawIds, agentIds, drawLimit, rowLimit };
+  const cacheKey = chartMatrixCacheKey(actor, filters);
+  const cached = getCachedChartMatrix(cacheKey);
+  if (cached) return cached;
+
+  const startedAt = performance.now();
+  const drawCandidates = await prisma.draw.findMany({
+    where: {
+      ...orgScope(actor),
+      ...(drawIds.length ? { id: { in: drawIds } } : {}),
+      ...(input.from || input.to ? { cutoffAt: { ...(input.from ? { gte: input.from } : {}), ...(input.to ? { lte: input.to } : {}) } } : {}),
+      bills: { some: { ...reportScope(actor), status: { in: COUNTED_STATUSES }, ...(agentIds.length ? { agentId: { in: agentIds } } : {}) } },
+    },
     orderBy: { cutoffAt: "desc" },
+    take: drawLimit + 1,
     select: { id: true, name: true, cutoffAt: true, status: true },
   });
-  if (!draws.length) return [];
+  const hasMoreDraws = drawCandidates.length > drawLimit;
+  const draws = drawCandidates.slice(0, drawLimit);
+  if (!draws.length) {
+    const empty: ChartMatrixResult = { rows: [], meta: { drawCount: 0, rowCount: 0, drawLimit, rowLimit, hasMoreDraws, truncated: false, queryMs: Number((performance.now() - startedAt).toFixed(2)), cacheHit: false } };
+    setCachedChartMatrix(cacheKey, empty);
+    return empty;
+  }
   type MatrixRow = {
     drawId: string; agentId: string; agentCode: string; agentName: string; agentStatus: string;
     bills: number; items: number; winners: number;
@@ -253,6 +347,7 @@ export async function chartMatrix(actor: Actor) {
              COALESCE(SUM(b."totalPayout"), 0) AS payout
       FROM ${reportTable("bills")} b
       WHERE ${reportBillSql(actor)} AND b."drawId" IN (${Prisma.join(draws.map((draw) => draw.id))})
+        ${agentIds.length ? Prisma.sql`AND b."agentId" IN (${Prisma.join(agentIds)})` : Prisma.empty}
       GROUP BY b."drawId", b."agentId"
     ), item_agg AS (
       SELECT b."drawId", b."agentId", COUNT(i.id)::int AS items,
@@ -260,6 +355,7 @@ export async function chartMatrix(actor: Actor) {
       FROM ${reportTable("bills")} b
       JOIN ${reportTable("bill_items")} i ON i."billId" = b.id
       WHERE ${reportBillSql(actor)} AND b."drawId" IN (${Prisma.join(draws.map((draw) => draw.id))})
+        ${agentIds.length ? Prisma.sql`AND b."agentId" IN (${Prisma.join(agentIds)})` : Prisma.empty}
       GROUP BY b."drawId", b."agentId"
     )
     SELECT ba."drawId", ba."agentId", a.code AS "agentCode", a.name AS "agentName", a.status AS "agentStatus",
@@ -273,10 +369,13 @@ export async function chartMatrix(actor: Actor) {
     LEFT JOIN ${reportTable("settlements")} s ON s."drawId" = ba."drawId"
       AND s."agentId" = ba."agentId" AND s."organizationId" = ${actor.organizationId}
     ORDER BY ba."drawId", a.code
+    LIMIT ${rowLimit + 1}
   `);
+  const truncated = rows.length > rowLimit;
+  const limitedRows = rows.slice(0, rowLimit);
   const drawById = new Map(draws.map((draw) => [draw.id, draw]));
   const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" });
-  return rows.map((row) => ({
+  const resultRows = limitedRows.map((row) => ({
     drawId: row.drawId,
     drawName: drawById.get(row.drawId)?.name ?? row.drawId,
     drawStatus: drawById.get(row.drawId)?.status ?? "UNKNOWN",
@@ -287,6 +386,36 @@ export async function chartMatrix(actor: Actor) {
     commission: decimal(row.commission).toNumber(), net: decimal(row.net).toNumber(),
     bills: row.bills, items: row.items, winners: row.winners,
   }));
+  const result: ChartMatrixResult = {
+    rows: resultRows,
+    meta: { drawCount: draws.length, rowCount: resultRows.length, drawLimit, rowLimit, hasMoreDraws, truncated, queryMs: Number((performance.now() - startedAt).toFixed(2)), cacheHit: false },
+  };
+  setCachedChartMatrix(cacheKey, result);
+  return result;
+}
+
+/** ตัวเลือกขนาดเล็กสำหรับ Dropdown โดยไม่ต้องโหลด Matrix ทั้งหมด */
+export async function chartMatrixOptions(actor: Actor) {
+  requirePermission(actor, "bill.viewOwn");
+  const countedBills = { ...reportScope(actor), status: { in: COUNTED_STATUSES } } satisfies Prisma.BillWhereInput;
+  const [draws, agents] = await Promise.all([
+    prisma.draw.findMany({
+      where: { ...orgScope(actor), bills: { some: countedBills } },
+      orderBy: { cutoffAt: "desc" },
+      take: 120,
+      select: { id: true, name: true, cutoffAt: true },
+    }),
+    prisma.agent.findMany({
+      where: { ...orgScope(actor), ...(actor.role === "AGENT" ? { id: actor.agentId ?? "__no_agent__" } : {}), bills: { some: countedBills } },
+      orderBy: [{ code: "asc" }, { name: "asc" }],
+      take: 250,
+      select: { id: true, code: true, name: true },
+    }),
+  ]);
+  return {
+    draws: draws.map((draw) => ({ id: draw.id, label: draw.name, cutoffAt: draw.cutoffAt.toISOString() })),
+    agents: agents.map((agent) => ({ id: agent.id, label: `${agent.code} · ${agent.name}` })),
+  };
 }
 
 /** แนวโน้มรายงวดสำหรับกราฟเจาะลึก เรียงเก่าไปใหม่เพื่อแสดงเส้นเวลา */

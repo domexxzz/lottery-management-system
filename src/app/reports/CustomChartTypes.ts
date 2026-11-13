@@ -19,6 +19,20 @@ export type ChartMatrixCell = {
   winners: number;
 };
 
+export type ChartMatrixMeta = {
+  drawCount: number;
+  rowCount: number;
+  drawLimit: number;
+  rowLimit: number;
+  hasMoreDraws: boolean;
+  truncated: boolean;
+  queryMs: number;
+  cacheHit: boolean;
+};
+
+export type ChartMatrixResponse = { rows: ChartMatrixCell[]; meta: ChartMatrixMeta };
+export type ChartFilterChoice = { id: string; label: string; cutoffAt?: string };
+
 export type CustomChartKind = "line" | "bar" | "horizontal-bar" | "area" | "stacked" | "pie" | "donut" | "scatter" | "combo";
 export type DataField = "cutoffAt" | "cutoffDate" | "cutoffTime" | "draw" | "agent" | "drawStatus" | "agentStatus" | ReportMetric;
 export type Calculation = "sum" | "average" | "count" | "max" | "min" | "raw";

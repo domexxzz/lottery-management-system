@@ -5,7 +5,7 @@ import { confirmBill, createDraftBill, replaceDraftItems } from "@/lib/bills/ser
 import { lockDrawManually } from "@/lib/draws/service";
 import { approveResult, enterResult } from "@/lib/results/service";
 import { calculateSettlement } from "@/lib/settlement/service";
-import { byAgent, byDraw, byPrizeType, drawSummary, searchBills } from "@/lib/reports/service";
+import { byAgent, byDraw, byPrizeType, chartMatrix, drawSummary, searchBills } from "@/lib/reports/service";
 import { sumMoney } from "@/lib/money";
 
 /**
@@ -190,6 +190,59 @@ describe("รอบที่ยังไม่คำนวณ", () => {
     expect(summary.pendingSettlement).toBe(true);
     expect(summary.gross.toFixed(2)).toBe("100.00");
     expect(summary.payout.toFixed(2)).toBe("0.00");
+  });
+});
+
+describe("Custom Chart Matrix", () => {
+  test("กรองงวดและ Agent ที่ฐานข้อมูล พร้อมใช้ cache สำหรับคำขอซ้ำ", async () => {
+    const first = await prisma.bill.create({
+      data: {
+        organizationId: f.org.id,
+        agentId: f.agents.agent1.id,
+        drawId: f.draw.id,
+        billNumber: `MATRIX-A-${f.draw.id}`,
+        title: "Matrix Agent 1",
+        status: "CONFIRMED",
+        totalStake: "125",
+        totalPayout: "0",
+        createdById: f.users.agentUser1.id,
+        confirmedAt: new Date(),
+      },
+    });
+    await prisma.billItem.create({
+      data: {
+        organizationId: f.org.id,
+        billId: first.id,
+        prizeTypeId: f.prizeTypes.threeTop.id,
+        number: "123",
+        stake: "125",
+        payoutRateSnapshot: "650",
+      },
+    });
+    await prisma.bill.create({
+      data: {
+        organizationId: f.org.id,
+        agentId: f.agents.agent2.id,
+        drawId: f.draw.id,
+        billNumber: `MATRIX-B-${f.draw.id}`,
+        title: "Matrix Agent 2",
+        status: "CONFIRMED",
+        totalStake: "75",
+        totalPayout: "0",
+        createdById: f.users.agentUser2.id,
+        confirmedAt: new Date(),
+      },
+    });
+
+    const filters = { drawIds: [f.draw.id], agentIds: [f.agents.agent1.id] };
+    const cold = await chartMatrix(f.actors.OWNER, filters);
+    const warm = await chartMatrix(f.actors.OWNER, filters);
+
+    expect(cold.rows).toHaveLength(1);
+    expect(cold.rows[0]).toMatchObject({ drawId: f.draw.id, agentId: f.agents.agent1.id, gross: 125, bills: 1, items: 1 });
+    expect(cold.meta).toMatchObject({ drawCount: 1, rowCount: 1, cacheHit: false, truncated: false });
+    expect(warm.rows).toEqual(cold.rows);
+    expect(warm.meta.cacheHit).toBe(true);
   });
 });
 

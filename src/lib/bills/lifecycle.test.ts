@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { BillStatus } from "@prisma/client";
-import { canTransition, cancelNeedsApproval } from "./lifecycle";
+import { canTransition } from "./lifecycle";
 
 const ALL: BillStatus[] = ["DRAFT", "CONFIRMED", "LOCKED", "SETTLED", "CANCELLED"];
 
@@ -11,10 +11,10 @@ describe("Bill state machine", () => {
     expect(canTransition("LOCKED", "SETTLED")).toBe(true);
   });
 
-  test("ยกเลิกได้ทุกสถานะที่ยังไม่จบ", () => {
+  test("ลบได้เฉพาะสถานะก่อนปิดรับ", () => {
     expect(canTransition("DRAFT", "CANCELLED")).toBe(true);
     expect(canTransition("CONFIRMED", "CANCELLED")).toBe(true);
-    expect(canTransition("LOCKED", "CANCELLED")).toBe(true);
+    expect(canTransition("LOCKED", "CANCELLED")).toBe(false);
   });
 
   test("SETTLED และ CANCELLED เป็นสถานะปลายทาง ออกไปไหนไม่ได้", () => {
@@ -40,16 +40,5 @@ describe("Bill state machine", () => {
     for (const s of ALL) {
       expect(canTransition(s, s)).toBe(false);
     }
-  });
-});
-
-describe("การยกเลิกหลัง Cutoff", () => {
-  test("บิลที่ถูกล็อกแล้วต้องผ่านผู้อนุมัติ", () => {
-    expect(cancelNeedsApproval("LOCKED")).toBe(true);
-  });
-
-  test("บิลก่อน Cutoff ไม่ต้องผ่านผู้อนุมัติ", () => {
-    expect(cancelNeedsApproval("DRAFT")).toBe(false);
-    expect(cancelNeedsApproval("CONFIRMED")).toBe(false);
   });
 });

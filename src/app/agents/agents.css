@@ -416,36 +416,6 @@
 .organization-inspector footer a { display: grid; min-height: 36px; place-items: center; border: 1px solid #1677ff; border-radius: 9px; color: #0b68ad; background: #fff; font-size: .56rem; font-weight: 850; text-decoration: none; }
 .organization-inspector footer a:last-child { color: #fff; background: #1677ff; }
 
-html[data-theme="dark"] .agents-map-page { background: radial-gradient(circle at 86% 0%, rgb(40 140 209 / 13%), transparent 32%); }
-html[data-theme="dark"] .agents-map-title h1,
-html[data-theme="dark"] .agents-map-kpis strong { color: #eef7ff; }
-html[data-theme="dark"] .agents-map-title small { color: #afc2d2; }
-html[data-theme="dark"] .agents-map-kpis article { border-color: #314a5e; background: rgb(22 37 51 / 88%); }
-html[data-theme="dark"] .organization-map-workbench { border-color: #314c62; background: rgb(18 32 44 / 88%); }
-html[data-theme="dark"] .organization-map-controls,
-html[data-theme="dark"] .organization-map-actions { border-color: #30495c; background: rgb(20 35 48 / 95%); }
-html[data-theme="dark"] .organization-map-controls .app-dropdown-trigger,
-html[data-theme="dark"] .organization-search,
-html[data-theme="dark"] .dashboard-shell .app-page .organization-connector-toggle,
-html[data-theme="dark"] .dashboard-shell .app-page .organization-reset,
-html[data-theme="dark"] .dashboard-shell .app-page .organization-map-actions button,
-html[data-theme="dark"] .dashboard-shell .app-page .organization-map-actions a { border-color: #38556b; color: #dcebf4; background: #1c3040; }
-html[data-theme="dark"] .organization-search input { color: #edf7ff; }
-html[data-theme="dark"] .organization-map-canvas-shell { background: #112130; }
-html[data-theme="dark"] .organization-map-viewport { background-color: #132533; background-image: radial-gradient(circle, rgb(128 176 207 / 16%) 1px, transparent 1px); }
-html[data-theme="dark"] .organization-owner-node,
-html[data-theme="dark"] .dashboard-shell .app-page .organization-agent-card,
-html[data-theme="dark"] .organization-customer-node { border-color: #38566d; color: #edf6ff; background: #1b3040; }
-html[data-theme="dark"] .organization-owner-node strong,
-html[data-theme="dark"] .organization-agent-copy strong,
-html[data-theme="dark"] .organization-agent-stats b,
-html[data-theme="dark"] .organization-customer-node,
-html[data-theme="dark"] .organization-inspector-person strong,
-html[data-theme="dark"] .organization-inspector-kpis strong { color: #eef7ff; }
-html[data-theme="dark"] .organization-inspector { border-color: #385267; background: #162936; }
-html[data-theme="dark"] .organization-inspector-kpis > div,
-html[data-theme="dark"] .organization-inspector dl > div { border-color: #385267; background: #1b3040; }
-
 @media (max-width: 1280px) {
   .organization-map-controls { grid-template-columns: minmax(170px, 1.3fr) repeat(4, minmax(105px, .7fr)) auto; }
   .organization-reset { display: none!important; }

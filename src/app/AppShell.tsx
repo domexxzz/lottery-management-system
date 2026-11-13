@@ -6,7 +6,6 @@ import { AccountMenu, MobileNavigation, SystemStatus } from "./ShellControls";
 import "./owner-chatbot.css";
 
 const ROLE_LABEL: Record<Role, string> = {
-  GODMODE: "ผู้ดูแลระบบสูงสุด",
   OWNER: "เจ้าของกิจการ",
   ADMIN: "ผู้ดูแลระบบ",
   AGENT: "ตัวแทน",

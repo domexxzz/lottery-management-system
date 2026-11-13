@@ -13,7 +13,10 @@ import {
   defaultChartSettings,
   normalizeForKind,
   type AxisConfig,
+  type ChartFilterChoice,
+  type ChartFilters,
   type ChartMatrixCell,
+  type ChartMatrixMeta,
   type CustomChartKind,
   type CustomChartSettings,
   type NumberFormat,
@@ -54,12 +57,26 @@ function ChartAdvancedSettings({ settings, draws, agents, onChange }: { settings
   </section>;
 }
 
-export function CustomChartBuilder({ cells, initialXMetric = "gross", initialYMetric, onCancel }: { cells: ChartMatrixCell[]; initialXMetric?: ReportMetric; initialYMetric?: ReportMetric; onCancel?: () => void }) {
+export function CustomChartBuilder({ cells, initialXMetric = "gross", initialYMetric, onCancel, drawOptions, agentOptions, dataLoading = false, matrixMeta, onQueryFiltersChange }: {
+  cells: ChartMatrixCell[];
+  initialXMetric?: ReportMetric;
+  initialYMetric?: ReportMetric;
+  onCancel?: () => void;
+  drawOptions?: ChartFilterChoice[];
+  agentOptions?: ChartFilterChoice[];
+  dataLoading?: boolean;
+  matrixMeta?: ChartMatrixMeta;
+  onQueryFiltersChange?: (filters: Pick<ChartFilters, "drawIds" | "agentIds" | "from" | "to">) => void;
+}) {
   const initialMetric = initialYMetric ?? initialXMetric;
   const [settings, setSettings] = useState<CustomChartSettings>(() => defaultChartSettings(initialMetric));
   const [savedMessage, setSavedMessage] = useState("");
-  const draws = useMemo(() => [...new Map(cells.map((cell) => [cell.drawId, { id: cell.drawId, label: `${DATE.format(new Date(cell.cutoffAt))} · ${cell.drawName}`, date: cell.cutoffAt }])).values()].sort((a, b) => b.date.localeCompare(a.date)), [cells]);
-  const agents = useMemo(() => [...new Map(cells.map((cell) => [cell.agentId, { id: cell.agentId, label: `${cell.agentCode} · ${cell.agentName}` }])).values()].sort((a, b) => a.label.localeCompare(b.label, "th")), [cells]);
+  const draws = useMemo(() => drawOptions?.length
+    ? drawOptions.map((choice) => ({ ...choice, label: choice.cutoffAt ? `${DATE.format(new Date(choice.cutoffAt))} · ${choice.label}` : choice.label, date: choice.cutoffAt ?? "" }))
+    : [...new Map(cells.map((cell) => [cell.drawId, { id: cell.drawId, label: `${DATE.format(new Date(cell.cutoffAt))} · ${cell.drawName}`, date: cell.cutoffAt }])).values()].sort((a, b) => b.date.localeCompare(a.date)), [cells, drawOptions]);
+  const agents = useMemo(() => agentOptions?.length
+    ? agentOptions
+    : [...new Map(cells.map((cell) => [cell.agentId, { id: cell.agentId, label: `${cell.agentCode} · ${cell.agentName}` }])).values()].sort((a, b) => a.label.localeCompare(b.label, "th")), [agentOptions, cells]);
 
   useEffect(() => {
     try {
@@ -69,6 +86,15 @@ export function CustomChartBuilder({ cells, initialXMetric = "gross", initialYMe
       if (CHART_TYPES.some((item) => item.value === saved.kind) && saved.x?.field && saved.y?.field && saved.filters) setSettings(saved);
     } catch { /* ใช้ค่าเริ่มต้นเมื่อข้อมูลที่บันทึกไว้ไม่สมบูรณ์ */ }
   }, []);
+
+  useEffect(() => {
+    onQueryFiltersChange?.({
+      drawIds: settings.filters.drawIds,
+      agentIds: settings.filters.agentIds,
+      from: settings.filters.from,
+      to: settings.filters.to,
+    });
+  }, [onQueryFiltersChange, settings.filters.agentIds, settings.filters.drawIds, settings.filters.from, settings.filters.to]);
 
   const filteredCount = useMemo(() => cells.filter((cell) => (!settings.filters.drawIds.length || settings.filters.drawIds.includes(cell.drawId)) && (!settings.filters.agentIds.length || settings.filters.agentIds.includes(cell.agentId)) && (!settings.filters.from || cell.cutoffDate >= settings.filters.from) && (!settings.filters.to || cell.cutoffDate <= settings.filters.to)).length, [cells, settings.filters]);
   const valid = validRange(settings.x) && validRange(settings.y) && (!settings.filters.from || !settings.filters.to || settings.filters.from <= settings.filters.to);
@@ -87,7 +113,8 @@ export function CustomChartBuilder({ cells, initialXMetric = "gross", initialYMe
     <ChartAxisSettings kind={settings.kind} x={settings.x} y={settings.y} onXChange={(x) => setSettings({ ...settings, x })} onYChange={(y) => setSettings({ ...settings, y })} />
     <ChartAdvancedSettings settings={settings} draws={draws} agents={agents} onChange={setSettings} />
     {!valid && <p className="custom-chart-error" role="alert">ช่วงค่า Min/Max หรือช่วงวันที่ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง</p>}
-    <div className="custom-chart-live-preview"><CustomChartPreview cells={cells} settings={settings} /></div>
+    {matrixMeta && (matrixMeta.hasMoreDraws || matrixMeta.truncated) && <div className="custom-preview-notice" role="status">{matrixMeta.hasMoreDraws ? `ค่าเริ่มต้นแสดง ${matrixMeta.drawCount} งวดล่าสุด` : ""}{matrixMeta.truncated ? `${matrixMeta.hasMoreDraws ? " · " : ""}ข้อมูลมีจำนวนมาก ระบบจำกัดไว้ ${matrixMeta.rowLimit.toLocaleString("th-TH")} คู่` : ""} เลือกงวด วันที่ หรือ Agent เพื่อเจาะจงข้อมูลเพิ่ม</div>}
+    <div className="custom-chart-live-preview">{dataLoading ? <div className="custom-preview-empty" role="status"><span>↻</span><strong>กำลังอัปเดตกราฟตามตัวกรอง…</strong><small>ระบบกำลังดึงเฉพาะข้อมูลที่เลือกจากฐานข้อมูล</small></div> : <CustomChartPreview cells={cells} settings={settings} />}</div>
     <footer className="custom-chart-guided-actions"><div>{savedMessage && <span role="status">✓ {savedMessage}</span>}</div><button type="button" onClick={cancel}>ยกเลิก</button><button type="button" onClick={reset}>คืนค่าเริ่มต้น</button><button type="button" className="custom-chart-save" disabled={!valid} onClick={save}>บันทึกการตั้งค่า</button></footer>
   </section>;
 }

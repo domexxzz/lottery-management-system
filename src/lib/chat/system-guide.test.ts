@@ -96,7 +96,7 @@ describe("คู่มือตรงกับสิทธิ์และเม�
     expect(allowed).toContain("ลงผลรางวัล:");
     expect(allowed).toContain("ตรวจหลักฐาน:");
     expect(allowed).toContain("เปิดงวดและตั้งเลขอั้น:");
-    expect(allowed).toContain("เสนอยกเลิกบิลหลังปิดรับ:");
+    expect(allowed).toContain("ลบบิลก่อนปิดรับ:");
     expect(allowed).not.toContain("ปิดบัญชีงวด:");
     expect(denied).toContain("ปิดบัญชีงวด (Owner ทำ)");
     expect(denied).toContain("อนุมัติการแก้ผลรางวัล (Owner ทำ)");
@@ -107,13 +107,13 @@ describe("คู่มือตรงกับสิทธิ์และเม�
     expect(can("ADMIN", "user.manage")).toBe(false);
   });
 
-  test("Agent รับบิล แนบหลักฐาน และยกเลิกบิลของตัวเองก่อนปิดรับได้เท่านั้น", () => {
+  test("Agent รับบิล แนบหลักฐาน และลบบิลของตัวเองก่อนปิดรับได้เท่านั้น", () => {
     const section = roleSection("agent");
     const allowed = block(section, "ทำอะไรได้ และทำยังไง").join("\n");
     expect(allowed).toContain("รับบิล:");
     expect(allowed).toContain("แนบหลักฐาน:");
-    expect(allowed).toContain("ยกเลิกบิลก่อนปิดรับ:");
-    expect(allowed).toContain("Agent ยกเลิกได้เฉพาะบิลของตัวเอง");
+    expect(allowed).toContain("ลบบิลก่อนปิดรับ:");
+    expect(allowed).toContain("Agent ลบได้เฉพาะบิลของตัวเอง");
     for (const forbidden of ["ลงผลรางวัล:", "ตรวจหลักฐาน:", "ปิดบัญชีงวด:", "เปิดงวดและตั้งเลขอั้น:"]) {
       expect(allowed).not.toContain(forbidden);
     }
@@ -121,7 +121,6 @@ describe("คู่มือตรงกับสิทธิ์และเม�
     expect(block(section, "ทำเองไม่ได้")).toEqual([
       "• เปิดงวด ตั้งเลขอั้น หรือสั่งปิดรับ (Owner หรือ Admin ทำ)",
       "• ยืนยันหรือตีกลับหลักฐาน (Owner หรือ Admin ทำ)",
-      "• ยกเลิกบิลหลังปิดรับ (ต้องแจ้ง Admin หรือ Owner)",
       "• ลงผลรางวัล (Owner หรือ Admin ทำ)",
     ]);
     expect(block(section, "ข้อควรรู้")).toContain("• ค่าคอมมิชชันคิด 30% จากยอดขายรวม");
@@ -136,7 +135,6 @@ describe("คู่มือตรงกับสิทธิ์และเม�
       ["AGENT", "รับบิล:", "bill.create"],
       ["AGENT", "ลงผลรางวัล:", "result.enter"],
       ["ADMIN", "คำนวณการเงินของงวด:", "settlement.calculate"],
-      ["ADMIN", "ยกเลิกบิลหลังปิดรับ:", "bill.approveChangeAfterCutoff"],
       ["OWNER", "จัดการบัญชีผู้ใช้:", "user.manage"],
       ["OWNER", "ปิดบัญชีงวด:", "settlement.approve"],
     ];

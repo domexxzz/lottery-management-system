@@ -151,7 +151,7 @@ export function SlipDetail({ bill, settledAt, showDrawLink, beforeItems }: { bil
         <div className="is-pending"><span>กำลังแทง</span><strong>{pending.count} รายการ</strong><small>{baht(pending.amount)} บาท</small></div>
         <div className="is-won"><span>ถูกรางวัล</span><strong>{won.count} รายการ</strong><small>{baht(won.amount)} บาท</small></div>
         <div className="is-lost"><span>ไม่ถูกรางวัล</span><strong>{lost.count} รายการ</strong><small>{baht(lost.amount)} บาท</small></div>
-        <div className="is-cancelled"><span>ยกเลิก</span><strong>{cancelled.count} รายการ</strong><small>{baht(cancelled.amount)} บาท</small></div>
+        <div className="is-cancelled"><span>ลบแล้ว</span><strong>{cancelled.count} รายการ</strong><small>{baht(cancelled.amount)} บาท</small></div>
       </div>
 
       {beforeItems}

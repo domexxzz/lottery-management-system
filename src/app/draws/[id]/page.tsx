@@ -117,7 +117,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
   const canApproveResult = can(actor.role, "result.approve");
   const canApproveCorrection = can(actor.role, "result.approveCorrection");
   const canProposeCorrection = can(actor.role, "result.proposeCorrection");
-  const correctionAppliesImmediately = actor.role === "OWNER" || actor.role === "GODMODE";
+  const correctionAppliesImmediately = actor.role === "OWNER";
   const canCalculate = can(actor.role, "settlement.calculate");
   const canApproveSettlement = can(actor.role, "settlement.approve");
   const canViewAgentProfiles = can(actor.role, "report.viewAllAgents");

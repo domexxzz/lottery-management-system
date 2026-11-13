@@ -20,7 +20,7 @@ const TAB_LABEL: Record<BetTab, string> = {
   PENDING: "กำลังแทง",
   WON: "ถูกรางวัล",
   LOST: "ไม่ถูกรางวัล",
-  CANCELLED: "ยกเลิก",
+  CANCELLED: "ลบแล้ว",
 };
 
 const TAB_ICON: Record<BetTab, string> = {
@@ -121,11 +121,11 @@ export async function AgentBillBoard({
     page: filter.page,
     pageSize: 10,
   });
-  const { bills, counts, page, pageCount, pageSize, total, totals } = result;
+  const { bills, counts, page, pageCount, pageSize, total, totals, sequence } = result;
 
   const stake = Number(totals.stake);
   const payout = Number(totals.payout);
-  const decided = counts.ALL;
+  const decided = counts.ALL + counts.CANCELLED;
   const share = (value: number) => (decided > 0 ? (value / decided) * 100 : 0);
   const wonShare = share(counts.WON);
   const lostShare = share(counts.LOST);
@@ -308,6 +308,28 @@ export async function AgentBillBoard({
         ))}
       </nav>
 
+      <section className="slip-sequence-overview" aria-label="คำอธิบายเลขบิล">
+        <div>
+          <span>บิลที่ใช้งาน</span>
+          <strong>{counts.ALL.toLocaleString("th-TH")}</strong>
+          <small>นำไปคำนวณยอด</small>
+        </div>
+        <div className="is-cancelled">
+          <span>ลบแล้ว</span>
+          <strong>{counts.CANCELLED.toLocaleString("th-TH")}</strong>
+          <small>เก็บไว้ในประวัติ</small>
+        </div>
+        <div className="is-sequence">
+          <span>เลขสูงสุดที่พบ</span>
+          <strong>{sequence.highest === null ? "—" : `บิล ${sequence.highest.toLocaleString("th-TH")}`}</strong>
+          <small>นับแยกตาม Agent/เดือน</small>
+        </div>
+        <p>
+          <b>ทำไมจำนวนบิลกับเลขบิลไม่เท่ากัน?</b>
+          เลขบิลเพิ่มตามลำดับการยืนยันและจะไม่ย้อนกลับเมื่อลบบิล เพื่อป้องกันเลขซ้ำและรักษาประวัติการตรวจสอบ
+        </p>
+      </section>
+
       <AgentBillFilters
         // ไม่ใส่คำค้นใน key: ค้นหาอัตโนมัติขณะพิมพ์ ถ้า remount ช่องพิมพ์จะหลุดโฟกัส
         key={`${scope.scope}|${filter.from}|${filter.to}|${filter.drawId}|${filter.agentId}`}
@@ -398,6 +420,7 @@ export async function AgentBillBoard({
           <dl>
             <div><dt>ยอดเดิมพันรวม</dt><dd className="is-blue">{baht(stake)} บาท</dd></div>
             <div><dt>จำนวนรายการ</dt><dd>{counts.ALL.toLocaleString("th-TH")}</dd></div>
+            <div><dt>ลบแล้ว</dt><dd className="is-cancelled">{counts.CANCELLED.toLocaleString("th-TH")} รายการ</dd></div>
             <div><dt>ถูกรางวัล</dt><dd className="is-green">{counts.WON.toLocaleString("th-TH")} รายการ</dd></div>
             <div><dt>เงินรางวัลรวม</dt><dd>{baht(payout)} บาท</dd></div>
             <div><dt>อัตราถูกรางวัล</dt><dd>{wonShare.toFixed(1)}%</dd></div>
@@ -406,15 +429,15 @@ export async function AgentBillBoard({
             <div
               className="slip-donut"
               role="img"
-              aria-label={`ถูกรางวัล ${counts.WON} ไม่ถูกรางวัล ${counts.LOST} ยกเลิก ${counts.CANCELLED} กำลังแทง ${counts.PENDING}`}
+              aria-label={`ถูกรางวัล ${counts.WON} ไม่ถูกรางวัล ${counts.LOST} ลบแล้ว ${counts.CANCELLED} กำลังแทง ${counts.PENDING}`}
               style={{ background: `conic-gradient(#12a35c 0 ${wonShare}%, #e2475a ${wonShare}% ${wonShare + lostShare}%, #e8941a ${wonShare + lostShare}% ${wonShare + lostShare + cancelledShare}%, #c9d8e8 ${wonShare + lostShare + cancelledShare}% 100%)` }}
             >
-              <span><strong>{counts.ALL.toLocaleString("th-TH")}</strong>รายการ</span>
+              <span><strong>{decided.toLocaleString("th-TH")}</strong>ประวัติ</span>
             </div>
             <ul>
               <li><i className="is-won" />ถูกรางวัล <strong>{counts.WON}</strong></li>
               <li><i className="is-lost" />ไม่ถูกรางวัล <strong>{counts.LOST}</strong></li>
-              <li><i className="is-cancelled" />ยกเลิก <strong>{counts.CANCELLED}</strong></li>
+              <li><i className="is-cancelled" />ลบแล้ว <strong>{counts.CANCELLED}</strong></li>
               <li><i className="is-pending" />กำลังแทง <strong>{counts.PENDING}</strong></li>
             </ul>
           </div>

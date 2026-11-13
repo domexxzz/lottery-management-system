@@ -21,8 +21,7 @@ describe("evidence policy", () => {
     expect(canReplaceRejectedEvidence({ role: "AGENT", billStatus: "CONFIRMED", attachmentStatus: "PENDING" })).toBe(false);
   });
 
-  test("Godmode, Owner และ Admin ตรวจหลักฐานได้", () => {
-    expect(canReviewEvidence("GODMODE")).toBe(true);
+  test("Owner และ Admin ตรวจหลักฐานได้", () => {
     expect(canReviewEvidence("OWNER")).toBe(true);
     expect(canReviewEvidence("ADMIN")).toBe(true);
     expect(canReviewEvidence("AGENT")).toBe(false);

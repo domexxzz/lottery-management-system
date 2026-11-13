@@ -49,12 +49,5 @@
 .analytics-page .custom-chart-guided-actions .custom-chart-save { border-color: #087f90; color: #fff; background: #087f90 !important; }
 .analytics-page .chart-color-picker button { width: 25px; height: 25px; min-height: 25px; padding: 0; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #bad0e6; }
 .analytics-page .chart-color-picker button[aria-pressed="true"] { box-shadow: 0 0 0 2px #087f90; }
-html[data-theme="dark"] .analytics-page .behavior-chart-builder { border-color: #36546f; background: #172b3c; }
-html[data-theme="dark"] .behavior-only-badge { border-color: #2d766f; color: #9fe2d7; background: #173f3d; }
-html[data-theme="dark"] .behavior-explorer .report-dashboard-selection b { color: #eff7ff; }
-html[data-theme="dark"] .behavior-explorer .report-dashboard-selection span { color: #bed0df; }
-html[data-theme="dark"] .behavior-fixed-axis { border-color: #36546f; background: #20384e; }
-html[data-theme="dark"] .behavior-fixed-axis strong { color: #eff7ff; }
-html[data-theme="dark"] .behavior-fixed-axis small { color: #bed0df; }
 @media (max-width: 760px) { .behavior-display-grid { grid-template-columns: 1fr; }.analytics-page .behavior-chart-builder { padding: .6rem; }.behavior-preview { min-height: 360px; } }
 @media (max-width: 600px) { .behavior-explorer .report-dashboard-chart-panel { min-height: 0; }.behavior-only-badge { width: fit-content; } }

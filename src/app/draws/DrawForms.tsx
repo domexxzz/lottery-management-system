@@ -121,14 +121,14 @@ export function DeleteDrawForm({ drawId, drawName, billCount }: { drawId: string
 
   return (
     <form className="delete-draw-form" action={formAction} onSubmit={(event) => {
-      const detail = billCount > 0 ? ` รวมบิล ${billCount} ใบและหลักฐานทั้งหมด` : "";
-      if (!window.confirm(`ลบงวด “${drawName}” ถาวร${detail}ใช่ไหม? การดำเนินการนี้ย้อนกลับจากหน้าเว็บไม่ได้`)) event.preventDefault();
+      if (!window.confirm(`ลบงวดว่าง “${drawName}” ถาวรใช่ไหม? การดำเนินการนี้ย้อนกลับจากหน้าเว็บไม่ได้`)) event.preventDefault();
     }}>
       <input type="hidden" name="drawId" value={drawId} />
       {state.error !== null && <p className="error" role="alert">{state.error}</p>}
       {state.message !== null && <p role="status">{state.message}</p>}
-      <button type="submit" className="danger-button" disabled={pending}>
-        {pending ? "กำลังลบ..." : "ลบงวด"}
+      {billCount > 0 && <p className="notice">งวดนี้มีบิล {billCount} ใบ จึงลบไม่ได้ เพราะระบบต้องเก็บประวัติบิลไว้</p>}
+      <button type="submit" className="danger-button" disabled={pending || billCount > 0}>
+        {pending ? "กำลังลบ..." : billCount > 0 ? "ลบไม่ได้ — มีบิลแล้ว" : "ลบงวด"}
       </button>
     </form>
   );

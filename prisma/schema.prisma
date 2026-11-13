@@ -21,7 +21,6 @@ datasource db {
 // ---------------------------------------------------------------- enums
 
 enum Role {
-  GODMODE
   OWNER
   ADMIN
   AGENT

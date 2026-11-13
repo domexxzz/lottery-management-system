@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { billScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
-import { canTransition, cancelNeedsApproval, transitionError } from "./lifecycle";
+import { canTransition, transitionError } from "./lifecycle";
 import {
   dedupeKey,
   totalStake,
@@ -17,8 +17,6 @@ import {
 import { loadNumberUsage, lockDrawNumberCap } from "@/lib/draws/number-cap";
 import { assertBillEvidenceReady } from "@/lib/evidence/service";
 import { billSequencePeriod, buildInternalBillNumber } from "./numbering";
-import { getStorageProvider } from "@/lib/storage/provider";
-import type { PrivateObjectStorage } from "@/lib/storage/types";
 
 export type ItemInput = {
   prizeTypeId: string;
@@ -507,7 +505,7 @@ async function confirmInTx(
   const restrictions = await loadRestrictions(tx, bill.drawId);
   const numberCap = await loadNumberCapInTx(tx, bill.drawId, bill.draw.numberCap, bill.id, bill.items.map((item) => item.prizeTypeId));
 
-  // ยอดที่ Agent ใช้ไปแล้วในรอบนี้ นับเฉพาะบิลที่มีผลผูกพัน ไม่รวมร่างและที่ยกเลิก
+  // ยอดที่ Agent ใช้ไปแล้วในรอบนี้ นับเฉพาะบิลที่มีผลผูกพัน ไม่รวมร่างและบิลที่ลบแล้ว
   const committed = await tx.bill.aggregate({
     where: {
       organizationId: bill.organizationId,
@@ -681,118 +679,6 @@ export async function placeBill(
   });
 }
 
-export async function cancelBill(
-  actor: Actor,
-  billId: string,
-  reason: string,
-): Promise<void> {
-  const trimmed = reason.trim();
-  if (trimmed.length === 0) {
-    throw new ValidationError("ต้องระบุเหตุผลในการยกเลิก");
-  }
-
-  await prisma.$transaction(async (tx) => {
-    const bill = await tx.bill.findFirst({
-      where: { id: billId, ...billScope(actor) },
-      select: { id: true, status: true, organizationId: true, cancelRequestedById: true },
-    });
-
-    if (!bill) throw new NotFoundError("ไม่พบบิล");
-    if (!canTransition(bill.status, "CANCELLED")) {
-      throw new ConflictError(transitionError(bill.status, "CANCELLED"));
-    }
-
-    if (cancelNeedsApproval(bill.status)) {
-      // หลัง Cutoff ต้องเป็นผู้มีอำนาจอนุมัติ และผู้อนุมัติต้องไม่ใช่ผู้เสนอคนเดียวกัน
-      requirePermission(actor, "bill.approveChangeAfterCutoff");
-      if (bill.cancelRequestedById === actor.userId) {
-        throw new ForbiddenError("ผู้เสนอยกเลิกกับผู้อนุมัติต้องไม่ใช่คนเดียวกัน");
-      }
-    } else {
-      requirePermission(actor, "bill.editBeforeCutoff");
-    }
-
-    await tx.bill.update({
-      where: { id: bill.id },
-      data: {
-        status: "CANCELLED",
-        cancelledById: actor.userId,
-        cancelledAt: new Date(),
-        cancelReason: trimmed,
-      },
-    });
-
-    await writeAudit(tx, {
-      organizationId: bill.organizationId,
-      actorId: actor.userId,
-      requestId: actor.requestId,
-      ipAddress: actor.ipAddress,
-      action: "CANCEL",
-      entityType: "Bill",
-      entityId: bill.id,
-      before: { status: bill.status, cancelRequestedById: bill.cancelRequestedById },
-      after: { status: "CANCELLED" },
-      reason: trimmed,
-    });
-  });
-}
-
-/**
- * เสนอยกเลิกบิลหลัง Cutoff
- *
- * Admin เสนอได้แต่ยกเลิกเองไม่ได้ ต้องรอ Owner อนุมัติ (เอกสารบทที่ 4)
- * บันทึกผู้เสนอไว้เพื่อให้ตรวจได้ว่าผู้อนุมัติเป็นคนละคน
- */
-export async function requestCancelAfterCutoff(
-  actor: Actor,
-  billId: string,
-  reason: string,
-): Promise<void> {
-  requirePermission(actor, "bill.proposeChangeAfterCutoff");
-
-  const trimmed = reason.trim();
-  if (trimmed.length === 0) {
-    throw new ValidationError("ต้องระบุเหตุผลในการเสนอยกเลิก");
-  }
-
-  await prisma.$transaction(async (tx) => {
-    const bill = await tx.bill.findFirst({
-      where: { id: billId, ...billScope(actor) },
-      select: { id: true, status: true, organizationId: true, cancelRequestedById: true },
-    });
-
-    if (!bill) throw new NotFoundError("ไม่พบบิล");
-    if (bill.status !== "LOCKED") {
-      throw new ConflictError("เสนอยกเลิกได้เฉพาะบิลที่ถูกล็อกหลังปิดรับแล้ว");
-    }
-    if (bill.cancelRequestedById !== null) {
-      throw new ConflictError("บิลนี้มีคำขอยกเลิกค้างอยู่แล้ว");
-    }
-
-    await tx.bill.update({
-      where: { id: bill.id },
-      data: {
-        cancelRequestedById: actor.userId,
-        cancelRequestedAt: new Date(),
-        cancelRequestReason: trimmed,
-      },
-    });
-
-    await writeAudit(tx, {
-      organizationId: bill.organizationId,
-      actorId: actor.userId,
-      requestId: actor.requestId,
-      ipAddress: actor.ipAddress,
-      action: "UPDATE",
-      entityType: "Bill",
-      entityId: bill.id,
-      before: { cancelRequestedById: null },
-      after: { cancelRequestedById: actor.userId },
-      reason: `เสนอยกเลิกหลังปิดรับ: ${trimmed}`,
-    });
-  });
-}
-
 export async function listBills(actor: Actor, filter: { drawId?: string; status?: BillStatus }) {
   requirePermission(actor, "bill.viewOwn");
 
@@ -861,114 +747,6 @@ export async function getBill(actor: Actor, billId: string) {
   return bill;
 }
 
-export type DeleteBillOutcome = {
-  billId: string;
-  title: string;
-  attachmentsDeleted: number;
-  settlementReset: boolean;
-};
-
-/**
- * Owner/Godmode ลบบิลถาวรได้ทุกสถานะ
- *
- * ถ้างวดเคยคำนวณ Settlement แล้ว ต้องล้างผลคำนวณทั้งงวดและย้อนสถานะบิลที่เหลือ
- * เป็น LOCKED เพื่อไม่ให้รายงานแสดงยอดเก่าที่รวมบิลซึ่งถูกลบไปแล้ว
- */
-export async function deleteBillPermanently(
-  actor: Actor,
-  billId: string,
-  storage: PrivateObjectStorage = getStorageProvider(),
-): Promise<DeleteBillOutcome> {
-  requirePermission(actor, "bill.delete");
-  if (actor.role !== "OWNER" && actor.role !== "GODMODE") {
-    throw new ForbiddenError("เฉพาะ Owner หรือ Godmode เท่านั้นที่ลบข้อมูลถาวรได้");
-  }
-
-  const outcome = await prisma.$transaction(async (tx) => {
-    const bill = await tx.bill.findFirst({
-      where: { id: billId, organizationId: actor.organizationId },
-      select: {
-        id: true,
-        organizationId: true,
-        title: true,
-        billNumber: true,
-        drawSequence: true,
-        status: true,
-        totalStake: true,
-        totalPayout: true,
-        drawId: true,
-        agentId: true,
-        _count: { select: { items: true } },
-        attachments: { select: { id: true, storageKey: true } },
-      },
-    });
-    if (!bill) throw new NotFoundError("ไม่พบบิล");
-
-    const settlementCount = await tx.settlement.count({ where: { drawId: bill.drawId } });
-    const settlementReset = settlementCount > 0 || bill.status === "SETTLED";
-    if (settlementReset) {
-      await tx.settlement.deleteMany({ where: { drawId: bill.drawId } });
-      await tx.billItem.updateMany({
-        where: { bill: { drawId: bill.drawId } },
-        data: { isWinner: false, payout: new Prisma.Decimal(0) },
-      });
-      await tx.bill.updateMany({
-        where: { drawId: bill.drawId, status: "SETTLED" },
-        data: { status: "LOCKED", totalPayout: new Prisma.Decimal(0) },
-      });
-      const approvedResults = await tx.result.count({ where: { drawId: bill.drawId, status: "APPROVED" } });
-      await tx.draw.update({
-        where: { id: bill.drawId },
-        data: { status: approvedResults > 0 ? "RESULT_PENDING" : "LOCKED", closedAt: null },
-      });
-    }
-
-    await tx.bill.delete({ where: { id: bill.id } });
-    await writeAudit(tx, {
-      organizationId: bill.organizationId,
-      actorId: actor.userId,
-      requestId: actor.requestId,
-      ipAddress: actor.ipAddress,
-      action: "DELETE",
-      entityType: "Bill",
-      entityId: bill.id,
-      before: {
-        title: bill.title,
-        billNumber: bill.billNumber,
-        drawSequence: bill.drawSequence,
-        status: bill.status,
-        drawId: bill.drawId,
-        agentId: bill.agentId,
-        totalStake: bill.totalStake.toFixed(2),
-        totalPayout: bill.totalPayout.toFixed(2),
-        items: bill._count.items,
-        attachments: bill.attachments.length,
-      },
-      after: { settlementReset },
-      reason: "Owner ลบบิลถาวร",
-    });
-
-    return {
-      storageKeys: bill.attachments.map((item) => item.storageKey),
-      result: {
-        billId: bill.id,
-        title: bill.title,
-        attachmentsDeleted: bill.attachments.length,
-        settlementReset,
-      },
-    };
-  });
-
-  await Promise.all(outcome.storageKeys.map(async (storageKey) => {
-    try {
-      await storage.delete(storageKey);
-    } catch (error) {
-      console.error("Bill deleted but evidence object cleanup failed", { storageKey, error });
-    }
-  }));
-  return outcome.result;
-}
-
 // ---------------------------------------------------------------- โพยของ Agent
 
 function betTabWhere(tab: BetTab): Prisma.BillWhereInput {
@@ -982,8 +760,9 @@ function betTabWhere(tab: BetTab): Prisma.BillWhereInput {
     case "CANCELLED":
       return { status: "CANCELLED" };
     default:
-      // ร่างเป็นของค้างจากหน้าเดิม ไม่ใช่โพยที่แทงแล้ว
-      return { status: { not: "DRAFT" } };
+      // หน้า "ทั้งหมด" หมายถึงบิลที่ยังใช้งานอยู่ ส่วนบิลที่ลบแล้วมีแท็บแยก
+      // เพื่อไม่ให้จำนวนบิลปัจจุบันดูมากกว่ายอดที่นำไปคำนวณจริง
+      return { status: { notIn: ["DRAFT", "CANCELLED"] } };
   }
 }
 
@@ -1041,23 +820,31 @@ export async function listBetBills(actor: Actor, filter: BetBillFilter & { page?
   const base = betBaseWhere(actor, filter);
   const pageSize = filter.pageSize ?? BET_PAGE_SIZE;
 
-  const [grouped, won, totals] = await Promise.all([
+  const [grouped, won, totals, sequence] = await Promise.all([
     prisma.bill.groupBy({ by: ["status"], where: { ...base, status: { not: "DRAFT" } }, _count: { _all: true } }),
     prisma.bill.count({ where: { ...base, ...betTabWhere("WON") } }),
     prisma.bill.aggregate({
-      where: { ...base, status: { not: "DRAFT" } },
+      // ยอดสรุปต้องไม่รวมบิลร่างและบิลที่ลบแล้ว
+      where: { ...base, ...betTabWhere("ALL") },
       _sum: { totalStake: true, totalPayout: true },
+    }),
+    prisma.bill.aggregate({
+      // เลขสูงสุดยังนับบิลที่ลบแล้ว เพื่ออธิบายช่องว่างของ Running Number
+      where: { ...base, status: { not: "DRAFT" } },
+      _max: { drawSequence: true },
     }),
   ]);
 
   const byStatus = new Map(grouped.map((row) => [row.status, row._count._all]));
   const settled = byStatus.get("SETTLED") ?? 0;
+  const pending = (byStatus.get("CONFIRMED") ?? 0) + (byStatus.get("LOCKED") ?? 0);
+  const cancelled = byStatus.get("CANCELLED") ?? 0;
   const counts: Record<BetTab, number> = {
-    ALL: grouped.reduce((sum, row) => sum + row._count._all, 0),
-    PENDING: (byStatus.get("CONFIRMED") ?? 0) + (byStatus.get("LOCKED") ?? 0),
+    ALL: pending + settled,
+    PENDING: pending,
     WON: won,
     LOST: settled - won,
-    CANCELLED: byStatus.get("CANCELLED") ?? 0,
+    CANCELLED: cancelled,
   };
 
   const total = counts[filter.tab];
@@ -1097,6 +884,9 @@ export async function listBetBills(actor: Actor, filter: BetBillFilter & { page?
     totals: {
       stake: totals._sum.totalStake ?? new Prisma.Decimal(0),
       payout: totals._sum.totalPayout ?? new Prisma.Decimal(0),
+    },
+    sequence: {
+      highest: sequence._max.drawSequence,
     },
   };
 }

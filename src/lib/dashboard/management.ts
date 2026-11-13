@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { orgScope, type Actor } from "@/lib/auth/context";
 
 /**
- * ข้อมูลหน้าภาพรวมของ Owner/Admin/Godmode
+ * ข้อมูลหน้าภาพรวมของ Owner/Admin
  *
  * เดิมหน้านี้ดึงบิลทุกใบขององค์กร (พร้อม Agent และจำนวนรายการ) มาวนรวมยอดใน Node.js
  * ราว 900 KB ต่อ request ที่ 2,000 บิล และโตตามจำนวนบิลตรง ๆ
@@ -62,9 +62,13 @@ export async function loadManagementDashboard(actor: Actor, filters: DashboardFi
   };
   /**
    * บิลที่นำมาคิดยอดเงิน: ถ้าไม่ได้เลือกสถานะ นับเฉพาะบิลที่มีผลผูกพัน
-   * เดิมนับบิลร่างและบิลยกเลิกรวมเข้าไปในยอดขายด้วย ซึ่งไม่ตรงกับหน้ารายงาน
+   * เดิมนับบิลร่างและบิลที่ลบแล้วรวมเข้าไปในยอดขายด้วย ซึ่งไม่ตรงกับหน้ารายงาน
    */
-  const moneyWhere: Prisma.BillWhereInput = selectedStatus ? listWhere : { ...listWhere, status: { in: COUNTED_STATUSES } };
+  const moneyWhere: Prisma.BillWhereInput = selectedStatus
+    ? COUNTED_STATUSES.includes(selectedStatus)
+      ? listWhere
+      : { ...listWhere, status: { in: [] } }
+    : { ...listWhere, status: { in: COUNTED_STATUSES } };
 
   const [selectedDraw, drawOptions, totals, itemCount, perAgent, recentBills, winnerTitles, awaitingClose, pendingCancellations, anomalyCount, activeAgents, settlementByDraw, settlementByAgent] = await Promise.all([
     filters.drawId ? prisma.draw.findFirst({ where: { ...scope, id: filters.drawId }, select: drawSelect }) : Promise.resolve(null),

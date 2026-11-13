@@ -30,7 +30,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const actor = await getActor();
   if (!actor) redirect("/login");
   if (actor.mustChangePassword) redirect("/change-password");
-  if (actor.role !== "GODMODE" && actor.role !== "OWNER") redirect("/");
+  if (actor.role !== "OWNER") redirect("/");
 
   const query = await searchParams;
   const drawId = first(query.drawId);

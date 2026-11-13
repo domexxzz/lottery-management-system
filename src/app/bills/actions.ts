@@ -5,12 +5,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActor } from "@/lib/auth/context";
 import {
-  cancelBill,
   confirmBill,
   createDraftBill,
   placeBill,
   replaceDraftItems,
-  requestCancelAfterCutoff,
   softDeleteBillBeforeCutoff,
   updateBillBeforeCutoff,
 } from "@/lib/bills/service";
@@ -102,44 +100,6 @@ export async function confirmBillAction(
   revalidatePath(`/bills/${billId}`);
   revalidatePath("/bills");
   redirect("/bills");
-}
-
-export async function requestCancelAction(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const actor = await requireActor();
-  const billId = String(formData.get("billId") ?? "");
-  const reason = String(formData.get("reason") ?? "");
-
-  try {
-    await requestCancelAfterCutoff(actor, billId, reason);
-  } catch (error) {
-    if (error instanceof AppError) return { error: error.message };
-    throw error;
-  }
-
-  revalidatePath(`/bills/${billId}`);
-  return { error: null };
-}
-
-export async function cancelBillAction(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const actor = await requireActor();
-  const billId = String(formData.get("billId") ?? "");
-  const reason = String(formData.get("reason") ?? "");
-
-  try {
-    await cancelBill(actor, billId, reason);
-  } catch (error) {
-    if (error instanceof AppError) return { error: error.message };
-    throw error;
-  }
-
-  revalidatePath(`/bills/${billId}`);
-  return { error: null };
 }
 
 export async function deleteBillAction(

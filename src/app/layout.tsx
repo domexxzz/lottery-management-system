@@ -30,7 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const actor = await getActor();
 
   return (
-    <html lang="th" className={sarabun.variable} data-theme="light">
+    <html lang="th" className={sarabun.variable}>
       <body>
         {actor !== null && !actor.mustChangePassword ? (
           <AppShell displayName={actor.displayName} role={actor.role}>

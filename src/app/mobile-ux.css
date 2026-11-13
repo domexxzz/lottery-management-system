@@ -481,18 +481,6 @@
 }
 
 @media (max-width: 760px) {
-  html[data-theme="dark"],html[data-theme="dark"] body { background: #0d1823; }
-  html[data-theme="dark"] body { background-image: linear-gradient(165deg,#102332 0,#0d1823 55%,#122637 100%); }
-  html[data-theme="dark"] .mobile-bottom-nav { border-color: #314b60; background: rgb(20 37 51 / 96%); box-shadow: 0 12px 34px rgb(0 0 0 / 34%); }
-  html[data-theme="dark"] .mobile-bottom-nav :is(a,button) { color: #a9bdcb; }
-  html[data-theme="dark"] .mobile-bottom-nav :is(a,button).active { color: #72dcd7; background: linear-gradient(145deg,#193f45,#19384c); }
-  html[data-theme="dark"] .dashboard-topbar { border-color: #31546d; background: rgb(8 35 53 / 97%); }
-  html[data-theme="dark"] .dashboard-topbar .account-popover { color: #edf6fb; background: #172936; }
-  html[data-theme="dark"] .dashboard-shell .reports-page .report-hero--blue { background: linear-gradient(135deg,#172a3b,#17344d); }
-  html[data-theme="dark"] .bills-page .table-wrap tr,
-  html[data-theme="dark"] .inspection-page .inspection-table tr,
-  html[data-theme="dark"] .users-table-wrap tr { border-color: #344d60; color: #dce9f1; background: #182b39; }
-  html[data-theme="dark"] :is(.bills-page .table-wrap td,.inspection-page .inspection-table td,.users-table-wrap td)::before { color: #a9bdcb; }
 }
 
 @media (prefers-reduced-motion: reduce) {

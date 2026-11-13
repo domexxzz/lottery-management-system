@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { DateRangePicker } from "@/components/calendar";
 import { LazyCustomChartBuilder } from "./LazyCustomChartBuilder";
-import type { ChartMatrixCell } from "./CustomChartBuilder";
+import type { ChartMatrixCell, ChartMatrixResponse } from "./CustomChartTypes";
 import type { ReportChartDatum, ReportMetric } from "./ReportChart";
 import { ReportsDashboardChart, type DashboardChartKind } from "./ReportsDashboardChart";
 
@@ -56,7 +56,7 @@ export function ReportsAnalyticsDashboard({ draws, agents, prizes, selectedDrawI
   const [settings, setSettings] = useState<Settings>(() => baseSettings(PRESETS[0]!));
   const [draft, setDraft] = useState<Settings>(settings);
   const [open, setOpen] = useState(false);
-  const [advanced, setAdvanced] = useState(true);
+  const [advanced, setAdvanced] = useState(false);
   const [period, setPeriod] = useState<Period>("current");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [from, setFrom] = useState("");
@@ -64,6 +64,7 @@ export function ReportsAnalyticsDashboard({ draws, agents, prizes, selectedDrawI
   const [selected, setSelected] = useState<ReportChartDatum | null>(null);
   const [matrix, setMatrix] = useState<ChartMatrixCell[] | null>(null);
   const [matrixError, setMatrixError] = useState("");
+  const [matrixRetry, setMatrixRetry] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
@@ -108,15 +109,21 @@ export function ReportsAnalyticsDashboard({ draws, agents, prizes, selectedDrawI
     if (item.value === "donut" || item.value === "pie") return canShare || agents.some((agent) => agent.gross > 0);
     return true;
   });
+  const matrixDrawIds = useMemo(() => periodDraws.map((draw) => draw.id), [periodDraws]);
+  const matrixScopeKey = matrixDrawIds.join(",");
   useEffect(() => {
-    if (settings.kind !== "stacked" || matrix || matrixError) return;
+    if (settings.kind !== "stacked") return;
     const controller = new AbortController();
-    fetch("/api/reports/chart-matrix", { signal: controller.signal, cache: "no-store" })
-      .then(async (response) => { if (!response.ok) throw new Error(`โหลดข้อมูลกราฟแท่งซ้อนไม่สำเร็จ (${response.status})`); return response.json() as Promise<ChartMatrixCell[]>; })
-      .then(setMatrix)
+    const params = new URLSearchParams({ drawLimit: String(Math.max(1, Math.min(60, matrixDrawIds.length || 24))), rowLimit: "5000" });
+    for (const drawId of matrixDrawIds) params.append("drawIds", drawId);
+    setMatrix(null);
+    setMatrixError("");
+    fetch(`/api/reports/chart-matrix?${params.toString()}`, { signal: controller.signal })
+      .then(async (response) => { if (!response.ok) throw new Error(`โหลดข้อมูลกราฟแท่งซ้อนไม่สำเร็จ (${response.status})`); return response.json() as Promise<ChartMatrixResponse>; })
+      .then((result) => setMatrix(result.rows))
       .catch((error: unknown) => { if (!controller.signal.aborted) setMatrixError(error instanceof Error ? error.message : "โหลดข้อมูลไม่สำเร็จ"); });
     return () => controller.abort();
-  }, [settings.kind, matrix, matrixError]);
+  }, [matrixDrawIds, matrixRetry, matrixScopeKey, settings.kind]);
 
   useEffect(() => {
     if (!open) return;
@@ -139,8 +146,8 @@ export function ReportsAnalyticsDashboard({ draws, agents, prizes, selectedDrawI
     setPresetId("custom");
     setSelected(null);
   }
-  function reset() { choosePreset(PRESETS[0]!); setPeriod("current"); setSelectedMonth(""); setFrom(""); setTo(""); setDraft(baseSettings(PRESETS[0]!)); setAdvanced(true); }
-  function openDrawer() { setDraft(settings); setAdvanced(true); setOpen(true); }
+  function reset() { choosePreset(PRESETS[0]!); setPeriod("current"); setSelectedMonth(""); setFrom(""); setTo(""); setDraft(baseSettings(PRESETS[0]!)); setAdvanced(false); }
+  function openDrawer() { setDraft(settings); setAdvanced(false); setOpen(true); }
   function refresh() { setRefreshing(true); router.refresh(); window.setTimeout(() => setRefreshing(false), 900); }
   async function exportExcel() {
     if (rows.length === 0 || exporting) return;
@@ -182,7 +189,7 @@ export function ReportsAnalyticsDashboard({ draws, agents, prizes, selectedDrawI
       {settings.dimension === "draws" && <div className="report-dashboard-period report-dashboard-quick-actions" role="group" aria-label="ปุ่มลัดสำหรับเจ้าของกิจการและพนักงานบัญชี"><span><b>ปุ่มลัด</b><small>เจ้าของกิจการ / บัญชี</small></span><button type="button" aria-pressed={period === "current"} disabled={Boolean(selectedDrawId)} onClick={() => { setPeriod("current"); setSelected(null); }}>งวดนี้</button><button type="button" aria-pressed={period === "compare"} disabled={Boolean(selectedDrawId)} onClick={() => { setPeriod("compare"); setSelected(null); }}>เทียบงวดก่อน</button><button type="button" aria-pressed={period === "month"} disabled={Boolean(selectedDrawId) || monthOptions.length === 0} onClick={() => { setPeriod("month"); setSelected(null); }}>เดือนล่าสุด</button><label className={`report-dashboard-month${period === "month" ? " is-active" : ""}`}><span className="sr-only">เลือกเดือนอื่น</span><select aria-label="เลือกเดือนอื่นที่ต้องการดู" value={period === "month" ? activeMonth : ""} disabled={Boolean(selectedDrawId) || monthOptions.length === 0} onChange={(event) => { setSelectedMonth(event.target.value); setPeriod("month"); setSelected(null); }}><option value="">เลือกเดือนอื่น…</option>{monthOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><button type="button" aria-pressed={period === "custom"} disabled={Boolean(selectedDrawId)} onClick={() => { setPeriod("custom"); setSelected(null); }}>เลือกช่วงวันที่</button><button className="report-dashboard-quick-export" type="button" onClick={exportExcel} disabled={exporting || rows.length === 0}>{exporting ? "กำลังสร้าง…" : "ดาวน์โหลด Excel"}</button>{period === "custom" && !selectedDrawId && <div className="report-dashboard-dates"><DateRangePicker startLabel="ตั้งแต่วันที่" endLabel="ถึงวันที่" startPlaceholder="เลือกวันเริ่มต้น" endPlaceholder="เลือกวันสิ้นสุด" startDate={from} endDate={to} onChange={({ startDate, endDate }) => { setFrom(startDate); setTo(endDate); setSelected(null); }} /></div>}{selectedDrawId && <small>กำลังดูงวดที่เลือกด้านบน</small>}</div>}
       <div className="report-dashboard-visual-grid">
         <div className="report-dashboard-visual-main">
-          {matrixError && settings.kind === "stacked" ? <div className="report-dashboard-empty" role="alert">{matrixError} <button type="button" onClick={() => setMatrixError("")}>ลองอีกครั้ง</button></div> : <ReportsDashboardChart kind={settings.kind} rows={rows} metric={settings.metric} dimension={settings.dimension} cells={matrix ?? undefined} showGrid={settings.showGrid} showLegend={settings.showLegend} min={settings.min === "" ? undefined : Number(settings.min)} max={settings.max === "" ? undefined : Number(settings.max)} onSelect={setSelected} />}
+          {matrixError && settings.kind === "stacked" ? <div className="report-dashboard-empty" role="alert">{matrixError} <button type="button" onClick={() => setMatrixRetry((value) => value + 1)}>ลองอีกครั้ง</button></div> : <ReportsDashboardChart kind={settings.kind} rows={rows} metric={settings.metric} dimension={settings.dimension} cells={matrix ?? undefined} showGrid={settings.showGrid} showLegend={settings.showLegend} min={settings.min === "" ? undefined : Number(settings.min)} max={settings.max === "" ? undefined : Number(settings.max)} onSelect={setSelected} />}
           {selected && <div className="report-dashboard-selection" aria-live="polite"><b>{selected.name}</b><span>ยอดขาย {MONEY.format(selected.gross)} บาท</span><span>จำนวนบิล {COUNT.format(selected.bills)}</span>{selected.href && <a href={selected.href}>ดูรายละเอียด →</a>}</div>}
         </div>
         <aside className="report-dashboard-quick-summary" aria-label="สรุปข้อมูลจากกราฟ" aria-live="polite">

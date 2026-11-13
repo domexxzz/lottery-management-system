@@ -20,7 +20,7 @@ const CUTOFF_LABEL = new Intl.DateTimeFormat("th-TH", {
   timeZone: "Asia/Bangkok",
 });
 
-const ROLE_LABEL = { GODMODE: "Godmode", OWNER: "Owner", ADMIN: "Admin", AGENT: "Agent" } as const;
+const ROLE_LABEL = { OWNER: "Owner", ADMIN: "Admin", AGENT: "Agent" } as const;
 
 /**
  * หน้าสร้างบิล ใช้หน้าเดียวกันทุกบทบาท
@@ -55,7 +55,7 @@ export default async function NewBillPage() {
           where: {
             ...orgScope(actor),
             status: "ACTIVE",
-            role: { in: actor.role === "GODMODE" ? ["GODMODE", "OWNER", "ADMIN", "AGENT"] : actor.role === "OWNER" ? ["OWNER", "ADMIN", "AGENT"] : ["ADMIN", "AGENT"] },
+            role: { in: actor.role === "OWNER" ? ["OWNER", "ADMIN", "AGENT"] : ["ADMIN", "AGENT"] },
             OR: [{ agent: null }, { agent: { status: "ACTIVE" } }],
           },
           orderBy: [{ role: "asc" }, { displayName: "asc" }],

@@ -12,7 +12,6 @@
     "db:up": "docker compose up -d",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
-    "user:godmode": "tsx scripts/bootstrap-godmode.ts",
     "db:studio": "prisma studio",
     "verify": "npm run typecheck && npm run lint && npm test && npm run test:integration && npm run build",
     "test": "vitest run --config vitest.config.mts",

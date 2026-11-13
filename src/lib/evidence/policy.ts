@@ -25,5 +25,5 @@ export function canReplaceRejectedEvidence(input: {
 }
 
 export function canReviewEvidence(role: Role): boolean {
-  return role === "GODMODE" || role === "OWNER" || role === "ADMIN";
+  return role === "OWNER" || role === "ADMIN";
 }

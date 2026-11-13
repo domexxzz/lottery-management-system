@@ -284,9 +284,9 @@ export async function enterResult(
  *
  * ไม่เขียนทับผลเดิมและไม่ลบทิ้ง แต่สร้าง version ถัดไปเพื่อเก็บประวัติ
  * Admin สร้าง DRAFT โดยผลเดิมยังมีผลจนกว่า Owner จะอนุมัติ
- * Owner/Godmode สร้างผล APPROVED และใช้ผลใหม่ทันที
+ * Owner สร้างผล APPROVED และใช้ผลใหม่ทันที
  *
- * Admin สร้างคำขอ DRAFT เพื่อรอ Owner อนุมัติ ส่วน Owner/Godmode อนุมัติทันที
+ * Admin สร้างคำขอ DRAFT เพื่อรอ Owner อนุมัติ ส่วน Owner อนุมัติทันที
  */
 export async function proposeResultCorrection(
   actor: Actor,

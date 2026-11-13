@@ -129,6 +129,14 @@ describe("แก้ไขและลบบิลก่อนปิดรับ"
     expect(audit.after).toMatchObject({ status: "CANCELLED", excludedFromCalculation: true });
     const pending = await listBetBills(f.actors.ADMIN, { tab: "PENDING" });
     expect(pending.bills).toHaveLength(0);
+    const active = await listBetBills(f.actors.ADMIN, { tab: "ALL" });
+    expect(active.bills).toHaveLength(0);
+    expect(active.counts.ALL).toBe(0);
+    expect(active.counts.CANCELLED).toBe(1);
+    expect(active.totals.stake.toFixed(2)).toBe("0.00");
+    expect(active.sequence.highest).toBe(placed.drawSequence);
+    const deleted = await listBetBills(f.actors.ADMIN, { tab: "CANCELLED" });
+    expect(deleted.bills.map((row) => row.id)).toEqual([placed.billId]);
   });
 
   test("หลังปิดรับแล้ว Agent/Admin/Owner แก้หรือลบบิลไม่ได้", async () => {

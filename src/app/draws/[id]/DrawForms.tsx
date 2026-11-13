@@ -86,7 +86,7 @@ export function EnterResultForm({
  *
  * แยกจากช่องกรอกผลปกติโดยตั้งใจ เพราะเป็นคนละการกระทำ:
  * การกรอกผลจบในขั้นตอนเดียว ส่วนการแก้ต้องมีเหตุผล
- * Admin รอ Owner อนุมัติ แต่ Owner/Godmode บันทึกแล้วใช้ผลใหม่ทันที
+ * Admin รอ Owner อนุมัติ แต่ Owner บันทึกแล้วใช้ผลใหม่ทันที
  */
 export function ProposeCorrectionForm({
   drawId,
