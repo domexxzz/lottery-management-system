@@ -3,7 +3,14 @@ import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
 import { verifyPassword } from "@/lib/auth/password";
 import { confirmBill, createDraftBill, replaceDraftItems } from "@/lib/bills/service";
-import { createManagedUser, deleteManagedUser, listManagedUsers, setManagedUserPassword } from "./service";
+import {
+  createManagedUser,
+  deleteManagedUser,
+  listManagedUsers,
+  setManagedUserPassword,
+  updateManagedUser,
+  type UpdateManagedUserInput,
+} from "./service";
 
 let f: Fixtures;
 
@@ -40,6 +47,47 @@ describe("Owner จัดการบัญชี", () => {
     const updated = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(await verifyPassword(updated.passwordHash, "new")).toBe(true);
     expect(await verifyPassword(updated.passwordHash, "old")).toBe(false);
+  });
+
+  test("Owner แก้ข้อมูลบัญชีและ Agent ได้ แต่เปลี่ยน username ไม่ได้แม้ client ส่งค่าแฝงมา", async () => {
+    const created = await newAgent("ตัวแทนเดิม", "old");
+    const user = await prisma.user.findFirstOrThrow({
+      where: { organizationId: f.org.id, login: created.login },
+      include: { agent: true },
+    });
+
+    const input: UpdateManagedUserInput & { login: string } = {
+      login: "hacked-username",
+      displayName: "ตัวแทนใหม่",
+      role: "AGENT",
+      status: "SUSPENDED",
+      password: "new-password",
+      agentCode: "ZX9",
+      agentName: "สาขาใหม่",
+      commissionRate: "25.5",
+      creditLimit: "5000",
+      perNumberLimit: "250",
+    };
+    const result = await updateManagedUser(f.actors.OWNER, user.id, input);
+
+    const updated = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, include: { agent: true } });
+    expect(result.login).toBe(created.login);
+    expect(updated.login).toBe(created.login);
+    expect(updated.displayName).toBe("ตัวแทนใหม่");
+    expect(updated.status).toBe("SUSPENDED");
+    expect(updated.mustChangePassword).toBe(false);
+    expect(await verifyPassword(updated.passwordHash, "new-password")).toBe(true);
+    expect(updated.agent).toMatchObject({ code: "ZX9", name: "สาขาใหม่", status: "SUSPENDED" });
+    expect(updated.agent?.commissionRate.toString()).toBe("25.5");
+    expect(updated.agent?.creditLimit?.toString()).toBe("5000");
+    expect(updated.agent?.perNumberLimit?.toString()).toBe("250");
+
+    const audit = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: f.org.id, entityType: "User", entityId: user.id, action: "UPDATE" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit.before).toMatchObject({ login: created.login });
+    expect(audit.after).toMatchObject({ login: created.login, displayName: "ตัวแทนใหม่" });
   });
 
   test("ลบบัญชีที่ยังไม่ใช้งานได้จริง ส่วนบัญชีที่มีบิลถูกซ่อนและเลขไม่ถูกใช้ซ้ำ", async () => {

@@ -32,6 +32,7 @@ export async function listDraws(
       cutoffAt: true,
       createdAt: true,
       status: true,
+      lotteryType: true,
       lockedAt: true,
       settlements: { select: { status: true } },
       _count: { select: { bills: true } },

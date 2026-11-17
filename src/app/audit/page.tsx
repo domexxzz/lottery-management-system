@@ -83,7 +83,7 @@ export default async function InspectionHistoryPage({
   };
 
   const [draws, users, resultGroups, totalBillCount] = await Promise.all([
-    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true } }),
+    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, lotteryType: true } }),
     prisma.user.findMany({
       where: { ...scope, role: { in: ["OWNER", "ADMIN", "AGENT"] } },
       orderBy: { displayName: "asc" },
@@ -168,7 +168,7 @@ export default async function InspectionHistoryPage({
 
     <section className="audit-kpis"><article><span>ผลรางวัลที่พบ</span><strong>{totalResultCount.toLocaleString("th-TH")}</strong><small>ตามตัวกรองปัจจุบัน</small></article><article><span>ตรวจแล้ว</span><strong>{(resultCounts.get("APPROVED") ?? 0).toLocaleString("th-TH")}</strong><small>ผ่านการอนุมัติ</small></article><article className={(resultCounts.get("DRAFT") ?? 0) ? "danger" : ""}><span>รอตรวจ</span><strong>{(resultCounts.get("DRAFT") ?? 0).toLocaleString("th-TH")}</strong><small>ยังไม่ยืนยัน</small></article><article><span>บิลที่พบ</span><strong>{totalBillCount.toLocaleString("th-TH")}</strong><small>เปิดดูแยกอีกมุมมอง</small></article></section>
 
-    <AuditFilters draws={draws.map((draw) => ({ id: draw.id, label: draw.name }))} users={users.map((user) => ({ id: user.id, label: `${user.displayName} · ${user.role}` }))} />
+    <AuditFilters draws={draws.map((draw) => ({ id: draw.id, label: draw.name, lotteryType: draw.lotteryType }))} users={users.map((user) => ({ id: user.id, label: `${user.displayName} · ${user.role}` }))} />
 
     <nav className="inspection-view-tabs" aria-label="เลือกประเภทประวัติ"><Link className={view === "results" ? "active" : ""} href={href({ view: null, page: null })}><span>ผลรางวัล</span><small>เลขรางวัลและผู้ยืนยัน</small></Link><Link className={view === "bills" ? "active" : ""} href={href({ view: "bills", page: null })}><span>บิลที่คีย์</span><small>เปิดดูเมื่อต้องตรวจเลขในบิล</small></Link></nav>
 

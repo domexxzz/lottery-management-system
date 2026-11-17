@@ -22,3 +22,33 @@
 @media(max-width:850px){.all-draw-filters{grid-template-columns:1fr 1fr}.all-draw-filters button{width:100%}}
 @media(max-width:560px){.all-draw-filters{grid-template-columns:1fr}.all-draw-sort{justify-content:center}}
 .draw-management-actions{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}.draw-management-actions form{margin:0}.draw-management-actions .danger-button{min-height:34px;margin:0;padding:.4rem .62rem;font-size:.61rem;white-space:nowrap}.delete-draw-form>p{max-width:190px;margin:.25rem 0;color:#a43740;font-size:.58rem}
+
+/* สร้างงวดหวยลาว */
+.create-draw-panel-lao{margin-top:1rem}
+.lao-draw-types{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin:.8rem 0;padding:.8rem;border:1px solid #dfe8ed;border-radius:12px}
+.lao-draw-types legend{padding:0 .3rem;font-weight:800}
+.lao-draw-types label{display:grid;grid-template-columns:auto 1fr;gap:.1rem .5rem;align-items:center;padding:.6rem .7rem;border:1px solid #e3eaf0;border-radius:10px;background:#fff;cursor:pointer}
+.lao-draw-types label small{grid-column:2;color:#5b6976;font-size:.8rem}
+.lao-draw-types p{grid-column:1/-1;margin:0;color:#4d5b69;font-size:.84rem}
+@media(max-width:640px){.lao-draw-types{grid-template-columns:1fr}}
+
+/* สร้างงวดทีละขั้น */
+.draw-wizard-start{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem 1rem}
+.draw-wizard-start button{padding:.75rem 1.4rem;font-size:1rem;font-weight:850}
+.draw-wizard-start small{color:#5b6976}
+.draw-wizard{display:grid;gap:.8rem}
+.draw-wizard-step{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem;margin:0;color:#33414f;font-weight:700}
+.draw-wizard-step b{padding:.15rem .55rem;border-radius:99px;color:#fff;background:#1f4d73;font-size:.8rem}
+.draw-wizard-step strong{color:#123853;font-size:1.05rem}
+.draw-wizard-types{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem}
+/* ขึ้นต้นด้วย .app-page ให้ชนะกฎ .app-page button ใน globals.css (พื้นเขียวเข้ม) ไม่ว่า CSS ไฟล์ไหนโหลดทีหลัง */
+.app-page .draw-wizard-types button{display:grid;align-content:start;gap:.25rem;min-height:0;padding:1rem;border:1.5px solid #cfdde8;border-radius:14px;color:#123853;background:#fff;box-shadow:0 4px 12px rgb(20 60 90 / 6%);font-size:inherit;text-align:left;cursor:pointer}
+.app-page .draw-wizard-types button:hover:not(:disabled){transform:none;box-shadow:0 6px 16px rgb(20 60 90 / 10%);border-color:#1f4d73;background:#f4f9fd}
+.app-page .draw-wizard-types strong{color:#123853;font-size:1.1rem}
+.app-page .draw-wizard-types span{color:#4d5b69;font-size:.85rem;font-weight:500;line-height:1.45}
+.draw-wizard>.secondary-button{justify-self:start}
+.draw-wizard-chosen{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem}
+.lao-draw-settings{grid-template-columns:repeat(2,minmax(0,1fr))}
+.lao-companion{display:grid;grid-template-columns:auto 1fr;gap:.1rem .5rem;align-items:center;margin:.6rem 0;padding:.6rem .8rem;border:1px solid #e3eaf0;border-radius:10px;background:#fff;cursor:pointer}
+.lao-companion small{grid-column:2;color:#5b6976;font-size:.8rem}
+@media(max-width:760px){.draw-wizard-types,.lao-draw-settings{grid-template-columns:1fr}}

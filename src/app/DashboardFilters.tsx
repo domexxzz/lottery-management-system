@@ -7,7 +7,7 @@ import { DashboardIcon as Icon } from "./DashboardIcon";
 import { DateRangePicker, type DateRangeValue } from "@/components/calendar";
 import { recentMonths } from "@/lib/draws/range";
 
-type Option = { id: string; label: string };
+type Option = { id: string; label: string; lotteryType?: string };
 
 export function DashboardFilters({ draws }: { draws: Option[] }) {
   const router = useRouter();
@@ -48,7 +48,7 @@ export function DashboardFilters({ draws }: { draws: Option[] }) {
       </button>
     </div>
     <div className="filter-fields">
-      <label>งวด<span className="filter-control"><Icon name="calendar" /><AppDropdown value={searchParams.get("drawId") ?? ""} onValueChange={(value) => update("drawId", value)} options={[{ value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" ariaLabel="เลือกงวด" /></span></label>
+      <label>งวด<span className="filter-control"><Icon name="calendar" /><AppDropdown value={searchParams.get("drawId") ?? ""} onValueChange={(value) => update("drawId", value)} options={[{ value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label, lotteryType: draw.lotteryType }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" ariaLabel="เลือกงวด" /></span></label>
       <label>เลือกเดือน<span className="filter-control"><Icon name="calendar" /><AppDropdown value={selectedMonth} onValueChange={selectMonth} options={[{ value: "", label: customRange ? "ช่วงที่เลือกเอง" : "ทุกเดือน" }, ...months.map((month) => ({ value: month.key, label: month.name }))]} ariaLabel="เลือกทั้งเดือน" /></span></label>
       <DateRangePicker startDate={dateFrom} endDate={dateTo} onChange={updateRange} />
     </div>

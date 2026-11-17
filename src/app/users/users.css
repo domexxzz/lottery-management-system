@@ -26,3 +26,29 @@
 .user-row-editor button{height:36px;margin:0;font-size:.64rem}
 .user-row-editor button.danger{background:#c64750}
 @media(max-width:700px){.user-credentials{grid-template-columns:1fr}.user-auto-identity{grid-template-columns:1fr 1fr}}
+
+/* หน้าแก้ไขผู้ใช้: แยกเป็นขั้นตอนเพื่อให้ Owner ตรวจค่าเดิมและค่าที่แก้ได้ง่าย */
+.user-edit-link{display:inline-flex;min-height:36px;align-items:center;justify-content:center;padding:0 .9rem;border:1px solid #68b8c0;border-radius:9px;color:#087c88;background:#effafa;font-size:.66rem;font-weight:850;text-decoration:none}
+.user-edit-link:hover{border-color:#087c88;background:#e1f5f5}
+.user-edit-page{max-width:1180px;margin:0 auto}
+.user-edit-hero{align-items:center}
+.user-edit-identity{display:grid;min-width:220px;gap:.08rem;padding:.7rem .9rem;border:1px solid #cfe2e7;border-radius:12px;background:linear-gradient(135deg,#f7fcfd,#edf7f8)}
+.user-edit-identity small{color:#718693;font-size:.58rem}.user-edit-identity strong{color:#17384f;font-size:.9rem}.user-edit-identity span{color:#087c88;font-size:.68rem;font-weight:750}
+.user-edit-card{max-width:980px;margin:0 auto;padding:1.15rem}
+.user-edit-form{display:grid;gap:.85rem}
+.user-edit-section{overflow:hidden;border:1px solid #d8e6eb;border-radius:14px;background:#fff}
+.user-edit-section>header{display:flex;align-items:center;gap:.65rem;padding:.7rem .85rem;border-bottom:1px solid #e0eaee;background:linear-gradient(120deg,#f7fbfc,#edf7f8)}
+.user-edit-section>header>span{display:inline-flex;flex:0 0 28px;width:28px;height:28px;align-items:center;justify-content:center;border-radius:50%;color:#fff;background:#0b8c98;font-size:.7rem;font-weight:900}
+.user-edit-section h2{margin:0;color:#17384f;font-size:.88rem}.user-edit-section header p{margin:.08rem 0 0;color:#71838f;font-size:.6rem}
+.user-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;padding:.85rem}
+.user-edit-agent-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.user-edit-grid label{display:grid;align-content:start;gap:.25rem;color:#405e70;font-size:.64rem;font-weight:800}
+.user-edit-grid :is(input,select){width:100%;height:42px;margin:0;border:1px solid #cadce5;border-radius:9px;color:#17384f;background:#fbfdfe;font-size:.72rem}
+.user-edit-grid small{color:#81929d;font-size:.57rem;font-weight:500;line-height:1.45}
+.user-edit-grid .user-readonly-input{border-color:#d8e1e6;color:#637888;background:#edf2f4;cursor:not-allowed}
+.user-edit-message{margin:0;padding:.65rem .75rem;border-radius:10px;background:#effaf5;font-size:.67rem;font-weight:750}.user-edit-message.error{background:#fff0f1}
+.user-edit-actions{display:flex;align-items:center;justify-content:flex-end;gap:.55rem;padding-top:.15rem}
+.user-edit-actions a,.user-edit-actions button{display:inline-flex;min-width:130px;height:42px;align-items:center;justify-content:center;margin:0;padding:0 .9rem;border-radius:10px;font-size:.7rem;font-weight:850;text-decoration:none}
+.user-edit-actions a{border:1px solid #ccdce4;color:#526b79;background:#fff}.user-edit-actions button{background:#087c88}
+@media(max-width:860px){.user-edit-agent-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.user-edit-page{padding:.65rem}.user-edit-hero{align-items:stretch}.user-edit-identity{min-width:0}.user-edit-card{padding:.7rem}.user-edit-grid,.user-edit-agent-grid{grid-template-columns:1fr}.user-edit-actions{display:grid;grid-template-columns:1fr 1fr}.user-edit-actions>*{width:100%;min-width:0}}

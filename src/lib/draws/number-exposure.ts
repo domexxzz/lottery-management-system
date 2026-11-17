@@ -30,6 +30,8 @@ export type ExposureRow = {
   isPermutation: boolean;
   used: Prisma.Decimal;
   itemCount: number;
+  /** เพดานของเลขนี้ (เพดานเฉพาะเลข หรือเพดานทั้งงวด) null = ไม่จำกัด */
+  cap: Prisma.Decimal | null;
   /** null เมื่องวดไม่จำกัดเพดาน */
   remaining: Prisma.Decimal | null;
   percent: number | null;
@@ -46,7 +48,7 @@ export type ExposureSummary = {
 
 type SqlClient = Pick<Prisma.TransactionClient, "$queryRaw">;
 
-function table(name: "bills" | "bill_items" | "prize_types") {
+function table(name: "bills" | "bill_items" | "prize_types" | "number_cap_overrides") {
   const schema = databaseSchema().replaceAll('"', '""');
   return Prisma.raw(`"${schema}"."${name}"`);
 }
@@ -82,20 +84,27 @@ function exposureCte(scope: ExposureScope): Prisma.Sql {
         ${scope.prizeTypeIds ? (scope.prizeTypeIds.length === 0 ? Prisma.sql`AND FALSE` : Prisma.sql`AND bi."prizeTypeId" IN (${Prisma.join(scope.prizeTypeIds)})`) : Prisma.empty}
       GROUP BY 1, 2
     ),
+    capped AS (
+      -- เพดานเฉพาะเลข (number_cap_overrides) ทับเพดานทั้งงวด
+      SELECT a.*, COALESCE(o.cap, ${cap}::numeric) AS eff_cap
+      FROM agg a
+      LEFT JOIN ${table("number_cap_overrides")} o
+        ON o."drawId" = ${scope.drawId} AND o."prizeTypeId" = a.prize_type_id AND o.number = a.num
+    ),
     exposure AS (
-      SELECT a.prize_type_id, a.num, a.used, a.item_count,
+      SELECT c.prize_type_id, c.num, c.used, c.item_count, c.eff_cap AS cap,
              pt.name AS prize_type_name, pt.code AS prize_type_code,
              (pt."matchRule" = 'PERMUTATION') AS is_perm,
-             (${cap}::numeric - a.used) AS remaining,
-             ROUND(a.used * 100 / NULLIF(${cap}::numeric, 0), 2) AS percent,
+             (c.eff_cap - c.used) AS remaining,
+             ROUND(c.used * 100 / NULLIF(c.eff_cap, 0), 2) AS percent,
              CASE
-               WHEN ${cap}::numeric IS NULL THEN 'normal'
-               WHEN a.used >= ${cap}::numeric THEN 'full'
-               WHEN a.used >= ${cap}::numeric * ${NEAR_FULL_RATIO} THEN 'near'
+               WHEN c.eff_cap IS NULL THEN 'normal'
+               WHEN c.used >= c.eff_cap THEN 'full'
+               WHEN c.used >= c.eff_cap * ${NEAR_FULL_RATIO} THEN 'near'
                ELSE 'normal'
              END AS status
-      FROM agg a
-      JOIN ${table("prize_types")} pt ON pt.id = a.prize_type_id
+      FROM capped c
+      JOIN ${table("prize_types")} pt ON pt.id = c.prize_type_id
     )
   `;
 }
@@ -108,6 +117,7 @@ type RawRow = {
   prize_type_name: string;
   prize_type_code: number;
   is_perm: boolean;
+  cap: Prisma.Decimal | null;
   remaining: Prisma.Decimal | null;
   percent: Prisma.Decimal | null;
   status: ExposureStatus;
@@ -123,6 +133,7 @@ function toRow(row: RawRow): ExposureRow {
     isPermutation: row.is_perm,
     used: new Prisma.Decimal(row.used),
     itemCount: row.item_count,
+    cap: row.cap === null ? null : new Prisma.Decimal(row.cap),
     remaining: row.remaining === null ? null : new Prisma.Decimal(row.remaining),
     percent: row.percent === null ? null : Number(row.percent),
     status: row.status,

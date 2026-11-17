@@ -48,6 +48,10 @@ enum DrawStatus {
 /// ประเภทหวยของงวด ตอนนี้มีเฉพาะหวยรัฐบาลไทย
 enum LotteryType {
   THAI_GOVERNMENT
+  /// หวยลาว แทงแยกประเภท แทงได้ทุกเลข
+  LAO
+  /// หวยลาวชุด ใช้ผลเดียวกับหวยลาว แทงได้ทุกเลข แยกเพดานจากหวยลาว
+  LAO_SET
 }
 
 /// ข้อจำกัดของเลขในงวด
@@ -153,9 +157,9 @@ model Organization {
   isActive Boolean @default(true)
 
   /// ตัวนับเลขบิลเดิม (legacy) — ระบบปัจจุบันใช้ AgentBillCounter ราย Agent/เดือน
-  billSequence    Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  billSequence Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   users                  User[]
   agents                 Agent[]
@@ -284,8 +288,8 @@ model Agent {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bills       Bill[]
-  settlements Settlement[]
+  bills        Bill[]
+  settlements  Settlement[]
   billCounters AgentBillCounter[]
 
   @@unique([organizationId, code])
@@ -318,7 +322,9 @@ model PrizeType {
   /// ถ้าไม่ตั้ง ระบบจะปฏิเสธการลงผลของรางวัลนั้น ไม่เดาค่าให้
   resultDigits Int?
   /// วิธีตัดสินว่าถูกรางวัล — ดู MatchRule
-  matchRule    MatchRule @default(EXACT)
+  matchRule    MatchRule   @default(EXACT)
+  /// ประเภทหวยที่รางวัลนี้ใช้ หน้าแทงและการลงผลแสดงเฉพาะรางวัลของประเภทหวยของงวด
+  lotteryType  LotteryType @default(THAI_GOVERNMENT)
 
   /// อัตราจ่ายต่อเงินเดิมพัน 1 หน่วย เช่น 900.0000 = จ่าย 900 บาทต่อ 1 บาท
   payoutRate      Decimal  @db.Decimal(12, 4)
@@ -332,6 +338,7 @@ model PrizeType {
   billItems         BillItem[]
   results           Result[]
   restrictedNumbers RestrictedNumber[]
+  capOverrides      NumberCapOverride[]
 
   @@unique([organizationId, code])
   @@map("prize_types")
@@ -350,18 +357,22 @@ model Draw {
   /// วันที่ออกผลของงวด (วันที่ 1 หรือ 16) — null สำหรับงวดที่สร้างก่อนมีคอลัมน์นี้
   drawDate    DateTime?   @db.Date
   /// เวลาเริ่มรับบิล
-  opensAt  DateTime
+  opensAt     DateTime
   /// เวลาปิดรับบิล — ถึงเวลานี้ worker จะล็อกบิลทั้งรอบ
-  cutoffAt DateTime
+  cutoffAt    DateTime
 
-  status   DrawStatus @default(OPEN)
+  status         DrawStatus @default(OPEN)
   /// เพดานยอดแทงรวมต่อเลขต่อประเภทรางวัลของทั้งงวด (ทุก Agent รวมกัน)
   /// ยอดครบเพดานแล้วเลขนั้นเป็น "เลขเต็ม" ปิดรับอัตโนมัติ · null = ไม่จำกัด
-  numberCap Decimal? @default(2000) @db.Decimal(18, 2)
+  numberCap      Decimal?   @default(2000) @db.Decimal(18, 2)
+  /// ผลที่ออกแบบเต็ม (หวยลาว 6 หลัก) เก็บไว้แสดงและตรวจย้อนหลัง ผลรายประเภทอยู่ใน results
+  officialNumber String?
+  /// เวลาออกผล (หวยลาวตั้งค่าเริ่มต้น 20:30 น. แก้ได้ตอนสร้างงวด) null = ไม่ได้ระบุ
+  resultAt       DateTime?
   /// ตัวนับเลขบิลเดิมระดับงวด (legacy) — เก็บไว้เพื่อรองรับฐานข้อมูลรุ่นก่อน
-  billSequence Int @default(0)
-  lockedAt DateTime?
-  closedAt DateTime?
+  billSequence   Int        @default(0)
+  lockedAt       DateTime?
+  closedAt       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -370,12 +381,35 @@ model Draw {
   results           Result[]
   settlements       Settlement[]
   restrictedNumbers RestrictedNumber[]
+  capOverrides      NumberCapOverride[]
 
   @@index([organizationId, name])
   @@index([organizationId, status])
   @@index([organizationId, cutoffAt])
   @@index([status, cutoffAt])
   @@map("draws")
+}
+
+/// เพดานเฉพาะเลข ทับเพดานทั้งงวด (Draw.numberCap) ของเลขนั้นในประเภทนั้น
+model NumberCapOverride {
+  id             String @id @default(cuid())
+  organizationId String
+
+  drawId      String
+  draw        Draw      @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  prizeTypeId String
+  prizeType   PrizeType @relation(fields: [prizeTypeId], references: [id])
+
+  number String
+  cap    Decimal @db.Decimal(18, 2)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([drawId, prizeTypeId, number])
+  @@index([organizationId, drawId])
+  @@map("number_cap_overrides")
 }
 
 /// เลขเต็มและเลขอั้นของแต่ละงวด
@@ -391,10 +425,10 @@ model RestrictedNumber {
   prizeTypeId String
   prizeType   PrizeType @relation(fields: [prizeTypeId], references: [id])
 
-  number String
-  kind   RestrictionKind
+  number     String
+  kind       RestrictionKind
   /// อัตราจ่ายที่ลดลง ใช้เฉพาะ REDUCED_RATE
-  payoutRate Decimal? @db.Decimal(12, 4)
+  payoutRate Decimal?        @db.Decimal(12, 4)
 
   createdById String
   createdBy   User     @relation("RestrictedNumberCreatedBy", fields: [createdById], references: [id])
@@ -419,13 +453,16 @@ model Bill {
 
   /// รหัสภายในที่ออกตอนยืนยัน ไม่แสดงแก่ผู้ใช้
   /// รูปแบบ: รหัส Agent + ประเภทหวย + DDMMYY + ลำดับ 4 หลัก
-  billNumber   String?
+  billNumber     String?
   /// เลขบิลที่ผู้ใช้เห็น นับแยกตาม Agent และเริ่มใหม่จาก 1 ทุกเดือน (เวลาไทย)
-  drawSequence  Int?
+  drawSequence   Int?
   /// เดือนของเลขบิล รูปแบบ YYYY-MM ตาม Asia/Bangkok
   sequencePeriod String?
   /// ชื่อลูกค้า
-  title        String
+  title          String
+  /// รหัสการกดยืนยันจากหน้าสร้างบิล (สุ่มฝั่ง browser ต่อหนึ่งบิล)
+  /// คำขอซ้ำจากการกดสองครั้งหรือเน็ตส่งซ้ำได้บิลเดิม ไม่สร้างบิลใหม่
+  submissionKey  String?
 
   status BillStatus @default(DRAFT)
 
@@ -459,6 +496,7 @@ model Bill {
 
   @@unique([organizationId, billNumber])
   @@unique([agentId, sequencePeriod, drawSequence])
+  @@unique([organizationId, submissionKey])
   @@index([organizationId, createdAt])
   @@index([organizationId, drawId, status])
   @@index([organizationId, agentId, drawId])
@@ -475,7 +513,7 @@ model AgentBillCounter {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   agentId String
-  agent   Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   /// YYYY-MM ตามเวลา Asia/Bangkok
   period       String
@@ -787,8 +825,8 @@ model DirectMessage {
   senderId String
   sender   User   @relation("DirectMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
 
-  body      String?
-  createdAt DateTime @default(now())
+  body        String?
+  createdAt   DateTime  @default(now())
   /// เมื่อผู้ส่งยกเลิกข้อความ ให้เก็บแถวไว้เพื่อรักษาลำดับเวลา
   /// แต่ซ่อนเนื้อหาและไฟล์แนบจากผู้ใช้ทั้งสองฝั่ง
   cancelledAt DateTime?

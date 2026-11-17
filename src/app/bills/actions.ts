@@ -12,10 +12,14 @@ import {
   softDeleteBillBeforeCutoff,
   updateBillBeforeCutoff,
 } from "@/lib/bills/service";
-import { AppError } from "@/lib/errors";
+import { AppError, BillItemsRejectedError, type RejectedBillItem } from "@/lib/errors";
 import { MAX_STAKE_PER_ITEM } from "@/lib/bills/betting";
 
-export type ActionState = { error: string | null };
+export type ActionState = {
+  error: string | null;
+  /** เลขที่ Server ปฏิเสธตอนยืนยัน (เช่นเลขเต็มระหว่างกรอก) หน้าสร้างบิลใช้ไฮไลต์รายการที่ต้องแก้ */
+  rejected?: RejectedBillItem[];
+};
 
 const ItemSchema = z.object({
   prizeTypeId: z.string().min(1),
@@ -176,10 +180,14 @@ function readSlip(formData: FormData) {
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง" } as const;
   const representativeUserId = String(formData.get("representativeUserId") ?? "").trim() || undefined;
+  // รหัสสุ่มจาก browser กันบิลซ้ำ รับเฉพาะรูปแบบที่คาดไว้ ค่าแปลกถือว่าไม่ได้ส่งมา
+  const rawKey = String(formData.get("submissionKey") ?? "").trim();
+  const submissionKey = /^[A-Za-z0-9-]{16,64}$/.test(rawKey) ? rawKey : undefined;
   return {
     data: {
       ...parsed.data,
       representativeUserId,
+      submissionKey,
       items: parsed.data.items.map((item) => ({ ...item, stake: String(item.stake) })),
     },
   } as const;
@@ -192,16 +200,19 @@ export async function placeBillAction(_prev: ActionState, formData: FormData): P
   if ("error" in slip) return { error: slip.error ?? "ข้อมูลไม่ถูกต้อง" };
 
   let billId: string;
+  let duplicate = false;
   try {
     const placed = await placeBill(actor, slip.data);
     billId = placed.billId;
+    duplicate = placed.duplicate === true;
   } catch (error) {
+    if (error instanceof BillItemsRejectedError) return { error: error.message, rejected: error.rejected };
     if (error instanceof AppError) return { error: error.message };
     throw error;
   }
 
   revalidatePath("/bills");
-  redirect(`/bills/${billId}?placed=1#bill-evidence`);
+  redirect(`/bills/${billId}?placed=1${duplicate ? "&dup=1" : ""}`);
 }
 
 /** หน้าสร้างบิล: บันทึกเป็นร่างไว้ก่อน แก้หรือยืนยันภายหลังได้จากหน้ารายละเอียด */

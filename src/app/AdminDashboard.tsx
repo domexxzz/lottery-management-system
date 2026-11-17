@@ -8,7 +8,6 @@ import { prisma } from "@/lib/db";
 import { DashboardIcon as Icon } from "./DashboardIcon";
 import { DashboardFilters } from "./DashboardFilters";
 import { AdminOperationsChart } from "./AdminOperationsChart";
-import { NumberCapPanel } from "./NumberCapPanel";
 import "./admin-dashboard.css";
 
 type DashboardFilter = { drawId?: string; agentId?: string; status?: string; dateFrom?: string; dateTo?: string };
@@ -40,7 +39,7 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
   const trendStart = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
 
   const [draws, currentDraw, pendingEvidence, pendingEvidenceCount, awaitingResultDraws, reviewedToday, rejectedToday, pendingSettlements, pendingCancellations, missingEvidence, rejectedOutstanding, recentAudit, todayBills, trendBills, trendReviews] = await Promise.all([
-    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true, cutoffAt: true } }),
+    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true, cutoffAt: true, lotteryType: true } }),
     filters.drawId
       ? prisma.draw.findFirst({ where: { ...scope, id: filters.drawId }, select: { id: true, name: true, status: true, cutoffAt: true } })
       : prisma.draw.findFirst({ where: { ...scope, status: { in: ["OPEN", "LOCKED", "RESULT_PENDING", "SETTLED"] } }, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true, cutoffAt: true } }),
@@ -99,7 +98,7 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
       <div className="admin-primary-actions"><Link href="/evidence"><Icon name="evidence"/><span><small>งานเร่งด่วน</small><strong>ตรวจหลักฐาน</strong></span><Icon name="arrow"/></Link><Link href={drawAction.href} className="secondary"><Icon name="draw"/><span><small>ขั้นตอนถัดไป</small><strong>{drawAction.label}</strong></span><Icon name="arrow"/></Link></div>
     </div>
 
-    <DashboardFilters draws={draws.map((draw) => ({ id: draw.id, label: draw.name }))} />
+    <DashboardFilters draws={draws.map((draw) => ({ id: draw.id, label: draw.name, lotteryType: draw.lotteryType }))} />
 
     <section className="admin-kpi-grid" aria-label="สรุปงานวันนี้">
       <article><span><Icon name="bill"/></span><div><small>บิลใหม่วันนี้</small><strong>{todayBills}</strong><p>ตามตัวกรองที่เลือก</p></div></article>
@@ -108,7 +107,6 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
       <article className={rejectedToday ? "danger" : "success"}><span><Icon name="alert"/></span><div><small>ตีกลับวันนี้</small><strong>{rejectedToday}</strong><p>โดยบัญชีของคุณ</p></div></article>
     </section>
 
-    <NumberCapPanel actor={actor} />
 
     <AdminOperationsChart daily={daily} backlog={{ evidence: pendingEvidence.length, settlement: pendingSettlements, cancellation: pendingCancellations, rejected: rejectedOutstanding }} />
 

@@ -57,8 +57,8 @@ export async function fullNumbersByDraw(
   organizationId: string,
   draws: DrawCapInput,
 ): Promise<Map<string, ExposureRow[]>> {
-  const capped = draws.filter((draw) => draw.numberCap !== null);
-  const entries = await Promise.all(capped.map(async (draw) => [
+  // งวดที่ไม่จำกัดเพดานก็อาจมีเพดานเฉพาะเลข จึงต้องตรวจทุกงวด
+  const entries = await Promise.all(draws.map(async (draw) => [
     draw.id,
     await exposureByStatus(client, { drawId: draw.id, cap: draw.numberCap, organizationId }, "full"),
   ] as const));
@@ -74,8 +74,7 @@ export async function capStatusByDraw(
   draws: DrawCapInput,
   limits: { near?: number; full?: number } = {},
 ): Promise<Map<string, CapStatus>> {
-  const capped = draws.filter((draw) => draw.numberCap !== null);
-  const entries = await Promise.all(capped.map(async (draw) => {
+  const entries = await Promise.all(draws.map(async (draw) => {
     const scope = { drawId: draw.id, cap: draw.numberCap, organizationId };
     const [summary, full, near] = await Promise.all([
       exposureSummary(client, scope),
@@ -85,4 +84,17 @@ export async function capStatusByDraw(
     return [draw.id, { summary, full, near }] as const;
   }));
   return new Map(entries);
+}
+
+/** เพดานเฉพาะเลขของงวด คีย์ตาม dedupeKey ("prizeTypeId:เลข") */
+export async function loadCapOverrides(
+  client: Pick<Prisma.TransactionClient, "numberCapOverride">,
+  drawId: string,
+  prizeTypeIds?: readonly string[],
+): Promise<Map<string, Prisma.Decimal>> {
+  const rows = await client.numberCapOverride.findMany({
+    where: { drawId, ...(prizeTypeIds ? { prizeTypeId: { in: [...prizeTypeIds] } } : {}) },
+    select: { prizeTypeId: true, number: true, cap: true },
+  });
+  return new Map(rows.map((row) => [`${row.prizeTypeId}:${row.number}`, row.cap]));
 }

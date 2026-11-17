@@ -72,7 +72,7 @@ export async function loadManagementDashboard(actor: Actor, filters: DashboardFi
 
   const [selectedDraw, drawOptions, totals, itemCount, perAgent, recentBills, winnerTitles, awaitingClose, pendingCancellations, anomalyCount, activeAgents, settlementByDraw, settlementByAgent] = await Promise.all([
     filters.drawId ? prisma.draw.findFirst({ where: { ...scope, id: filters.drawId }, select: drawSelect }) : Promise.resolve(null),
-    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true, opensAt: true, cutoffAt: true } }),
+    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true, opensAt: true, cutoffAt: true, lotteryType: true } }),
     prisma.bill.aggregate({ where: moneyWhere, _count: { _all: true }, _sum: { totalStake: true, totalPayout: true } }),
     prisma.billItem.count({ where: { bill: moneyWhere } }),
     prisma.bill.groupBy({ by: ["agentId"], where: moneyWhere, _count: { _all: true }, _sum: { totalStake: true } }),
@@ -171,7 +171,7 @@ export async function loadManagementDashboard(actor: Actor, filters: DashboardFi
     .filter((row) => row.draw !== undefined)
     .sort((a, b) => (b.draw?.cutoffAt.getTime() ?? 0) - (a.draw?.cutoffAt.getTime() ?? 0))
     .slice(0, 4)
-    .map(({ draw, sum }) => ({ label: draw?.name ?? "-", gross: num(sum.gross), payout: num(sum.payout), commission: num(sum.commission), net: num(sum.net) }));
+    .map(({ draw, sum }) => ({ id: draw?.id ?? "unknown", label: draw?.name ?? "-", gross: num(sum.gross), payout: num(sum.payout), commission: num(sum.commission), net: num(sum.net) }));
   const agentFinance = settlementByAgent
     .map((row) => {
       const agent = agentById.get(row.agentId);
@@ -184,7 +184,7 @@ export async function loadManagementDashboard(actor: Actor, filters: DashboardFi
   return {
     selectedStatus,
     currentDraw,
-    drawOptions: drawOptions.map(({ id, name, status }) => ({ id, name, status })),
+    drawOptions: drawOptions.map(({ id, name, status, lotteryType }) => ({ id, name, status, lotteryType })),
     summary,
     recentBills,
     salesTrend,

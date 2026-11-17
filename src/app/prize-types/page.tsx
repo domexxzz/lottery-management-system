@@ -6,7 +6,7 @@ import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { listRestrictions } from "@/lib/draws/restrictions";
 import { capLabel, fullNumbersByDraw } from "@/lib/draws/number-cap";
-import { compactRate, drawDateLabel } from "@/lib/bills/betting";
+import { compactRate, lotteryLabel, drawDateLabel } from "@/lib/bills/betting";
 import { listPrizeTypes } from "@/lib/prizeTypes/service";
 import { RestrictionManager } from "../draws/[id]/RestrictionManager";
 import { PrizeTypeRow } from "./PrizeTypeRow";
@@ -36,7 +36,7 @@ export default async function PrizeTypesPage({
     prisma.draw.findMany({
       where: { ...orgScope(actor), status: "OPEN" },
       orderBy: [{ cutoffAt: "asc" }, { createdAt: "desc" }],
-      select: { id: true, name: true, drawDate: true, cutoffAt: true, numberCap: true },
+      select: { id: true, name: true, drawDate: true, cutoffAt: true, numberCap: true, lotteryType: true },
     }),
   ]);
   const visiblePrizeTypes = prizeTypes.filter((prizeType) => ![10, 11].includes(prizeType.code));
@@ -44,7 +44,10 @@ export default async function PrizeTypesPage({
   const confirmedItems = visiblePrizeTypes.reduce((sum, p) => sum + p._count.billItems, 0);
   const selectedDraw = openDraws.find((draw) => draw.id === query.drawId) ?? openDraws[0];
   const restrictionRows = selectedDraw ? await listRestrictions(actor, selectedDraw.id) : [];
-  const restrictionPrizeTypes = visiblePrizeTypes.filter((prizeType) => prizeType.isActive);
+  const restrictionPrizeTypes = visiblePrizeTypes.filter((prizeType) => prizeType.isActive && prizeType.lotteryType === (selectedDraw?.lotteryType ?? "THAI_GOVERNMENT"));
+  const lotteryGroups = ([["THAI_GOVERNMENT", "หวยรัฐบาล"], ["LAO", "หวยลาว"], ["LAO_SET", "หวยลาวชุด"]] as const)
+    .map(([lotteryType, label]) => ({ lotteryType, label, items: visiblePrizeTypes.filter((prizeType) => prizeType.lotteryType === lotteryType) }))
+    .filter((group) => group.items.length > 0);
   const fullNumberRows = selectedDraw
     ? (await fullNumbersByDraw(prisma, actor.organizationId, [selectedDraw])).get(selectedDraw.id) ?? []
     : [];
@@ -79,8 +82,11 @@ export default async function PrizeTypesPage({
 
         {!canEdit && <p className="muted">บทบาทของคุณดูได้อย่างเดียว</p>}
 
+        {lotteryGroups.map((group) => (
+        <div key={group.lotteryType} className="rulebook-lottery-group">
+        <h3 className="rulebook-lottery-heading">{group.label} <small>{group.items.length} ประเภท</small></h3>
         <div className="rulebook-prize-list">
-          {visiblePrizeTypes.map((p) =>
+          {group.items.map((p) =>
               canEdit ? (
                 <PrizeTypeRow
                   key={p.id}
@@ -107,6 +113,8 @@ export default async function PrizeTypesPage({
               ),
           )}
         </div>
+        </div>
+        ))}
       </section>
 
       <section id="number-restrictions" className="card workspace-card rulebook-section" aria-labelledby="number-restrictions-heading">
@@ -124,8 +132,9 @@ export default async function PrizeTypesPage({
               draws={openDraws.map((draw) => ({
                 id: draw.id,
                 name: draw.name,
+                lotteryType: draw.lotteryType,
                 dateLabel: draw.drawDate
-                  ? `${new Intl.DateTimeFormat("th-TH", { dateStyle: "long", timeZone: "Asia/Bangkok" }).format(draw.drawDate)} (${new Intl.DateTimeFormat("th-TH", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Bangkok" }).format(draw.drawDate)})`
+                  ? `${draw.lotteryType === "THAI_GOVERNMENT" ? "" : `${lotteryLabel(draw.lotteryType)} · `}${new Intl.DateTimeFormat("th-TH", { dateStyle: "long", timeZone: "Asia/Bangkok" }).format(draw.drawDate)} (${new Intl.DateTimeFormat("th-TH", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Bangkok" }).format(draw.drawDate)})`
                   : `งวด ${drawDateLabel(draw)}`,
                 cutoffLabel: new Intl.DateTimeFormat("th-TH", {
                   dateStyle: "medium",

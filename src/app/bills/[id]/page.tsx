@@ -9,6 +9,7 @@ import { NotFoundError } from "@/lib/errors";
 import { ConfirmButton, DeleteBillForm, EditBillForm } from "./BillActions";
 import { EvidenceManager } from "./EvidenceManager";
 import { SlipDetail } from "./SlipDetail";
+import { PlacedBillPanel } from "./PlacedBillPanel";
 import "./evidence.css";
 import "../slip-board.css";
 import { getStorageConfig } from "@/lib/storage/config";
@@ -22,13 +23,13 @@ export default async function BillDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ placed?: string; edit?: string }>;
+  searchParams: Promise<{ placed?: string; edit?: string; dup?: string }>;
 }) {
   const actor = await getActor();
   if (!actor) redirect("/login");
 
   const { id } = await params;
-  const { placed, edit } = await searchParams;
+  const { placed, edit, dup } = await searchParams;
 
   let bill;
   try {
@@ -80,7 +81,15 @@ export default async function BillDetailPage({
     <main className="workspace-page bill-detail-page slip-board-page">
       <section className="slip-detail-page" aria-labelledby="bill-heading">
         {placed === "1" && bill.drawSequence !== null && (
-          <p className="slip-placed" role="status">บันทึกบิลสำเร็จ · บิล {bill.drawSequence} · แนบหลักฐานได้ในส่วนด้านล่างจนกว่าจะปิดรับ</p>
+          <PlacedBillPanel
+            sequence={bill.drawSequence}
+            customer={bill.title}
+            itemCount={bill.items.length}
+            totalStake={bill.totalStake.toFixed(2)}
+            lotteryType={bill.draw.lotteryType}
+            draftScope={`${actor.userId}:${bill.draw.lotteryType}`}
+            duplicate={dup === "1"}
+          />
         )}
         <header className="bill-detail-toolbar">
           <Link href="/bills" className="slip-outline-button bill-detail-back">← กลับไปหน้าประวัติ</Link>

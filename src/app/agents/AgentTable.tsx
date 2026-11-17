@@ -53,7 +53,7 @@ export function AgentTable({
 }: {
   /** คีย์ลัด วันนี้ / งวดนี้ / เดือนนี้ (YYYY-MM-DD เวลาไทย) */
   shortcuts: { today: string; monthFrom: string; monthTo: string; drawId: string };
-  draws: { id: string; name: string }[];
+  draws: { id: string; name: string; lotteryType?: string }[];
   selectedDrawId: string;
   /** ช่วงวันที่ออกรางวัล YYYY-MM-DD ว่าง = ไม่กรองตามวันที่ */
   from: string;
@@ -145,7 +145,7 @@ export function AgentTable({
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         <input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="ค้นหา Agent หรือลูกค้า" aria-label="ค้นหา Agent หรือลูกค้า" />
       </label>
-      <AppDropdown ariaLabel="เลือกงวด" value={byRange ? RANGE_VALUE : selectedDrawId} onValueChange={changeDraw} options={[...(byRange ? [{ value: RANGE_VALUE, label: "ตามช่วงวันที่" }] : []), { value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.name }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" />
+      <AppDropdown ariaLabel="เลือกงวด" value={byRange ? RANGE_VALUE : selectedDrawId} onValueChange={changeDraw} options={[...(byRange ? [{ value: RANGE_VALUE, label: "ตามช่วงวันที่" }] : []), { value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.name, lotteryType: draw.lotteryType }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" />
       <AppDropdown ariaLabel="เลือกสถานะ Agent" value={status} onValueChange={(value) => { setStatus(value); setPage(1); }} options={[{ value: "", label: "ทุกสถานะ" }, { value: "ACTIVE", label: "ใช้งาน" }, { value: "SUSPENDED", label: "ระงับ" }, { value: "CLOSED", label: "ปิด" }]} />
       <div className="agent-view-switch" role="group" aria-label="รูปแบบการแสดงผล">
         <button type="button" aria-pressed={view === "table"} onClick={() => setView("table")}>ตาราง</button>

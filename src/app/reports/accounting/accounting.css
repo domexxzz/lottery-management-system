@@ -1,0 +1,53 @@
+/* สรุปบัญชี · เขียว = กำไร แดง = ขาดทุน */
+.accounting-page { display: grid; gap: 1rem; max-width: 1280px; }
+.acc-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: .8rem; }
+.app-page .acc-head h1 { margin: .15rem 0 .25rem; font-size: 1.5rem; }
+.acc-head p { margin: 0; color: #3f4c59; font-size: .92rem; }
+.acc-head .page-eyebrow a { color: inherit; }
+.acc-csv { padding: .6rem 1rem; border: 1px solid #c8dbef; border-radius: 10px; color: #1f4d73; background: #fff; font-weight: 800; text-decoration: none; }
+
+.acc-filters { display: grid; gap: .7rem; padding: .9rem 1rem; border: 1px solid #dfe7ee; border-radius: 14px; background: #fff; }
+.acc-filters.is-loading { opacity: .65; }
+.acc-tabs, .acc-lottery { display: flex; flex-wrap: wrap; gap: .4rem; }
+.accounting-page .acc-tabs button, .accounting-page .acc-lottery button { display: inline-flex; align-items: center; gap: .4rem; min-height: 38px; padding: 0 .9rem; border: 1px solid #c8dbef; border-radius: 10px; color: #2d4a6b; background: #fff; box-shadow: none; font-size: .9rem; font-weight: 750; cursor: pointer; }
+.accounting-page .acc-tabs button[aria-pressed="true"], .accounting-page .acc-lottery button[aria-pressed="true"] { border-color: #123b62; color: #fff; background: #123b62; }
+.acc-lottery svg { border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / 10%); }
+.acc-filter-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 280px)); gap: .6rem; }
+.acc-filter-row label { display: grid; gap: .25rem; margin: 0; color: #33414f; font-size: .85rem; font-weight: 750; }
+.acc-filter-row label .app-dropdown { margin-top: 0; }
+.acc-filter-row input[type="date"] { min-height: 42px; }
+
+.acc-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; }
+.acc-cards article { display: grid; gap: .15rem; padding: .85rem 1rem; border: 1px solid #dfe7ee; border-radius: 14px; background: #fff; }
+.acc-cards span { color: #3f4c59; font-size: .9rem; font-weight: 750; }
+.acc-cards strong { font-size: 1.55rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.acc-cards small { color: #5b6976; font-size: .8rem; }
+.acc-cards .is-profit { border: 2px solid #9edbbd; background: #f1fbf6; }
+.acc-cards .is-profit strong { color: #12814f; }
+.acc-cards .is-loss { border: 2px solid #f1a7b2; background: #fff2f4; }
+.acc-cards .is-loss strong { color: #c0283f; }
+
+.acc-card { padding: .9rem 1rem; border: 1px solid #dfe7ee; border-radius: 14px; background: #fff; }
+.acc-card > header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .2rem .8rem; margin-bottom: .6rem; }
+.app-page .acc-card h2 { margin: 0; font-size: 1.05rem; }
+.acc-card > header span { color: #5b6976; font-size: .84rem; }
+.acc-empty { margin: 0; padding: 1rem; color: #4d5b69; text-align: center; }
+.acc-table-wrap { overflow-x: auto; }
+.acc-table { width: 100%; min-width: 820px; margin: 0; border-collapse: collapse; }
+.acc-table th { padding: .5rem .6rem; color: #33414f; font-size: .8rem; font-weight: 800; text-align: left; background: #f6f9fb; white-space: nowrap; }
+.acc-table td { padding: .55rem .6rem; border-top: 1px solid #edf1f5; vertical-align: top; font-size: .92rem; }
+.acc-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.acc-table td small { display: block; color: #6b7d8c; font-size: .74rem; font-weight: 500; }
+.acc-table td a { color: inherit; text-decoration: none; }
+.acc-table .is-profit { color: #12814f; font-weight: 800; }
+.acc-table .is-loss { color: #c0283f; font-weight: 800; }
+.acc-table tfoot th, .acc-table tfoot td { border-top: 2px solid #c9d3dc; background: #f8fafc; font-weight: 900; }
+.acc-draw summary { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .45rem; cursor: pointer; }
+.acc-draw summary small { flex-basis: 100%; color: #6b7d8c; font-size: .74rem; }
+.acc-draw summary svg { border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / 10%); }
+.acc-agent-table { width: max-content; min-width: 100%; margin: .5rem 0 .2rem; border-collapse: collapse; background: #f8fafc; }
+.acc-agent-table th, .acc-agent-table td { padding: .35rem .55rem; font-size: .82rem; border-top: 1px solid #e6edf2; }
+.acc-agent-table .num { text-align: right; }
+
+@media (max-width: 900px) { .acc-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .acc-cards { grid-template-columns: 1fr; } }

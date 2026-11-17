@@ -37,7 +37,7 @@ export default async function AllDrawsPage({ searchParams }: { searchParams: Pro
     <section className="card workspace-card" aria-labelledby="all-draws-heading">
       <p><Link href="/draws">← กลับหน้าจัดการงวด</Link></p>
       <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">All Draws</p><h1 id="all-draws-heading">งวดทั้งหมด</h1><p>ดูประวัติและดำเนินการกับทุกงวด เรียงตามวันที่เปิดรับจากใหม่ไปเก่า</p></div><span className="draw-total-badge">{draws.length} / {allDraws.length} งวด</span></header>
-      <AllDrawFilters draws={allDraws.map((draw) => ({ id: draw.id, name: draw.name, status: getDrawDisplayStatus(draw) }))} />
+      <AllDrawFilters draws={allDraws.map((draw) => ({ id: draw.id, name: draw.name, status: getDrawDisplayStatus(draw), lotteryType: draw.lotteryType }))} />
       <DrawTable draws={draws} canEnterResults={canEnterResults} canReviewResults={canReviewResults} canManage={canManage} canDelete={canDelete} />
     </section>
   </main>;

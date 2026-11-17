@@ -40,3 +40,16 @@ export class ConflictError extends AppError {
     super(message, 409, "CONFLICT");
   }
 }
+
+/** เลขในบิลที่ Server ปฏิเสธตอนยืนยัน ระบุเป็นประเภท + เลข ให้หน้าสร้างบิลชี้ได้ว่าต้องแก้รายการไหน */
+export type RejectedBillItem = { prizeTypeId: string; number: string; reason: string };
+
+/**
+ * ตรวจบิลไม่ผ่านเพราะบางรายการ เช่นเลขเต็มระหว่างที่ผู้ใช้กำลังกรอก
+ * เป็น ValidationError เหมือนเดิม ที่เรียกใช้เดิมจึงทำงานได้ตามปกติ
+ */
+export class BillItemsRejectedError extends ValidationError {
+  constructor(message: string, readonly rejected: RejectedBillItem[]) {
+    super(message);
+  }
+}

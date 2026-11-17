@@ -494,3 +494,8 @@
   .rulebook-form-final .rulebook-field-wide { grid-column: span 1; }
 }
 
+
+/* แยกกลุ่มรางวัลตามประเภทหวย */
+.rulebook-lottery-group + .rulebook-lottery-group { margin-top: 1.4rem; }
+.app-page .rulebook-lottery-heading { display: flex; align-items: baseline; gap: .5rem; margin: .4rem 0 .6rem; color: #173b54; font-size: 1.05rem; }
+.rulebook-lottery-heading small { color: #5b6976; font-size: .8rem; font-weight: 600; }

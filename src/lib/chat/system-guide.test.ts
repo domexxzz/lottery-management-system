@@ -84,7 +84,7 @@ describe("คู่มือตรงกับสิทธิ์และเม�
 
   test("Agent ไม่เห็นเมนูของฝ่ายบริหาร", () => {
     const menus = block(roleSection("agent"), "เมนูที่เห็น").join("\n");
-    for (const label of ["ภาพรวม —", "รายงาน", "ตรวจหลักฐาน", "จัดการผู้ใช้งาน", "ผู้ช่วยล็อตเตอรี่", "ภาพรวม Agent"]) {
+    for (const label of ["ภาพรวม —", "ตรวจหลักฐาน", "จัดการผู้ใช้งาน", "ผู้ช่วยล็อตเตอรี่", "ภาพรวม Agent"]) {
       expect(menus).not.toContain(label);
     }
   });

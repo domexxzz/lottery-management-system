@@ -30,6 +30,8 @@ export const PERMISSIONS = [
   "evidence.upload",
   "evidence.review",
   "evidence.delete",
+  /** ตั้งเพดานเฉพาะเลข / ปลดเลขเต็ม (เฉพาะ Owner) */
+  "number.capOverride",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -69,6 +71,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "evidence.upload",
     "evidence.review",
     "evidence.delete",
+    "number.capOverride",
   ],
   ADMIN: [
     "report.viewAllAgents",

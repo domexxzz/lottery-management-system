@@ -8,7 +8,7 @@ export function RulebookDrawPicker({
   draws,
 }: {
   value: string;
-  draws: { id: string; name: string; dateLabel: string; cutoffLabel: string }[];
+  draws: { id: string; name: string; dateLabel: string; cutoffLabel: string; lotteryType?: string }[];
 }) {
   const router = useRouter();
 
@@ -29,6 +29,7 @@ export function RulebookDrawPicker({
           label: draw.name,
           description: `${draw.dateLabel} · ปิดรับ ${draw.cutoffLabel}`,
           badge: "เปิดรับ",
+          lotteryType: draw.lotteryType,
         }))}
         onValueChange={(drawId) => {
           router.replace(`/prize-types?drawId=${encodeURIComponent(drawId)}#number-restrictions`);

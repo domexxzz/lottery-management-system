@@ -6,6 +6,7 @@ import { lockDrawManually } from "@/lib/draws/service";
 import { approveResult, enterResult } from "@/lib/results/service";
 import { calculateSettlement } from "@/lib/settlement/service";
 import { byAgent, byDraw, byPrizeType, chartMatrix, drawSummary, searchBills } from "@/lib/reports/service";
+import { getAgentReport, getSimpleAgentReport } from "@/lib/reports/agent-report";
 import { sumMoney } from "@/lib/money";
 
 /**
@@ -117,6 +118,39 @@ describe("รายงานตรงกับ Settlement", () => {
 
     // 3 ตัวโต๊ด: A1 แทง 999 ไม่ใช่โต๊ดของ 123
     expect(byCode.get(2)!.winnerCount).toBe(0);
+  });
+
+  test("Agent เห็นรายงานรายงวดและเฉพาะบิลถูกรางวัลของตนเอง", async () => {
+    await settledDraw();
+
+    const report = await getAgentReport(f.actors.AGENT1, { drawId: f.draw.id, view: "winners" });
+    expect(report.rows).toHaveLength(1);
+    expect(report.rows[0]).toMatchObject({ drawId: f.draw.id, billCount: 1, winnerCount: 1 });
+    expect(report.rows[0]!.commission?.greaterThan(0)).toBe(true);
+    expect(report.bills).toHaveLength(1);
+    expect(report.bills[0]).toMatchObject({ title: "A1 บิลหนึ่ง" });
+    expect(report.bills[0]!.totalPayout.greaterThan(0)).toBe(true);
+
+    const otherAgent = await getAgentReport(f.actors.AGENT2, { drawId: f.draw.id, view: "winners" });
+    expect(otherAgent.bills).toHaveLength(0);
+  });
+
+  test("รายงาน Agent แบบย่อแสดง 2 งวดล่าสุด ยอดขาย ค่าคอม และบิลถูกรางวัล", async () => {
+    await settledDraw();
+
+    const report = await getSimpleAgentReport(f.actors.AGENT1);
+    expect(report.rounds.length).toBeLessThanOrEqual(2);
+    const round = report.rounds.find((item) => item.drawId === f.draw.id);
+    expect(round).toMatchObject({ billCount: 1, winnerCount: 1, commissionFinal: true });
+    expect(round?.gross.greaterThan(0)).toBe(true);
+    expect(round?.commission.greaterThan(0)).toBe(true);
+    expect(report.winners).toHaveLength(1);
+    expect(report.winners[0]).toMatchObject({ title: "A1 บิลหนึ่ง" });
+
+    const selected = await getSimpleAgentReport(f.actors.AGENT1, f.draw.id);
+    expect(selected.selectedDrawId).toBe(f.draw.id);
+    expect(selected.rounds[0]?.drawId).toBe(f.draw.id);
+    expect(selected.drawOptions.some((draw) => draw.id === f.draw.id)).toBe(true);
   });
 
   test("ตัวกรองทุกรอบรวมยอดและ Settlement ของ Agent จากหลายรอบ", async () => {

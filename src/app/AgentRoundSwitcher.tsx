@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { AppDropdown } from "./AppDropdown";
 import { DRAW_DISPLAY_STATUS_LABEL, getDrawDisplayStatus } from "@/lib/draws/display-status";
 
-type DrawOption = { id: string; name: string; status: string; cutoffAt: string };
+type DrawOption = { id: string; name: string; status: string; cutoffAt: string; lotteryType?: string };
 function remaining(cutoffAt: string) {
   const milliseconds = new Date(cutoffAt).getTime() - Date.now();
   if (milliseconds <= 0) return "ปิดรับแล้ว";
@@ -24,5 +24,5 @@ export function AgentRoundSwitcher({ draws, selectedId }: { draws: DrawOption[];
   useEffect(() => { setCountdown(selected ? remaining(selected.cutoffAt) : ""); const timer = window.setInterval(() => setCountdown(selected ? remaining(selected.cutoffAt) : ""), 60_000); return () => window.clearInterval(timer); }, [selected]);
   function change(value: string) { const params = new URLSearchParams(searchParams.toString()); if (value === "all") params.delete("drawId"); else params.set("drawId", value); const query = params.toString(); startTransition(() => router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })); }
   const selectedStatus = selected ? getDrawDisplayStatus(selected) : null;
-  return <div className={`agent-round-switcher ${pending ? "is-loading" : ""}`}><label htmlFor="agent-dashboard-round">เลือกดูงวด</label><div><AppDropdown id="agent-dashboard-round" value={selected?.id ?? "all"} onValueChange={change} options={[{ value: "all", label: "ทุกงวด", description: "ภาพรวมทั้งหมด" }, ...draws.map((draw) => { const status = getDrawDisplayStatus(draw); return { value: draw.id, label: draw.name, description: DRAW_DISPLAY_STATUS_LABEL[status] }; })]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" /><span className={`agent-round-status status-${selectedStatus?.toLowerCase() ?? "all"}`}>{selectedStatus ? DRAW_DISPLAY_STATUS_LABEL[selectedStatus] : "ข้อมูลทั้งหมด"}</span>{selectedStatus === "OPEN" && <b>◷ {countdown}</b>}</div></div>;
+  return <div className={`agent-round-switcher ${pending ? "is-loading" : ""}`}><label htmlFor="agent-dashboard-round">เลือกดูงวด</label><div><AppDropdown id="agent-dashboard-round" value={selected?.id ?? "all"} onValueChange={change} options={[{ value: "all", label: "ทุกงวด", description: "ภาพรวมทั้งหมด" }, ...draws.map((draw) => { const status = getDrawDisplayStatus(draw); return { value: draw.id, label: draw.name, description: DRAW_DISPLAY_STATUS_LABEL[status], lotteryType: draw.lotteryType }; })]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" /><span className={`agent-round-status status-${selectedStatus?.toLowerCase() ?? "all"}`}>{selectedStatus ? DRAW_DISPLAY_STATUS_LABEL[selectedStatus] : "ข้อมูลทั้งหมด"}</span>{selectedStatus === "OPEN" && <b>◷ {countdown}</b>}</div></div>;
 }

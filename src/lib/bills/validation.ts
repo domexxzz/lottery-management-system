@@ -110,7 +110,12 @@ export type ValidateInput = {
    * เพดานรับต่อเลขของทั้งงวด และยอดที่บิลใบอื่นแทงเลขนั้นไปแล้ว (คีย์เดียวกับ dedupeKey)
    * ไม่ส่งหรือ cap = null คือไม่จำกัด
    */
-  numberCap?: { cap: Prisma.Decimal | null; used: ReadonlyMap<string, Prisma.Decimal> };
+  numberCap?: {
+    cap: Prisma.Decimal | null;
+    used: ReadonlyMap<string, Prisma.Decimal>;
+    /** เพดานเฉพาะเลข ทับเพดานทั้งงวด */
+    overrides?: ReadonlyMap<string, Prisma.Decimal>;
+  };
 };
 
 export type NumberRestriction = {
@@ -206,7 +211,7 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
         message: `รายการที่ ${index + 1}: ${rule.name} เลข ${item.number} เป็นเลขเต็ม ปิดรับแล้ว`,
       });
     }
-    const cap = input.numberCap?.cap ?? null;
+    const cap = input.numberCap?.overrides?.get(key) ?? input.numberCap?.cap ?? null;
     if (cap !== null && input.restrictions?.get(key)?.kind !== "CLOSED") {
       const used = input.numberCap?.used.get(key) ?? ZERO;
       const remaining = cap.minus(used);

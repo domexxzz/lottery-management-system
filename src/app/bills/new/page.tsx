@@ -7,6 +7,7 @@ import { BetSlip, type SlipRepresentative, type SlipRestriction } from "./BetSli
 import { fullNumbersByDraw } from "@/lib/draws/number-cap";
 import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
 import { billSequencePeriod } from "@/lib/bills/numbering";
+import { LotteryTypePicker } from "./LotteryTypePicker";
 import "./new-bill.css";
 import "./bet-slip.css";
 
@@ -21,6 +22,13 @@ const CUTOFF_LABEL = new Intl.DateTimeFormat("th-TH", {
 });
 
 const ROLE_LABEL = { OWNER: "Owner", ADMIN: "Admin", AGENT: "Agent" } as const;
+type NewBillSearchParams = { lottery?: string | string[] };
+type SupportedLottery = "THAI_GOVERNMENT" | "LAO" | "LAO_SET";
+const SUPPORTED: readonly SupportedLottery[] = ["THAI_GOVERNMENT", "LAO", "LAO_SET"];
+
+function first(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
 
 /**
  * หน้าสร้างบิล ใช้หน้าเดียวกันทุกบทบาท
@@ -29,23 +37,48 @@ const ROLE_LABEL = { OWNER: "Owner", ADMIN: "Admin", AGENT: "Agent" } as const;
  * ชื่อลูกค้าเดิมและโพยเดิมโหลดผ่าน /api/bills/slip-data ภายหลัง
  * เดิมหน้านี้ดึงบิลถึง 5,000 ใบพร้อมรายการเลขทุกครั้งที่เปิด
  */
-export default async function NewBillPage() {
+export default async function NewBillPage({ searchParams }: { searchParams: Promise<NewBillSearchParams> }) {
   const actor = await getActor();
   if (!actor) redirect("/login");
   if (actor.mustChangePassword) redirect("/change-password");
   if (!can(actor.role, "bill.create")) redirect("/bills");
 
-  const sequencePeriod = billSequencePeriod(new Date());
+  const query = await searchParams;
+  const rawLottery = first(query.lottery);
+  const selectedLottery = SUPPORTED.find((value) => value === rawLottery);
   const drawSelect = { id: true, name: true, drawDate: true, lotteryType: true, cutoffAt: true, status: true, numberCap: true } as const;
-  const [openDraws, prizeTypes, representatives, ownAgent] = await Promise.all([
-    prisma.draw.findMany({
-      where: { ...orgScope(actor), status: "OPEN", cutoffAt: { gt: new Date() } },
-      orderBy: { cutoffAt: "asc" },
-      take: 12,
-      select: drawSelect,
-    }),
+  const allOpenDraws = await prisma.draw.findMany({
+    where: { ...orgScope(actor), lotteryType: { in: [...SUPPORTED] }, status: "OPEN", cutoffAt: { gt: new Date() } },
+    orderBy: { cutoffAt: "asc" },
+    take: 36,
+    select: drawSelect,
+  });
+  const openDraws = allOpenDraws.filter((draw) => draw.lotteryType === selectedLottery);
+
+  if (!selectedLottery) {
+    const firstOf = (type: SupportedLottery) => {
+      const draw = allOpenDraws.find((row) => row.lotteryType === type);
+      return draw ? { dateLabel: drawDateLabel(draw), cutoffAt: draw.cutoffAt.toISOString(), cutoffLabel: CUTOFF_LABEL.format(draw.cutoffAt) } : null;
+    };
+    const thaiDraw = allOpenDraws.find((row) => row.lotteryType === "THAI_GOVERNMENT");
+    return (
+      <main className="workspace-page new-bill-page bet-slip-page">
+        <nav className="bs-breadcrumb" aria-label="ตำแหน่งหน้า">
+          <Link href="/">หน้าหลัก</Link><span aria-hidden="true">/</span><Link href="/bills">รายการบิล</Link><span aria-hidden="true">/</span><span>เลือกประเภทหวย</span>
+        </nav>
+        <LotteryTypePicker thaiDraw={thaiDraw ? {
+          dateLabel: drawDateLabel(thaiDraw),
+          cutoffAt: thaiDraw.cutoffAt.toISOString(),
+          cutoffLabel: CUTOFF_LABEL.format(thaiDraw.cutoffAt),
+        } : null} laoDraw={firstOf("LAO")} laoSetDraw={firstOf("LAO_SET")} />
+      </main>
+    );
+  }
+
+  const sequencePeriod = billSequencePeriod(new Date());
+  const [prizeTypes, representatives, ownAgent] = await Promise.all([
     prisma.prizeType.findMany({
-      where: { ...orgScope(actor), isActive: true },
+      where: { ...orgScope(actor), isActive: true, lotteryType: selectedLottery },
       orderBy: { code: "asc" },
       select: { id: true, code: true, name: true, digits: true, matchRule: true, payoutRate: true },
     }),
@@ -86,7 +119,7 @@ export default async function NewBillPage() {
   // ไม่มีงวดเปิดรับ ให้แสดงงวดล่าสุดพร้อมแถบ "หมดเวลาการเดิมพัน"
   const draws = openDraws.length > 0
     ? openDraws
-    : await prisma.draw.findMany({ where: orgScope(actor), orderBy: { cutoffAt: "desc" }, take: 1, select: drawSelect });
+    : await prisma.draw.findMany({ where: { ...orgScope(actor), lotteryType: selectedLottery }, orderBy: { cutoffAt: "desc" }, take: 1, select: drawSelect });
 
   const restrictionRows = draws.length === 0 ? [] : await prisma.restrictedNumber.findMany({
     where: { ...orgScope(actor), drawId: { in: draws.map((draw) => draw.id) } },
@@ -110,6 +143,7 @@ export default async function NewBillPage() {
     }
   }
 
+
   const slipRepresentatives: SlipRepresentative[] | null = representatives?.map((user) => ({
     id: user.id,
     displayName: user.displayName,
@@ -124,13 +158,19 @@ export default async function NewBillPage() {
       <nav className="bs-breadcrumb" aria-label="ตำแหน่งหน้า">
         <Link href="/">หน้าหลัก</Link><span aria-hidden="true">/</span><Link href="/bills">รายการบิล</Link><span aria-hidden="true">/</span><span>สร้างบิลใหม่</span>
       </nav>
+      <div className="lottery-type-change">
+        <span>ประเภทที่เลือก: <strong>{lotteryLabel(selectedLottery)}</strong></span>
+        <Link href="/bills/new">← เปลี่ยนประเภทหวย</Link>
+      </div>
       {draws.length === 0 ? (
         <p className="error">ยังไม่มีงวดในระบบ</p>
       ) : (
         <BetSlip
           draws={draws.map((draw) => ({
             id: draw.id,
+            lotteryType: draw.lotteryType,
             lotteryLabel: lotteryLabel(draw.lotteryType),
+            flag: draw.lotteryType === "THAI_GOVERNMENT" ? "TH" : "LA",
             dateLabel: drawDateLabel(draw),
             cutoffAt: draw.cutoffAt.toISOString(),
             cutoffLabel: CUTOFF_LABEL.format(draw.cutoffAt),
@@ -141,6 +181,8 @@ export default async function NewBillPage() {
           representatives={slipRepresentatives}
           ownCommissionRate={ownAgent ? ownAgent.commissionRate.toFixed(4) : null}
           ownNextBillSequence={(ownAgent?.billCounters[0]?.lastSequence ?? 0) + 1}
+          serverNow={Date.now()}
+          draftScope={`${actor.userId}:${selectedLottery}`}
         />
       )}
     </main>

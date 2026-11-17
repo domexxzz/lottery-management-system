@@ -233,6 +233,8 @@ export function readBetTab(raw: string | undefined): BetTab {
 
 export const LOTTERY_TYPE_LABEL: Record<string, string> = {
   THAI_GOVERNMENT: "หวยรัฐบาล",
+  LAO: "หวยลาว",
+  LAO_SET: "หวยลาวชุด",
 };
 
 export function lotteryLabel(lotteryType: string): string {

@@ -4,7 +4,7 @@ import type { BetTab } from "./betting";
 import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { billScope, requirePermission, type Actor } from "@/lib/auth/context";
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import { BillItemsRejectedError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { canTransition, transitionError } from "./lifecycle";
 import {
   dedupeKey,
@@ -14,7 +14,7 @@ import {
   type NumberRestriction,
   type PrizeTypeRule,
 } from "./validation";
-import { loadNumberUsage, lockDrawNumberCap } from "@/lib/draws/number-cap";
+import { loadCapOverrides, loadNumberUsage, lockDrawNumberCap } from "@/lib/draws/number-cap";
 import { assertBillEvidenceReady } from "@/lib/evidence/service";
 import { billSequencePeriod, buildInternalBillNumber } from "./numbering";
 
@@ -180,9 +180,11 @@ export async function createDraftBill(
 async function loadPrizeRules(
   client: Prisma.TransactionClient | typeof prisma,
   organizationId: string,
+  /** ส่งมาเมื่อรู้งวดแล้ว: รับเฉพาะรางวัลของประเภทหวยของงวดนั้น */
+  lotteryType?: LotteryType,
 ): Promise<Map<string, PrizeTypeRule>> {
   const rows = await client.prizeType.findMany({
-    where: { organizationId, isActive: true },
+    where: { organizationId, isActive: true, ...(lotteryType ? { lotteryType } : {}) },
     select: {
       id: true,
       code: true,
@@ -282,7 +284,7 @@ export async function updateBillBeforeCutoff(
     const bill = await tx.bill.findFirst({
       where: { id: billId, ...billScope(actor) },
       include: {
-        draw: { select: { status: true, cutoffAt: true, numberCap: true } },
+        draw: { select: { status: true, cutoffAt: true, numberCap: true, lotteryType: true } },
         agent: { select: { creditLimit: true, perNumberLimit: true } },
         items: {
           orderBy: { createdAt: "asc" },
@@ -296,7 +298,7 @@ export async function updateBillBeforeCutoff(
     }
     assertDrawStillOpen(bill.draw);
 
-    const rules = await loadPrizeRules(tx, bill.organizationId);
+    const rules = await loadPrizeRules(tx, bill.organizationId, bill.draw.lotteryType);
     const restrictions = await loadRestrictions(tx, bill.drawId);
     const numberCap = await loadNumberCapInTx(tx, bill.drawId, bill.draw.numberCap, bill.id, input.items.map((item) => item.prizeTypeId));
     const parsed: DraftItem[] = input.items.map((item) => ({
@@ -449,11 +451,14 @@ async function loadNumberCapInTx(
   cap: Prisma.Decimal | null,
   billId: string,
   prizeTypeIds: readonly string[],
-): Promise<{ cap: Prisma.Decimal | null; used: Map<string, Prisma.Decimal> }> {
-  if (cap === null) return { cap, used: new Map() };
+): Promise<{ cap: Prisma.Decimal | null; used: Map<string, Prisma.Decimal>; overrides: Map<string, Prisma.Decimal> }> {
+  const types = [...new Set(prizeTypeIds)];
+  const overrides = await loadCapOverrides(tx, drawId, types);
+  if (cap === null && overrides.size === 0) return { cap, used: new Map(), overrides };
   await lockDrawNumberCap(tx, drawId);
-  return { cap, used: await loadNumberUsage(tx, drawId, { excludeBillId: billId, prizeTypeIds: [...new Set(prizeTypeIds)] }) };
+  return { cap, overrides, used: await loadNumberUsage(tx, drawId, { excludeBillId: billId, prizeTypeIds: types }) };
 }
+
 
 /** เลขเต็ม/เลขอั้นของงวด คีย์ตาม dedupeKey */
 export async function loadRestrictions(
@@ -501,7 +506,7 @@ async function confirmInTx(
   // เพื่อไม่ให้ข้ามกฎหลักฐานด้วยการเรียก Action โดยตรง
   if (options.requireEvidence) await assertBillEvidenceReady(tx, bill.id);
 
-  const rules = await loadPrizeRules(tx, bill.organizationId);
+  const rules = await loadPrizeRules(tx, bill.organizationId, bill.draw.lotteryType);
   const restrictions = await loadRestrictions(tx, bill.drawId);
   const numberCap = await loadNumberCapInTx(tx, bill.drawId, bill.draw.numberCap, bill.id, bill.items.map((item) => item.prizeTypeId));
 
@@ -535,7 +540,14 @@ async function confirmInTx(
   });
 
   if (issues.length > 0) {
-    throw new ValidationError(issues.map((i) => i.message).join(" · "));
+    const message = issues.map((i) => i.message).join(" · ");
+    // ปัญหารายเลข (เช่นเลขเต็มระหว่างที่ผู้ใช้กรอก) ส่งกลับเป็นประเภท + เลข
+    // หน้าสร้างบิลจะไฮไลต์และให้ลบเฉพาะเลขนั้นได้ ไม่ต้องเริ่มบิลใหม่
+    const rejected = issues.flatMap((issue) => {
+      const item = issue.itemIndex === null ? undefined : draftItems[issue.itemIndex];
+      return item ? [{ prizeTypeId: item.prizeTypeId, number: item.number, reason: issue.message }] : [];
+    });
+    throw rejected.length > 0 ? new BillItemsRejectedError(message, rejected) : new ValidationError(message);
   }
 
   const confirmedAt = new Date();
@@ -611,10 +623,54 @@ async function confirmInTx(
  */
 export async function placeBill(
   actor: Actor,
-  input: { drawId: string; title: string; items: readonly ItemInput[]; representativeUserId?: string },
-): Promise<{ billId: string; billNumber: string; drawSequence: number }> {
+  input: {
+    drawId: string;
+    title: string;
+    items: readonly ItemInput[];
+    representativeUserId?: string;
+    /** รหัสการกดยืนยันจาก browser คำขอซ้ำด้วยรหัสเดิมได้บิลเดิมคืน */
+    submissionKey?: string;
+  },
+): Promise<{ billId: string; billNumber: string; drawSequence: number; duplicate?: boolean }> {
   requirePermission(actor, "bill.create");
   requirePermission(actor, "bill.confirm");
+
+  // กดยืนยันซ้ำ/เน็ตส่งซ้ำหลังบิลแรกสำเร็จแล้ว: คืนบิลเดิม ไม่ตรวจกฎซ้ำ (เช่นเลขเต็มเพราะบิลแรกเอง)
+  const key = input.submissionKey;
+  if (key) {
+    const existing = await findSubmittedBill(actor, key);
+    if (existing) return existing;
+  }
+
+  try {
+    return await placeBillOnce(actor, input);
+  } catch (error) {
+    // สองคำขอเข้ามาพร้อมกัน: คำขอหลังรอ unique index จนคำขอแรก commit แล้วชน P2002
+    if (key && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const existing = await findSubmittedBill(actor, key);
+      if (existing) return existing;
+    }
+    throw error;
+  }
+}
+
+async function findSubmittedBill(actor: Actor, submissionKey: string) {
+  const bill = await prisma.bill.findFirst({
+    where: { organizationId: actor.organizationId, submissionKey },
+    select: { id: true, billNumber: true, drawSequence: true, createdById: true },
+  });
+  if (!bill) return null;
+  // รหัสสุ่มจาก browser ของผู้ใช้เอง ถ้าเป็นของคนอื่นถือว่าผิดปกติ ไม่คืนบิลของคนอื่นให้
+  if (bill.createdById !== actor.userId || bill.drawSequence === null) {
+    throw new ConflictError("คำขอนี้ถูกใช้ไปแล้ว กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง");
+  }
+  return { billId: bill.id, billNumber: bill.billNumber ?? "", drawSequence: bill.drawSequence, duplicate: true };
+}
+
+async function placeBillOnce(
+  actor: Actor,
+  input: { drawId: string; title: string; items: readonly ItemInput[]; representativeUserId?: string; submissionKey?: string },
+): Promise<{ billId: string; billNumber: string; drawSequence: number }> {
 
   const title = input.title.trim();
   if (title.length === 0) throw new ValidationError("กรุณากรอกชื่อลูกค้า");
@@ -648,6 +704,7 @@ export async function placeBill(
         status: "DRAFT",
         createdById: actor.userId,
         totalStake: totalStake(parsed),
+        submissionKey: input.submissionKey ?? null,
       },
       select: { id: true, title: true, agentId: true, drawId: true },
     });

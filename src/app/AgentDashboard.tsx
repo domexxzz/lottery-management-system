@@ -18,7 +18,7 @@ export async function AgentDashboard({ actor, drawId }: { actor: Actor; drawId?:
   const scope = orgScope(actor); const agentId = actor.agentId ?? "__no_agent__";
   const [agent, draws] = await Promise.all([
     prisma.agent.findFirst({ where: { ...scope, id: agentId }, select: { id: true, code: true, name: true, commissionRate: true, creditLimit: true, perNumberLimit: true } }),
-    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, take: 50, select: { id: true, name: true, status: true, cutoffAt: true } }),
+    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, take: 50, select: { id: true, name: true, status: true, cutoffAt: true, lotteryType: true } }),
   ]);
   const selectedDraw = drawId ? draws.find((draw) => draw.id === drawId) ?? null : null;
   const activeDraw = draws.find((draw) => ["OPEN","LOCKED","RESULT_PENDING","SETTLED"].includes(draw.status)) ?? draws[0] ?? null;

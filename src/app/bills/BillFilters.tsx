@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppDropdown } from "../AppDropdown";
 
-type Option = { id: string; label: string };
+type Option = { id: string; label: string; lotteryType?: string };
 
 export function BillFilters({
   query,
@@ -50,7 +50,7 @@ export function BillFilters({
 
       <label htmlFor="draw">
         งวด
-        <AppDropdown id="draw" name="draw" value={drawId} onValueChange={(value) => update("draw", value)} options={[{ value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" />
+        <AppDropdown id="draw" name="draw" value={drawId} onValueChange={(value) => update("draw", value)} options={[{ value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label, lotteryType: draw.lotteryType }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" />
       </label>
 
       {agents !== null && (

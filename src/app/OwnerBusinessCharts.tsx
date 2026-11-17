@@ -6,9 +6,9 @@ import { ChartTabs } from "./ChartTabs";
 import { DashboardIcon, type DashboardIconName } from "./DashboardIcon";
 import "./owner-business-charts.css";
 
-type FinanceRow = { label: string; gross: number; payout: number; commission: number; net: number };
-type AgentFinanceRow = FinanceRow & { agentId: string };
-type VolumeRow = { label: string; bills: number; average: number };
+type FinanceRow = { id: string; label: string; gross: number; payout: number; commission: number; net: number };
+type AgentFinanceRow = Omit<FinanceRow, "id"> & { agentId: string };
+type VolumeRow = { key: string; label: string; bills: number; average: number };
 type View = "finance" | "agents" | "volume";
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const TABS = [
@@ -40,7 +40,7 @@ export function OwnerBusinessCharts({ draws, agents, volume }: { draws: FinanceR
       <FinanceSmallMultiples rows={draws}/>
     </>}
     {view === "agents" && <><div className="owner-view-title"><strong>ผลงาน Agent · Top 5</strong><span>เรียงตามยอดขายสูงสุด</span><Link href="/agents" className="owner-all-agents">ดู Agent ทั้งหมด →</Link></div><AgentTopList rows={agents}/></>}
-    {view === "volume" && (volume.length ? <div className="owner-volume-chart">{volume.map((row) => <article key={row.label}><div><strong>{row.label}</strong><span>{row.bills} บิล</span></div><div className="volume-bars"><span><i style={{ width: `${row.bills / maxBills * 100}%` }}/></span><span className="average"><i style={{ width: `${row.average / maxAverage * 100}%` }}/></span></div><b>{MONEY.format(row.average)}<small>บาทเฉลี่ย/บิล</small></b></article>)}</div> : <p className="empty-state">ไม่พบบิลตามตัวกรองที่เลือก</p>)}
+    {view === "volume" && (volume.length ? <div className="owner-volume-chart">{volume.map((row) => <article key={row.key}><div><strong>{row.label}</strong><span>{row.bills} บิล</span></div><div className="volume-bars"><span><i style={{ width: `${row.bills / maxBills * 100}%` }}/></span><span className="average"><i style={{ width: `${row.average / maxAverage * 100}%` }}/></span></div><b>{MONEY.format(row.average)}<small>บาทเฉลี่ย/บิล</small></b></article>)}</div> : <p className="empty-state">ไม่พบบิลตามตัวกรองที่เลือก</p>)}
     </div>
   </article>;
 }
@@ -76,7 +76,7 @@ function FinanceSmallMultiples({ rows }: { rows: FinanceRow[] }) {
           const barStyle = metric.key === "net"
             ? value < 0 ? { width: `${percent / 2}%`, right: "50%" } : { width: `${percent / 2}%`, left: "50%" }
             : { width: `${percent}%`, left: 0 };
-          return <div className="finance-small-row" key={row.label} title={`${row.label}: ${MONEY.format(value)} บาท`}>
+          return <div className="finance-small-row" key={row.id} title={`${row.label}: ${MONEY.format(value)} บาท`}>
             <span>{row.label}</span>
             <i className={metric.key === "net" ? "has-zero" : undefined}><b className={value < 0 ? "negative" : "positive"} style={barStyle}/></i>
             <strong className={value < 0 ? "negative" : undefined}>{MONEY.format(value)}<span className="money-unit">&nbsp;บาท</span></strong>
