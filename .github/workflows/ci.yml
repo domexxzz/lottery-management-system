@@ -63,6 +63,15 @@ jobs:
       - name: Apply migrations
         run: npx prisma migrate deploy
 
+      # test หลักฐานบิลใช้ MinIO จริง (src/test/setup.ts ชี้ 127.0.0.1:9000 bucket bill-private)
+      # ใช้ service minio + minio-init ใน docker-compose ตัวเดียวกับเครื่อง dev
+      # ไม่ใช้ services: ของ Actions เพราะส่งคำสั่ง "server /data" ให้ MinIO ไม่ได้
+      # และ MinIO เลิกเผยแพร่ image ทางการแล้ว จึงต้อง build จาก docker/minio/Dockerfile
+      - name: Start MinIO
+        run: |
+          docker compose up -d --wait minio
+          docker compose run --rm minio-init
+
       # ตรวจเส้นทางเงินและด่านกำกับกับฐานข้อมูลจริง
       # ชุดนี้คือสิ่งที่จับได้เมื่อมีคนแก้ settlement หรือ scope แล้วพัง
       - name: Integration tests
