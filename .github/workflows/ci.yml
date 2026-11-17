@@ -31,6 +31,9 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://lottery:lottery_ci_only@localhost:5432/lottery_test?schema=public
+      # integration test ใช้ schema แยกบน Postgres ตัวเดียวกัน script จะ migrate schema นี้เองก่อนรัน
+      # ต้องขึ้นต้นด้วย integration_test และต้องไม่ซ้ำกับ DATABASE_URL (ตรวจใน scripts/prepare-integration-db.ts)
+      TEST_DATABASE_URL: postgresql://lottery:lottery_ci_only@localhost:5432/lottery_test?schema=integration_test
       # ค่าเหล่านี้ใช้เฉพาะใน CI ไม่ใช่ความลับจริง
       SESSION_TTL_MINUTES: "480"
       SESSION_COOKIE_NAME: lottery_session

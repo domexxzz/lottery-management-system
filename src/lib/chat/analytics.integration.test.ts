@@ -72,7 +72,7 @@ describe("ประเมินความเสี่ยง", () => {
 
   test("เรียงจากภาระผูกพันสูงสุด ไม่ใช่จากยอดเดิมพัน", async () => {
     const { threeTop, runTop } = f.prizeTypes;
-    // วิ่งบนจ่าย 3.2 เท่า เดิมพันสูงแต่ภาระต่ำ
+    // วิ่งบนจ่าย 2.5 เท่า (ตาม fixture) เดิมพันสูงแต่ภาระต่ำ
     await billFor(f.actors.AGENT1, "ลูกค้า-ก", [
       { prizeTypeId: runTop.id, number: "7", stake: "1000" },
       { prizeTypeId: threeTop.id, number: "123", stake: "100" },
@@ -80,11 +80,11 @@ describe("ประเมินความเสี่ยง", () => {
 
     const { riskExposure } = await buildOwnerAnalytics(f.actors.OWNER);
 
-    // เดิมพัน 1000 แต่ภาระแค่ 3,200 ส่วนเดิมพัน 100 มีภาระ 90,000
+    // เดิมพัน 1000 แต่ภาระแค่ 2,500 ส่วนเดิมพัน 100 มีภาระ 90,000
     expect(riskExposure.details[0]!.number).toBe("123");
     expect(riskExposure.details[0]!.payoutIfWins).toBe("90000.00");
     expect(riskExposure.details[1]!.number).toBe("7");
-    expect(riskExposure.details[1]!.payoutIfWins).toBe("3200.00");
+    expect(riskExposure.details[1]!.payoutIfWins).toBe("2500.00");
   });
 
   test("ไม่นับบิลร่างที่ยังไม่ยืนยัน เพราะยังไม่มีภาระผูกพัน", async () => {

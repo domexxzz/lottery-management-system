@@ -393,7 +393,8 @@ describe("ลูกค้าที่ซื้อเลขเดียวกั�
     const { threeTop } = f.prizeTypes;
     await billFor("ลูกค้า", [
       { prizeTypeId: threeTop.id, number: "111", stake: "10" },
-      { prizeTypeId: threeTop.id, number: "222", stake: "9000" },
+      // ยอดต่อรายการไม่เกิน 1,000 บาท (MAX_STAKE_PER_ITEM)
+      { prizeTypeId: threeTop.id, number: "222", stake: "900" },
     ]);
     await billFor("ลูกค้า", [{ prizeTypeId: threeTop.id, number: "111", stake: "10" }]);
 
@@ -402,6 +403,6 @@ describe("ลูกค้าที่ซื้อเลขเดียวกั�
     if (!("rows" in repeat) || !("rows" in ranking)) throw new Error("expected rows");
 
     expect(repeat.rows[0]!.totalStakeOnNumber).toBe("20.00");
-    expect(ranking.rows[0]!.totalSpend).toBe("9020.00");
+    expect(ranking.rows[0]!.totalSpend).toBe("920.00");
   });
 });
