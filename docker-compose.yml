@@ -61,6 +61,21 @@ services:
         aws --endpoint-url http://minio:9000 s3api get-bucket-acl --bucket "$$STORAGE_BUCKET" >/dev/null
     restart: "no"
 
+  # Windows Application Control บางเครื่องบล็อก schema-engine-windows.exe ของ Prisma
+  # จึงรัน migration ใน Linux container โดยไม่ต้องลดการป้องกันของ Windows
+  prisma-migrate:
+    build:
+      context: .
+      dockerfile: docker/prisma/Dockerfile
+    image: lottery-prisma-migrate:7.10.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://lottery:lottery_dev_only@postgres:5432/lottery?schema=public
+    profiles: ["tools"]
+    restart: "no"
+
 volumes:
   lottery-pgdata:
   lottery-minio-data:

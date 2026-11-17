@@ -5,6 +5,8 @@ const BANGKOK_TIME_ZONE = "Asia/Bangkok";
 
 const LOTTERY_TYPE_CODE: Record<LotteryType, string> = {
   THAI_GOVERNMENT: "01",
+  LAO: "02",
+  LAO_SET: "03",
 };
 
 function bangkokDateParts(value: Date) {

@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { LotteryFlag } from "./bills/ThaiFlag";
 
 export type AppDropdownOption = {
   value: string;
@@ -9,6 +10,8 @@ export type AppDropdownOption = {
   description?: string;
   badge?: string;
   disabled?: boolean;
+  /** ตัวเลือกที่เป็นงวด: ใส่ประเภทหวยเพื่อแสดงธง (หวยรัฐบาล = ธงไทย, หวยลาว/หวยลาวชุด = ธงลาว) */
+  lotteryType?: string;
 };
 
 type AppDropdownProps = {
@@ -148,7 +151,7 @@ export function AppDropdown({
             }
           }}
         >
-          <span><strong>{option.label}</strong>{option.description && <small>{option.description}</small>}</span>
+          <span><strong>{option.lotteryType && <LotteryFlag lotteryType={option.lotteryType} className="app-dropdown-flag" />}{option.label}</strong>{option.description && <small>{option.description}</small>}</span>
           {option.badge && <b>{option.badge}</b>}
           {option.value === selectedValue && <i aria-hidden="true">✓</i>}
         </button>)}
@@ -176,7 +179,7 @@ export function AppDropdown({
         if (event.key === "Escape") setOpen(false);
       }}
     >
-      <span className={selected ? "" : "is-placeholder"}>{selected?.label ?? placeholder}</span>
+      <span className={selected ? "" : "is-placeholder"}>{selected?.lotteryType && <LotteryFlag lotteryType={selected.lotteryType} className="app-dropdown-flag" />}{selected?.label ?? placeholder}</span>
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5.5 7.5 4.5 4.5 4.5-4.5" /></svg>
     </button>
     {menu}

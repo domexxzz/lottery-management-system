@@ -17,6 +17,10 @@ export type ReviewItem = {
   createdAt: string;
   verifiedAt: string | null;
   duplicateCount: number;
+  /** วันที่รูปจะถูกลบอัตโนมัติ (ครบ 1 ปีจากวันที่แนบ) */
+  expiresAt: string;
+  daysLeft: number;
+  remaining: string;
   uploadedBy: string;
   verifiedBy: string | null;
   bill: { id: string; drawSequence: number | null; title: string; status: string; totalStake: string; agentCode: string; agentName: string; drawName: string };
@@ -131,7 +135,7 @@ export function ReviewQueue({ items, canDelete = false, emptyTitle = "ไม่�
           <button type="button" className="review-image" onClick={() => setPreview(item)}><img src={`/api/attachments/${item.id}/file`} alt={typeLabel[item.type]} /><span>เปิดดูรูปขนาดใหญ่</span></button>
           <div className="review-body">
             <header><div><small>{typeLabel[item.type]}</small><strong>{item.originalName}</strong></div><span className={`evidence-status ${item.status.toLowerCase()}`}>{statusLabel[item.status]}</span></header>
-            <dl><div><dt>ผู้แนบ</dt><dd>{item.uploadedBy}</dd></div><div><dt>เวลาที่แนบ</dt><dd>{new Date(item.createdAt).toLocaleString("th-TH")}</dd></div></dl>
+            <dl><div><dt>ผู้แนบ</dt><dd>{item.uploadedBy}</dd></div><div><dt>เวลาที่แนบ</dt><dd>{new Date(item.createdAt).toLocaleString("th-TH")}</dd></div><div className={item.daysLeft <= 30 ? "evidence-expiry is-soon" : "evidence-expiry"}><dt>ลบอัตโนมัติ</dt><dd>{new Date(item.expiresAt).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })} · <b>{item.remaining}</b></dd></div></dl>
             {item.duplicateCount > 1 && <div className="duplicate-review-alert"><strong>รูปนี้เคยปรากฏ {item.duplicateCount} ครั้ง</strong><button type="button" onClick={() => loadDuplicateHistory(item)}>ดูว่าซ้ำกับรูปไหน</button></div>}
             {item.payment && <section className="payment-summary"><strong>ยอดชำระ <b>{Number(item.payment.amount).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท</b></strong><div><span>{item.payment.paymentMethod}</span><span>แนบเมื่อ {new Date(item.payment.paidAt).toLocaleString("th-TH")}</span></div>{item.payment.note && <p>{item.payment.note}</p>}</section>}
             {item.rejectionReason && <p className="review-reason"><strong>เหตุผลที่ตีกลับ:</strong> {item.rejectionReason}</p>}

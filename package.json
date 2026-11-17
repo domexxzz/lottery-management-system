@@ -17,6 +17,7 @@
     "test": "vitest run --config vitest.config.mts",
     "test:watch": "vitest --config vitest.config.mts",
     "job:cutoff": "tsx scripts/run-cutoff.ts",
+    "job:evidence-retention": "tsx scripts/run-evidence-retention.ts",
     "notify:check": "tsx scripts/check-telegram.ts",
     "job:notify": "tsx scripts/run-notify.ts",
     "job:notify:watch": "tsx scripts/run-notify.ts --watch",

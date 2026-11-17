@@ -55,3 +55,30 @@ describe("เงื่อนไขงวดปัจจุบัน/ย้อน
     expect([...(await namesIn("current", nov18)), ...(await namesIn("past", nov18))].sort()).toEqual(all);
   });
 });
+
+describe("หน้าประวัติแยกตามประเภทหวย", () => {
+  test("ดูทั้งหมดเห็นงวดปัจจุบันทุกประเภท เลือกประเภทแล้วเห็นเฉพาะงวดของประเภทนั้น", async () => {
+    const { resolveHistoryScope } = await import("./history-scope");
+    const { parseHistoryFilter } = await import("./history-filter");
+    await prisma.draw.deleteMany({ where: { organizationId: f.org.id, bills: { none: {} } } });
+    const now = at("2026-11-18T05:00:00Z");
+    const make = (name: string, lotteryType: "THAI_GOVERNMENT" | "LAO" | "LAO_SET", cutoffAt: string, drawDate: string) =>
+      prisma.draw.create({ data: { organizationId: f.org.id, name, lotteryType, status: "OPEN", opensAt: at("2026-11-18T03:00:00Z"), cutoffAt: at(cutoffAt), drawDate: at(drawDate) } });
+    await make("ไทย 1 ธ.ค.", "THAI_GOVERNMENT", "2026-12-01T07:00:00Z", "2026-12-01T00:00:00Z");
+    const lao = await make("หวยลาว 18", "LAO", "2026-11-18T13:00:00Z", "2026-11-18T00:00:00Z");
+    await make("หวยลาวชุด 18", "LAO_SET", "2026-11-18T13:00:00Z", "2026-11-18T00:00:00Z");
+
+    const all = await resolveHistoryScope(f.actors.OWNER, parseHistoryFilter({}), now);
+    expect(all.focusDraw).toBeNull();
+    expect(all.drawId).toBe("");
+    expect(all.noCurrentDraw).toBe(false);
+    expect(all.drawOptions.map((option) => option.label).sort()).toEqual(["หวยรัฐบาล · งวด 01/12/2026", "หวยลาว · งวด 18/11/2026", "หวยลาวชุด · งวด 18/11/2026"].sort());
+
+    const onlyLao = await resolveHistoryScope(f.actors.OWNER, parseHistoryFilter({ lottery: "LAO" }), now);
+    expect(onlyLao.focusDraw?.id).toBe(lao.id);
+    expect(onlyLao.drawOptions.map((option) => option.label)).toEqual(["งวด 18/11/2026"]);
+
+    const none = await resolveHistoryScope(f.actors.OWNER, parseHistoryFilter({ lottery: "LAO_SET", scope: "past" }), now);
+    expect(none.drawOptions).toEqual([]);
+  });
+});

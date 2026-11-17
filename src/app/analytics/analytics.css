@@ -27,12 +27,6 @@
 @media (max-width: 480px) { .analytics-filters,.analytics-kpis { grid-template-columns: 1fr; } }
 
 /* Guided charts for customer-behavior data only */
-.analytics-page .behavior-explorer { margin-bottom: .85rem; border-color: #cfe2ed; }
-.behavior-only-badge { display: inline-flex; align-items: center; min-height: 34px; padding: .4rem .65rem; border: 1px solid #bde1db; border-radius: 999px; color: #08796f; background: #eaf9f5; font-size: .7rem; font-weight: 800; white-space: nowrap; }
-.behavior-explorer .report-dashboard-chart-panel { min-height: 410px; }
-.behavior-explorer .report-dashboard-selection { margin-top: .45rem; }
-.behavior-explorer .report-dashboard-selection b { color: #123c58; }
-.behavior-explorer .report-dashboard-selection span { color: #526f82; }
 .analytics-page .behavior-chart-builder { margin: .85rem 0 0; padding: .9rem; border-color: #cfe2ed; background: linear-gradient(160deg,#fbfdff,#f4fbfb); }
 .behavior-data-scope { max-width: 620px; }
 .behavior-data-scope > label,.behavior-display-grid > label { display: grid; gap: .3rem; color: #294d63; font-size: .72rem; font-weight: 760; }
@@ -50,4 +44,27 @@
 .analytics-page .chart-color-picker button { width: 25px; height: 25px; min-height: 25px; padding: 0; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #bad0e6; }
 .analytics-page .chart-color-picker button[aria-pressed="true"] { box-shadow: 0 0 0 2px #087f90; }
 @media (max-width: 760px) { .behavior-display-grid { grid-template-columns: 1fr; }.analytics-page .behavior-chart-builder { padding: .6rem; }.behavior-preview { min-height: 360px; } }
-@media (max-width: 600px) { .behavior-explorer .report-dashboard-chart-panel { min-height: 0; }.behavior-only-badge { width: fit-content; } }
+
+/* 3 เรื่องที่ควรรู้ตอนนี้ */
+.analytics-insights { margin: 0 0 1rem; padding: 1rem 1.1rem; border: 1px solid #bfe3e3; border-radius: 16px; background: linear-gradient(135deg, #effafa, #ffffff); box-shadow: 0 10px 26px rgb(22 120 130 / 8%); }
+.analytics-insights h2 { margin: 0 0 .7rem; color: #0f4c5c; font-size: 1.05rem; font-weight: 850; }
+.analytics-insights ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; margin: 0; padding: 0; list-style: none; counter-reset: insight; }
+.analytics-insights li { position: relative; padding: .8rem .85rem .8rem 2.6rem; border: 1px solid #d9eeee; border-radius: 12px; background: #fff; counter-increment: insight; }
+.analytics-insights li::before { position: absolute; top: .8rem; left: .8rem; display: grid; width: 1.4rem; height: 1.4rem; place-items: center; border-radius: 50%; color: #fff; background: #168b99; content: counter(insight); font-size: .72rem; font-weight: 800; }
+.analytics-insights strong { display: block; color: #123b52; font-size: .88rem; line-height: 1.4; }
+.analytics-insights p { margin: .25rem 0 0; color: #5f7381; font-size: .74rem; line-height: 1.5; }
+
+/* เลขที่รับยอดสูงสุด 5 อันดับ */
+.top-number-list { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
+.top-number-list li { display: grid; grid-template-columns: 26px auto minmax(0, 1fr) auto; align-items: center; gap: .7rem; padding: .6rem .75rem; border: 1px solid #e3eaee; border-radius: 12px; background: #fbfdfd; }
+.top-number-list b { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 8px; color: #fff; background: #168b99; font-size: .72rem; }
+.top-number-list strong { color: #153a52; font-size: 1.35rem; font-weight: 850; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.top-number-list span { display: grid; min-width: 0; color: #3f5868; font-size: .74rem; font-weight: 700; }
+.top-number-list span small { color: #84929b; font-size: .64rem; font-weight: 500; }
+.top-number-list em { color: #178392; font-size: .8rem; font-style: normal; font-weight: 800; white-space: nowrap; }
+.number-groups-more { margin-top: .75rem; }
+.number-groups-more > summary { min-height: 44px; display: flex; align-items: center; padding: 0 .8rem; border: 1px solid #d6e5e8; border-radius: 10px; color: #0f6f7b; background: #f4fafb; font-size: .76rem; font-weight: 800; cursor: pointer; }
+.number-groups-more[open] > summary { margin-bottom: .7rem; }
+.customer-table-card td small { color: #84929b; font-size: .62rem; }
+
+@media (max-width: 900px) { .analytics-insights ol { grid-template-columns: 1fr; } }

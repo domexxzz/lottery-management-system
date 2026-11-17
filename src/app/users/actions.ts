@@ -10,6 +10,7 @@ import {
   deleteManagedUser,
   setManagedUserPassword,
   setManagedUserStatus,
+  updateManagedUser,
 } from "@/lib/users/service";
 
 /**
@@ -32,6 +33,19 @@ const CreateUserSchema = z.object({
   perNumberLimit: z.string().max(20).optional(),
 });
 
+const UpdateUserSchema = z.object({
+  userId: z.string().min(1),
+  displayName: z.string().trim().min(1, "กรุณากรอกชื่อที่แสดง").max(120),
+  role: z.enum(["ADMIN", "AGENT"]),
+  status: z.enum(["ACTIVE", "SUSPENDED"]),
+  password: z.string().max(256).optional(),
+  agentCode: z.string().trim().max(32).optional(),
+  agentName: z.string().trim().max(120).optional(),
+  commissionRate: z.string().max(20).optional(),
+  creditLimit: z.string().max(20).optional(),
+  perNumberLimit: z.string().max(20).optional(),
+});
+
 function fail(error: unknown): UserActionState {
   if (error instanceof AppError) return { error: error.message, ok: false };
   throw error;
@@ -40,6 +54,38 @@ function fail(error: unknown): UserActionState {
 function refresh() {
   revalidatePath("/users");
   revalidatePath("/agents");
+}
+
+export async function updateUserAction(_previous: UserActionState, formData: FormData): Promise<UserActionState> {
+  const actor = await requireActor();
+  const parsed = UpdateUserSchema.safeParse({
+    userId: formData.get("userId"),
+    displayName: formData.get("displayName"),
+    role: formData.get("role"),
+    status: formData.get("status"),
+    password: formData.get("password") ?? "",
+    agentCode: formData.get("agentCode") ?? "",
+    agentName: formData.get("agentName") ?? "",
+    commissionRate: formData.get("commissionRate") ?? "",
+    creditLimit: formData.get("creditLimit") ?? "",
+    perNumberLimit: formData.get("perNumberLimit") ?? "",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง", ok: false };
+  try {
+    const updated = await updateManagedUser(actor, parsed.data.userId, parsed.data);
+    refresh();
+    revalidatePath(`/users/${parsed.data.userId}/edit`);
+    return {
+      error: null,
+      ok: true,
+      message: "บันทึกข้อมูลผู้ใช้แล้ว",
+      ...(parsed.data.password
+        ? { credentials: { login: displayLogin(updated.login), password: parsed.data.password } }
+        : {}),
+    };
+  } catch (error) {
+    return fail(error);
+  }
 }
 
 export async function createUserAction(_previous: UserActionState, formData: FormData): Promise<UserActionState> {

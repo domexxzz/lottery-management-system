@@ -52,7 +52,8 @@ export function itemPayout(stake: Prisma.Decimal, payoutRateSnapshot: Prisma.Dec
  * รหัส 5 และ 6 (2 ตัวบน/ล่าง) เป็นกติกาธุรกิจเฉพาะ: อัตราปกติ 75 อั้นแล้วจ่าย 38
  */
 export function reducedPayoutRate(payoutRate: Prisma.Decimal, prizeTypeCode?: number): Prisma.Decimal {
-  if (prizeTypeCode === 5 || prizeTypeCode === 6) return new Prisma.Decimal(38);
+  // 2 ตัว (หวยไทย 5/6, หวยลาว 103/104) จ่ายบาทละ 75 อั้นแล้วปัดเป็น 38
+  if (prizeTypeCode === 5 || prizeTypeCode === 6 || prizeTypeCode === 103 || prizeTypeCode === 104) return new Prisma.Decimal(38);
   return payoutRate.dividedBy(2).toDecimalPlaces(4, ROUNDING);
 }
 

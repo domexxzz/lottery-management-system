@@ -22,6 +22,18 @@ export type CreateManagedUserInput = {
   perNumberLimit?: string;
 };
 
+export type UpdateManagedUserInput = {
+  displayName: string;
+  role: ManagedRole;
+  status: UserStatus;
+  password?: string;
+  agentCode?: string;
+  agentName?: string;
+  commissionRate?: string;
+  creditLimit?: string;
+  perNumberLimit?: string;
+};
+
 const AGENT_COMMISSION_RATE = new Prisma.Decimal(30);
 
 function decimal(raw: string | undefined, label: string, optional = false): Prisma.Decimal | null {
@@ -190,12 +202,151 @@ async function findManageableUser(actor: Actor, userId: string) {
       displayName: true,
       role: true,
       status: true,
-      agent: { select: { id: true, code: true, status: true } },
+      mustChangePassword: true,
+      agent: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          status: true,
+          commissionRate: true,
+          creditLimit: true,
+          perNumberLimit: true,
+        },
+      },
     },
   });
   if (!user) throw new NotFoundError("ไม่พบบัญชีผู้ใช้");
   if (user.role === "OWNER") throw new ForbiddenError("ไม่สามารถจัดการบัญชี Owner จากหน้านี้ได้");
   return user;
+}
+
+/** อ่านข้อมูลสำหรับหน้าแก้ไข โดยยังใช้ขอบเขตและกฎเดียวกับ mutation */
+export async function getManagedUser(actor: Actor, userId: string) {
+  requirePermission(actor, "user.manage");
+  return findManageableUser(actor, userId);
+}
+
+/**
+ * Owner แก้ข้อมูลบัญชีได้ทุกช่องที่เกี่ยวกับการใช้งาน ยกเว้น username
+ *
+ * input จงใจไม่มี login และคำสั่ง update ไม่แตะคอลัมน์ login แม้ client จะส่งค่าเกินมา
+ * การเปลี่ยนบทบาท Agent -> Admin จะปิด Agent เดิมไว้เพื่อรักษาบิลและรายงานย้อนหลัง
+ */
+export async function updateManagedUser(actor: Actor, userId: string, input: UpdateManagedUserInput): Promise<{ login: string }> {
+  requirePermission(actor, "user.manage");
+  const user = await findManageableUser(actor, userId);
+  const displayName = input.displayName.trim();
+  if (!displayName) throw new ValidationError("กรุณากรอกชื่อที่แสดง");
+  if (input.role !== "ADMIN" && input.role !== "AGENT") throw new ForbiddenError("Owner กำหนดได้เฉพาะบทบาท Admin หรือ Agent");
+  if (input.status !== "ACTIVE" && input.status !== "SUSPENDED") throw new ValidationError("สถานะไม่ถูกต้อง");
+
+  // รหัสผ่านเป็นข้อมูลตรงตัว จึงไม่ trim ช่องว่างที่ Owner ตั้งใจใช้
+  const password = input.password ?? "";
+  if (password) {
+    const passwordError = validateOwnerSetPassword(password);
+    if (passwordError) throw new ValidationError(passwordError);
+  }
+  const passwordHash = password ? await hashPassword(password) : undefined;
+
+  const requestedAgentCode = input.agentCode?.trim().toUpperCase() ?? "";
+  if (input.role === "AGENT" && requestedAgentCode && !/^[A-Z0-9._-]{1,32}$/.test(requestedAgentCode)) {
+    throw new ValidationError("รหัส Agent ใช้ได้เฉพาะ A-Z, 0-9, จุด ขีดกลาง หรือขีดล่าง");
+  }
+  const agentName = input.agentName?.trim() || displayName;
+  const commissionRate = input.role === "AGENT"
+    ? decimal(input.commissionRate?.trim() || AGENT_COMMISSION_RATE.toString(), "อัตราคอมมิชชัน")!
+    : null;
+  const creditLimit = input.role === "AGENT" ? decimal(input.creditLimit, "วงเงินรวมต่องวด", true) : null;
+  const perNumberLimit = input.role === "AGENT" ? decimal(input.perNumberLimit, "วงเงินต่อเลข", true) : null;
+  const before = {
+    login: user.login,
+    displayName: user.displayName,
+    role: user.role,
+    status: user.status,
+    mustChangePassword: user.mustChangePassword,
+    agent: user.agent ? {
+      code: user.agent.code,
+      name: user.agent.name,
+      status: user.agent.status,
+      commissionRate: user.agent.commissionRate.toString(),
+      creditLimit: user.agent.creditLimit?.toString() ?? null,
+      perNumberLimit: user.agent.perNumberLimit?.toString() ?? null,
+    } : null,
+  };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          displayName,
+          role: input.role,
+          status: input.status,
+          ...(passwordHash ? { passwordHash } : {}),
+        },
+      });
+
+      let agentAfter: Prisma.InputJsonObject | null = null;
+      if (input.role === "AGENT") {
+        const identity = user.agent || requestedAgentCode ? null : await nextAgentIdentity(actor.organizationId, tx);
+        const code = requestedAgentCode || user.agent?.code || identity!.code;
+        const agentData = {
+          code,
+          name: agentName,
+          commissionRate: commissionRate!,
+          creditLimit,
+          perNumberLimit,
+          status: input.status === "ACTIVE" ? "ACTIVE" as const : "SUSPENDED" as const,
+          userId: user.id,
+        };
+        if (user.agent) {
+          const updatedAgent = await tx.agent.update({ where: { id: user.agent.id }, data: agentData, select: { id: true, code: true, name: true, status: true, commissionRate: true, creditLimit: true, perNumberLimit: true } });
+          agentAfter = { ...updatedAgent, commissionRate: updatedAgent.commissionRate.toString(), creditLimit: updatedAgent.creditLimit?.toString() ?? null, perNumberLimit: updatedAgent.perNumberLimit?.toString() ?? null };
+        } else {
+          const createdAgent = await tx.agent.create({ data: { organizationId: actor.organizationId, ...agentData }, select: { id: true, code: true, name: true, status: true, commissionRate: true, creditLimit: true, perNumberLimit: true } });
+          agentAfter = { ...createdAgent, commissionRate: createdAgent.commissionRate.toString(), creditLimit: createdAgent.creditLimit?.toString() ?? null, perNumberLimit: createdAgent.perNumberLimit?.toString() ?? null };
+        }
+      } else if (user.agent) {
+        const closedAgent = await tx.agent.update({
+          where: { id: user.agent.id },
+          data: { userId: null, status: "CLOSED" },
+          select: { id: true, code: true, name: true, status: true },
+        });
+        agentAfter = closedAgent;
+      }
+
+      await writeAudit(tx, {
+        organizationId: actor.organizationId,
+        actorId: actor.userId,
+        requestId: actor.requestId,
+        ipAddress: actor.ipAddress,
+        action: "UPDATE",
+        entityType: "User",
+        entityId: user.id,
+        before,
+        after: {
+          // login แสดงเพื่อยืนยันว่าไม่เปลี่ยน แต่ไม่มีวันรับค่าจากฟอร์ม
+          login: user.login,
+          displayName,
+          role: input.role,
+          status: input.status,
+          mustChangePassword: user.mustChangePassword,
+          password: passwordHash ? "changed" : "unchanged",
+          agent: agentAfter,
+        },
+        reason: "Owner แก้ไขบัญชีผู้ใช้",
+      });
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new ConflictError("รหัส Agent นี้ถูกใช้แล้ว");
+    throw error;
+  }
+
+  if (passwordHash || user.role !== input.role || user.status !== input.status) {
+    await revokeAllSessionsForUser(user.id);
+  }
+  return { login: user.login };
 }
 
 /**

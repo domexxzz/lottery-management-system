@@ -3,10 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DateRangePicker } from "@/components/calendar";
+import { AppDropdown } from "../AppDropdown";
 
-type Option = { value: string; label: string };
+type Option = { value: string; label: string; lotteryType?: string };
 
 type Values = { q: string; from: string; to: string; draw: string; agent: string };
+
+/** วันที่ในรูป YYYY-MM-DD → "18 พ.ย. 69" สำหรับชิปตัวกรอง */
+function shortDate(value: string): string {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" });
+}
 
 /** รอให้หยุดพิมพ์ก่อนค่อยค้นหา ไม่ยิง request ทุกตัวอักษร */
 const TYPING_DELAY_MS = 400;
@@ -25,6 +33,7 @@ export function AgentBillFilters({
   drawId,
   defaultDrawId,
   scope,
+  lottery,
   agentId,
   tab,
   draws,
@@ -39,6 +48,8 @@ export function AgentBillFilters({
   defaultDrawId: string;
   /** ขอบเขตงวด: current | past | all */
   scope: "current" | "past" | "all";
+  /** ประเภทหวยที่เลือกอยู่ ("" = ทุกประเภท) ต้องคงไว้ตอนเปลี่ยนตัวกรองอื่น */
+  lottery: string;
   agentId: string;
   tab: string;
   draws: Option[];
@@ -65,6 +76,7 @@ export function AgentBillFilters({
     const params = new URLSearchParams();
     if (tab !== "ALL") params.set("tab", tab);
     if (scope !== "current") params.set("scope", scope);
+    if (lottery) params.set("lottery", lottery);
     for (const [key, value] of Object.entries(values)) if (value) params.set(key, value);
     // replace แทน push: พิมพ์ค้นหาไม่ควรสร้างประวัติย้อนกลับทีละตัวอักษร
     router.replace(`/bills${params.size ? `?${params}` : ""}`, { scroll: false });
@@ -96,6 +108,41 @@ export function AgentBillFilters({
     apply({ q: "", from: "", to: "", draw: "", agent: "" });
   }
 
+  // มือถือ: ด้านบนเหลือช่องค้นหากับปุ่ม "ตัวกรอง" ตัวกรองที่เหลือเปิดเป็น Bottom Sheet
+  // บนจอใหญ่ CSS แสดงทุกช่องเรียงแถวเดียวเหมือนเดิม state นี้จึงไม่มีผล
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  function closeSheet() {
+    setSheetOpen(false);
+    toggleRef.current?.focus();
+  }
+  useEffect(() => {
+    if (!sheetOpen) return;
+    closeRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      // ปฏิทินและ dropdown ที่ซ้อนอยู่จัดการ Escape เองก่อน
+      if (event.key === "Escape" && !document.querySelector(".calendar-popover, .app-dropdown-menu")) {
+        setSheetOpen(false);
+        toggleRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheetOpen]);
+
+  // ตัวกรองที่ใช้อยู่ แสดงเป็นชิปใต้ช่องค้นหาบนมือถือ กดชิปเพื่อเอาตัวกรองนั้นออก
+  const chips: { key: string; label: string; clear: () => void }[] = [];
+  if (draw) {
+    chips.push({ key: "draw", label: draws.find((option) => option.value === draw)?.label ?? "งวดที่เลือก", clear: () => { setDraw(""); apply({ draw: "" }); } });
+  }
+  if (agent && agents) {
+    chips.push({ key: "agent", label: agents.find((option) => option.value === agent)?.label ?? "Agent ที่เลือก", clear: () => { setAgent(""); apply({ agent: "" }); } });
+  }
+  if (range.startDate && range.endDate) {
+    chips.push({ key: "dates", label: `${shortDate(range.startDate)} – ${shortDate(range.endDate)}`, clear: () => { setRange({ startDate: "", endDate: "" }); apply({ from: "", to: "" }); } });
+  }
+
   return (
     <form
       className={`slip-filter-card ${agents ? "has-agent" : ""}`}
@@ -107,6 +154,39 @@ export function AgentBillFilters({
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         <input name="q" type="search" value={q} onChange={(event) => onType(event.target.value)} placeholder="ค้นหาเลขบิล / ชื่อลูกค้า" />
       </label>
+      <button
+        ref={toggleRef}
+        type="button"
+        className="slip-filter-toggle"
+        aria-expanded={sheetOpen}
+        aria-controls="slip-filter-sheet"
+        onClick={() => setSheetOpen(true)}
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" /></svg>
+        ตัวกรอง
+        {chips.length > 0 && <b aria-label={`ใช้อยู่ ${chips.length} รายการ`}>{chips.length}</b>}
+      </button>
+      {chips.length > 0 && (
+        <div className="slip-filter-chips" aria-label="ตัวกรองที่ใช้อยู่">
+          {chips.map((chip) => (
+            <button key={chip.key} type="button" onClick={chip.clear} aria-label={`เอาตัวกรอง ${chip.label} ออก`}>
+              <span>{chip.label}</span><i aria-hidden="true">×</i>
+            </button>
+          ))}
+        </div>
+      )}
+      {sheetOpen && <button type="button" className="slip-filter-backdrop" aria-label="ปิดตัวกรอง" tabIndex={-1} onClick={closeSheet} />}
+      <div
+        id="slip-filter-sheet"
+        className={`slip-filter-sheet ${sheetOpen ? "is-open" : ""}`}
+        role={sheetOpen ? "dialog" : undefined}
+        aria-modal={sheetOpen ? true : undefined}
+        aria-labelledby={sheetOpen ? "slip-filter-sheet-heading" : undefined}
+      >
+      <header className="slip-filter-sheet-head">
+        <h2 id="slip-filter-sheet-heading">ตัวกรอง</h2>
+        <button ref={closeRef} type="button" aria-label="ปิดตัวกรอง" onClick={closeSheet}>×</button>
+      </header>
       <div className="slip-filter-dates">
         <DateRangePicker
           startLabel="ตั้งแต่"
@@ -120,12 +200,19 @@ export function AgentBillFilters({
       </div>
       <label className="slip-filter-select slip-filter-draw">
         <span>งวด</span>
-        <select value={draw || defaultDrawId} onChange={(event) => { setDraw(event.target.value); apply({ draw: event.target.value }); }}>
-          {scope === "current"
-            ? draws.length === 0 && <option value="">ไม่มีงวดปัจจุบัน</option>
-            : <option value="">{scope === "past" ? "ทุกงวดย้อนหลัง" : "ทุกงวด"}</option>}
-          {draws.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
+        <AppDropdown
+          ariaLabel="เลือกงวด"
+          value={draw || defaultDrawId}
+          onValueChange={(value) => { setDraw(value); apply({ draw: value }); }}
+          searchable={draws.length > 8}
+          searchPlaceholder="ค้นหางวด"
+          options={[
+            ...(scope === "current"
+              ? (draws.length === 0 ? [{ value: "", label: "ไม่มีงวดปัจจุบัน" }] : !lottery ? [{ value: "", label: "ทุกงวดปัจจุบัน" }] : [])
+              : [{ value: "", label: scope === "past" ? "ทุกงวดย้อนหลัง" : "ทุกงวด" }]),
+            ...draws,
+          ]}
+        />
       </label>
       {agents && (
         <label className="slip-filter-select slip-filter-agent">
@@ -140,6 +227,8 @@ export function AgentBillFilters({
         <button type="button" className="slip-clear-filter" disabled={!hasFilter} onClick={clearAll}>
           ล้างตัวกรอง
         </button>
+        <button type="button" className="slip-filter-done" onClick={closeSheet}>ดูผลลัพธ์</button>
+      </div>
       </div>
     </form>
   );

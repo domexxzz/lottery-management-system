@@ -6,6 +6,7 @@ import {
   deleteUserAction,
   setUserPasswordAction,
   setUserStatusAction,
+  updateUserAction,
   type UserActionState,
 } from "./actions";
 
@@ -53,6 +54,64 @@ export function CreateUserForm({ nextAgentLogin }: { nextAgentLogin: string }) {
     {state.ok && state.message && <p className="success" role="status">{state.message}</p>}
     {state.ok && state.credentials && <CredentialsCard login={state.credentials.login} password={state.credentials.password} />}
     <button type="submit" disabled={pending}>{pending ? "กำลังสร้างบัญชี..." : `สร้างบัญชี ${isAgent ? "Agent" : "Admin"}`}</button>
+  </form>;
+}
+
+export type EditableUser = {
+  id: string;
+  login: string;
+  displayName: string;
+  role: "ADMIN" | "AGENT";
+  status: "ACTIVE" | "SUSPENDED";
+  agent: null | {
+    code: string;
+    name: string;
+    commissionRate: string;
+    creditLimit: string;
+    perNumberLimit: string;
+  };
+};
+
+/** ฟอร์มแก้ไขเต็มหน้า Username เป็นข้อมูลอ้างอิงและไม่มี field ที่ service รับไปแก้ */
+export function EditUserForm({ user }: { user: EditableUser }) {
+  const [role, setRole] = useState<"ADMIN" | "AGENT">(user.role);
+  const [state, action, pending] = useActionState(updateUserAction, INITIAL);
+  const isAgent = role === "AGENT";
+
+  return <form action={action} className="user-edit-form">
+    <input type="hidden" name="userId" value={user.id} />
+    <section className="user-edit-section">
+      <header><span>1</span><div><h2>ข้อมูลบัญชี</h2><p>Username ใช้อ้างอิงประวัติและไม่สามารถแก้ไขได้</p></div></header>
+      <div className="user-edit-grid">
+        <label>Username<input value={user.login} readOnly aria-readonly="true" className="user-readonly-input" /><small>ล็อกถาวรเพื่อให้บิลและ Audit อ้างอิงบัญชีเดิมได้ถูกต้อง</small></label>
+        <label>ชื่อที่แสดง<input name="displayName" defaultValue={user.displayName} required maxLength={120} /><small>ชื่อที่เห็นในเมนู บิล และรายงาน</small></label>
+        <label>บทบาท<select name="role" value={role} onChange={(event) => setRole(event.target.value as "ADMIN" | "AGENT")}><option value="AGENT">Agent — ขายและดูข้อมูลของตนเอง</option><option value="ADMIN">Admin — จัดการงานประจำวัน</option></select></label>
+        <label>สถานะ<select name="status" defaultValue={user.status}><option value="ACTIVE">ใช้งาน</option><option value="SUSPENDED">ระงับสิทธิ์</option></select><small>ระงับแล้วบัญชีจะเข้าสู่ระบบไม่ได้</small></label>
+      </div>
+    </section>
+
+    {isAgent && <section className="user-edit-section">
+      <header><span>2</span><div><h2>ข้อมูล Agent</h2><p>ใช้คำนวณค่าคอมและควบคุมวงเงินรับบิล</p></div></header>
+      <div className="user-edit-grid user-edit-agent-grid">
+        <label>รหัส Agent<input name="agentCode" defaultValue={user.agent?.code ?? ""} maxLength={32} placeholder="เว้นว่างให้ระบบสร้างอัตโนมัติ" /><small>ใช้ A-Z, 0-9, จุด ขีดกลาง หรือขีดล่าง</small></label>
+        <label>ชื่อ Agent<input name="agentName" defaultValue={user.agent?.name ?? user.displayName} maxLength={120} required /></label>
+        <label>คอมมิชชัน (%)<input name="commissionRate" type="number" min="0" max="100" step="0.0001" defaultValue={user.agent?.commissionRate ?? "30"} required /></label>
+        <label>วงเงินรวมต่องวด<input name="creditLimit" type="number" min="0.01" step="0.01" defaultValue={user.agent?.creditLimit ?? ""} placeholder="ไม่จำกัด" /><small>เว้นว่าง = ไม่จำกัด</small></label>
+        <label>วงเงินต่อเลข<input name="perNumberLimit" type="number" min="0.01" step="0.01" defaultValue={user.agent?.perNumberLimit ?? ""} placeholder="ไม่จำกัด" /><small>เว้นว่าง = ไม่จำกัด</small></label>
+      </div>
+    </section>}
+
+    <section className="user-edit-section">
+      <header><span>{isAgent ? "3" : "2"}</span><div><h2>ความปลอดภัย</h2><p>เว้นรหัสผ่านว่างไว้หากไม่ต้องการเปลี่ยน</p></div></header>
+      <div className="user-edit-grid">
+        <label>รหัสผ่านใหม่<input name="password" type="text" maxLength={256} autoComplete="off" spellCheck={false} placeholder="ไม่เปลี่ยนรหัสผ่าน" /><small>ถ้ากรอก ระบบจะออกจากระบบบัญชีนี้ทุกอุปกรณ์</small></label>
+      </div>
+    </section>
+
+    {state.error && <p className="error user-edit-message" role="alert">{state.error}</p>}
+    {state.ok && state.message && <p className="success user-edit-message" role="status">{state.message}</p>}
+    {state.ok && state.credentials && <CredentialsCard login={state.credentials.login} password={state.credentials.password} />}
+    <div className="user-edit-actions"><a href="/users">ยกเลิก</a><button type="submit" disabled={pending}>{pending ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}</button></div>
   </form>;
 }
 

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/db";
 import { hashPassword } from "../src/lib/auth/password";
+import { LAO_PRIZE_TYPES } from "../src/lib/lao/rules";
 
 /** Rulebook ที่ยืนยันแล้ว: เปิดรับเฉพาะ 2 ตัวและ 3 ตัวรวม 6 ประเภท */
 const PRIZE_TYPES = [
@@ -103,6 +104,24 @@ async function main() {
         matchRule: pt.matchRule,
         payoutRate: pt.payoutRate,
         isActive: pt.isActive,
+      },
+    });
+  }
+
+  // หวยลาว (101–104) และหวยลาวชุด (201–207) ไม่ทับอัตราจ่ายที่ Owner แก้ไว้แล้ว
+  for (const pt of LAO_PRIZE_TYPES) {
+    await prisma.prizeType.upsert({
+      where: { organizationId_code: { organizationId: org.id, code: pt.code } },
+      update: { lotteryType: pt.lotteryType },
+      create: {
+        organizationId: org.id,
+        code: pt.code,
+        name: pt.name,
+        digits: pt.digits,
+        matchRule: pt.matchRule,
+        lotteryType: pt.lotteryType,
+        payoutRate: pt.payoutRate,
+        isActive: true,
       },
     });
   }

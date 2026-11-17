@@ -10,7 +10,7 @@ import {
   lotteryLabel,
   type BetStatus,
 } from "@/lib/bills/betting";
-import { ThaiFlag } from "../ThaiFlag";
+import { LotteryFlag } from "../ThaiFlag";
 import { SlipItems, type SlipItemRow } from "./SlipItems";
 
 type SlipItem = {
@@ -128,7 +128,7 @@ export function SlipDetail({ bill, settledAt, showDrawLink, beforeItems }: { bil
           </div>
           <div className="slip-fact">
             <small>งวด</small>
-            <strong><ThaiFlag /> {lotteryLabel(bill.draw.lotteryType)} {drawDateLabel(bill.draw)}</strong>
+            <strong><LotteryFlag lotteryType={bill.draw.lotteryType} /> {lotteryLabel(bill.draw.lotteryType)} {drawDateLabel(bill.draw)}</strong>
             <span>Agent: {bill.agent.code} · {bill.agent.name}</span>
             <span>สร้างโดย {bill.createdBy.displayName}</span>
           </div>

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
 import { listBetBills, placeBill, recentCustomerNames, softDeleteBillBeforeCutoff, updateBillBeforeCutoff } from "./service";
 import { addRestriction, removeRestriction } from "@/lib/draws/restrictions";
+import { BillItemsRejectedError } from "@/lib/errors";
 
 let f: Fixtures;
 
@@ -71,6 +72,75 @@ describe("หน้าแทงเลข: placeBill", () => {
       title: "ลูกค้า",
       items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }],
     })).rejects.toThrow(/หมดเวลาการเดิมพัน/);
+  });
+});
+
+describe("กันบิลซ้ำและเลขที่ถูกปฏิเสธตอนยืนยัน", () => {
+  const key = "0123456789abcdef0123456789abcdef";
+
+  test("ส่งซ้ำด้วยรหัสเดิมได้บิลเดิม ไม่สร้างบิลใหม่และไม่กินเลขบิล", async () => {
+    const input = {
+      drawId: f.draw.id,
+      title: "ลูกค้ากดซ้ำ",
+      items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }],
+      submissionKey: key,
+    };
+    const first = await placeBill(f.actors.AGENT1, input);
+    const again = await placeBill(f.actors.AGENT1, input);
+
+    expect(again.billId).toBe(first.billId);
+    expect(again.duplicate).toBe(true);
+    expect(await prisma.bill.count()).toBe(1);
+    const next = await placeBill(f.actors.AGENT1, { ...input, submissionKey: undefined });
+    expect(next.drawSequence).toBe(2);
+  });
+
+  test("สองคำขอพร้อมกันด้วยรหัสเดิมได้บิลเดียว", async () => {
+    const input = {
+      drawId: f.draw.id,
+      title: "ลูกค้าเน็ตช้า",
+      items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "456", stake: "10" }],
+      submissionKey: key,
+    };
+    const [a, b] = await Promise.all([placeBill(f.actors.AGENT1, input), placeBill(f.actors.AGENT1, input)]);
+
+    expect(a.billId).toBe(b.billId);
+    expect(await prisma.bill.count()).toBe(1);
+  });
+
+  test("รหัสของผู้ใช้อื่นใช้ซ้ำไม่ได้ และไม่คืนบิลของคนอื่น", async () => {
+    const items = [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "789", stake: "10" }];
+    await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ลูกค้า", items, submissionKey: key });
+    await expect(placeBill(f.actors.AGENT2, { drawId: f.draw.id, title: "ลูกค้า", items, submissionKey: key }))
+      .rejects.toThrow(/คำขอนี้ถูกใช้ไปแล้ว/);
+  });
+
+  test("เลขเต็มระหว่างกรอก: บอกประเภทและเลขที่ถูกปฏิเสธ และไม่สร้างบิล", async () => {
+    await addRestriction(f.actors.ADMIN, { drawId: f.draw.id, prizeTypeId: f.prizeTypes.threeTop.id, number: "999", kind: "CLOSED" });
+    const error = await placeBill(f.actors.AGENT1, {
+      drawId: f.draw.id,
+      title: "ลูกค้า",
+      items: [
+        { prizeTypeId: f.prizeTypes.threeTop.id, number: "111", stake: "10" },
+        { prizeTypeId: f.prizeTypes.threeTop.id, number: "999", stake: "10" },
+      ],
+      submissionKey: key,
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(BillItemsRejectedError);
+    expect((error as BillItemsRejectedError).rejected).toEqual([
+      expect.objectContaining({ prizeTypeId: f.prizeTypes.threeTop.id, number: "999" }),
+    ]);
+    expect(await prisma.bill.count()).toBe(0);
+
+    // ลบเลขที่ถูกปฏิเสธแล้วส่งใหม่ด้วยรหัสเดิมได้ เพราะรอบแรก rollback ไปแล้ว
+    const retried = await placeBill(f.actors.AGENT1, {
+      drawId: f.draw.id,
+      title: "ลูกค้า",
+      items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "111", stake: "10" }],
+      submissionKey: key,
+    });
+    expect(retried.duplicate).toBeUndefined();
   });
 });
 

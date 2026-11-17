@@ -20,6 +20,9 @@ import {
 } from "./DrawForms";
 import { GloResultImporter } from "./GloResultImporter";
 import { RestrictionManager } from "./RestrictionManager";
+import { CapOverrideManager, LaoResultForm } from "./LaoForms";
+import { isLaoLottery } from "@/lib/lao/rules";
+import { listCapOverrides } from "@/lib/lao/service";
 import { listRestrictions } from "@/lib/draws/restrictions";
 import { capLabel, fullNumbersByDraw } from "@/lib/draws/number-cap";
 import { compactRate } from "@/lib/bills/betting";
@@ -54,6 +57,7 @@ type WinItem = Awaited<ReturnType<typeof listSettlements>>["winningItems"][numbe
 const WINS_PREVIEW = 5;
 
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const RESULT_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
 
 function WinList({ items }: { items: WinItem[] }) {
   return (
@@ -102,7 +106,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
     ? await Promise.all([
         listRestrictions(actor, draw.id),
         prisma.prizeType.findMany({
-          where: { ...orgScope(actor), isActive: true },
+          where: { ...orgScope(actor), isActive: true, lotteryType: draw.lotteryType },
           orderBy: { code: "asc" },
           select: { id: true, code: true, name: true, digits: true, payoutRate: true },
         }),
@@ -113,6 +117,9 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
     ? (await fullNumbersByDraw(prisma, actor.organizationId, [capDraw])).get(capDraw.id) ?? []
     : [];
   const prizeNameById = new Map(restrictionPrizeTypes.map((prizeType) => [prizeType.id, prizeType.name]));
+  const isLao = isLaoLottery(draw.lotteryType);
+  const canOverrideCap = can(actor.role, "number.capOverride");
+  const capOverrideRows = canManageRestrictions ? await listCapOverrides(actor, draw.id) : [];
   const canEnter = can(actor.role, "result.enter");
   const canApproveResult = can(actor.role, "result.approve");
   const canApproveCorrection = can(actor.role, "result.approveCorrection");
@@ -160,7 +167,10 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
             </p>
           )}
           {canEnter && draw.status !== "CLOSED" && <div className="result-entry-guide"><span className="result-entry-guide-icon"><DashboardIcon name="edit" /></span><div><strong>กรอกและยืนยันผลรางวัล</strong><small>ตรวจเลขให้ถูกต้องก่อนบันทึก เมื่อกดแล้วผลจะได้รับการยืนยันทันทีโดยไม่ต้องตรวจซ้ำ</small></div><a href="#result-entry-list">กรอกผลด้านล่าง ↓</a></div>}
-          {canEnter && editableCount > 0 && draw.status !== "CLOSED" && <GloResultImporter drawId={draw.id} dateOptions={gloDateOptions} />}
+          {isLao && draw.resultAt && !draw.officialNumber && <p className="muted">ออกผล {RESULT_TIME.format(draw.resultAt)} น.</p>}
+          {isLao && draw.officialNumber && <p className="lao-official-number"><span>ผลที่ออก</span><strong>{draw.officialNumber}</strong></p>}
+          {isLao && canEnter && editableCount > 0 && approvedCount === 0 && draw.status !== "CLOSED" && <LaoResultForm drawId={draw.id} />}
+          {!isLao && canEnter && editableCount > 0 && draw.status !== "CLOSED" && <GloResultImporter drawId={draw.id} dateOptions={gloDateOptions} />}
           <div className="table-wrap" id="result-entry-list"><table className="result-entry-table">
             <thead>
               <tr>
@@ -220,7 +230,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                       {latest?.maker.displayName ?? "-"}
                     </td>
                     <td>
-                      {canEnter && !locked && resultLength !== null && (
+                      {!isLao && canEnter && !locked && resultLength !== null && (
                         <div className={valueCount > 1 ? "result-value-inputs" : undefined}>
                           {Array.from({ length: valueCount }, (_, valueIndex) => (
                             <input
@@ -241,7 +251,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                           ))}
                         </div>
                       )}
-                      {canEnter && !locked && resultLength === null && (
+                      {!isLao && canEnter && !locked && resultLength === null && (
                         <span className="error" role="alert">
                           ยังไม่ได้ตั้งจำนวนหลักของผลรางวัล · ตั้งที่{" "}
                           <Link href="/prize-types">Rulebook</Link> ก่อนลงผล
@@ -275,7 +285,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
               })}
             </tbody>
           </table></div>
-          {canEnter && editableCount > 0 && draw.status !== "CLOSED" && (
+          {!isLao && canEnter && editableCount > 0 && draw.status !== "CLOSED" && (
             <SaveAllResultsForm drawId={draw.id} formId={bulkFormId} editableCount={editableCount} />
           )}
           </>
@@ -392,6 +402,15 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
               number: row.number,
               used: MONEY.format(Number(row.used)),
             }))}
+          />
+        )}
+        {canManageRestrictions && (canOverrideCap || capOverrideRows.length > 0) && (
+          <CapOverrideManager
+            drawId={draw.id}
+            editable={canOverrideCap && draw.status === "OPEN"}
+            capLabel={`${capLabel(capDraw?.numberCap ?? null)}${capDraw?.numberCap ? " บาท" : ""}`}
+            prizeTypes={restrictionPrizeTypes.map((prizeType) => ({ id: prizeType.id, code: prizeType.code, name: prizeType.name, digits: prizeType.digits }))}
+            rows={capOverrideRows.map((row) => ({ id: row.id, number: row.number, cap: MONEY.format(Number(row.cap)), prizeTypeName: row.prizeType.name }))}
           />
         )}
       </section>

@@ -17,6 +17,7 @@ import {
   reconcileSettlement,
 } from "@/lib/settlement/service";
 import { AppError } from "@/lib/errors";
+import { enterLaoResult, removeCapOverride, setCapOverride } from "@/lib/lao/service";
 import {
   addRestriction,
   addScopedRestriction,
@@ -309,4 +310,65 @@ export async function updateNumberCapAction(_prev: ActionState, formData: FormDa
   revalidatePath("/bills/new");
   revalidatePath("/prize-types");
   return { error: null, message: "บันทึกเพดานต่อเลขแล้ว" };
+}
+
+// ---------------------------------------------------------------- หวยลาว
+
+/** ลงผลหวยลาวจากเลขที่ออกเต็ม บันทึกให้ทั้งงวดหวยลาวและหวยลาวชุดของวันเดียวกัน แล้วคำนวณเงินต่อทันที */
+export async function enterLaoResultAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const drawId = String(formData.get("drawId") ?? "");
+  let outcome: Awaited<ReturnType<typeof enterLaoResult>>;
+  try {
+    outcome = await enterLaoResult(actor, drawId, String(formData.get("officialNumber") ?? ""));
+  } catch (error) {
+    return fail(error);
+  }
+  const messages: string[] = [];
+  let failed: string | null = null;
+  for (const saved of outcome.saved) {
+    const settle = saved.autoApproved ? await settleWhenResultsComplete(actor, saved.drawId) : { kind: "skipped" as const };
+    revalidatePath(`/draws/${saved.drawId}`);
+    const state = savedState("บันทึกผลแล้ว", settle);
+    if (state.error) failed = state.error;
+    else if (state.message) messages.push(state.message);
+  }
+  revalidatePath("/draws");
+  revalidatePath("/reports");
+  if (failed) return { error: failed, message: null };
+  const count = outcome.saved.length;
+  const skipped = outcome.skipped.length > 0 ? ` · ข้าม ${outcome.skipped.join(", ")} (ยังไม่ปิดรับหรือมีผลแล้ว)` : "";
+  return { error: null, message: `${count === 2 ? "บันทึกผลให้ทั้งหวยลาวและหวยลาวชุดแล้ว" : messages[0] ?? "บันทึกผลแล้ว"}${skipped}` };
+}
+
+export async function setCapOverrideAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const drawId = String(formData.get("drawId") ?? "");
+  try {
+    await setCapOverride(actor, {
+      drawId,
+      prizeTypeId: String(formData.get("prizeTypeId") ?? ""),
+      number: String(formData.get("number") ?? ""),
+      cap: String(formData.get("cap") ?? ""),
+    });
+    revalidatePath(`/draws/${drawId}`);
+    revalidatePath("/bills");
+    revalidatePath("/bills/new");
+    return { error: null, message: "บันทึกเพดานเฉพาะเลขแล้ว" };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function removeCapOverrideAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  try {
+    const { drawId } = await removeCapOverride(actor, String(formData.get("overrideId") ?? ""));
+    revalidatePath(`/draws/${drawId}`);
+    revalidatePath("/bills");
+    revalidatePath("/bills/new");
+    return { error: null, message: "กลับไปใช้เพดานทั้งงวดแล้ว" };
+  } catch (error) {
+    return fail(error);
+  }
 }

@@ -3,6 +3,9 @@ import type { AttachmentStatus, AttachmentType } from "@prisma/client";
 import type { Actor } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { listEvidenceReviewQueue } from "@/lib/evidence/service";
+import { drawDateLabel } from "@/lib/bills/betting";
+import { daysUntilExpiry, evidenceExpiresAt, evidenceSummaryByDraw, purgeExpiredEvidenceSoon, remainingLabel } from "@/lib/evidence/retention";
+import { DeleteAllEvidence } from "./DeleteAllEvidence";
 import { EvidenceFilters } from "./EvidenceFilters";
 import { ReviewQueue } from "./ReviewQueue";
 
@@ -18,6 +21,11 @@ export async function EvidenceReviewScreen({ actor, params, mode }: { actor: Act
   const typeRaw = first(params.type);
   const page = Math.max(1, Number(first(params.page)) || 1);
   const basePath = mode === "verified" ? "/evidence/verified" : "/evidence";
+  // ลบรูปที่ครบ 1 ปีก่อนแสดงรายการ (อย่างมากชั่วโมงละครั้ง ไม่ทำให้หน้าช้า)
+  await purgeExpiredEvidenceSoon();
+  const canDelete = can(actor.role, "evidence.delete");
+  const now = new Date();
+  const summary = canDelete ? await evidenceSummaryByDraw(actor) : null;
   const result = await listEvidenceReviewQueue(actor, {
     query: first(params.q)?.trim() || undefined,
     status: mode === "verified" ? "VERIFIED" : queueStatus,
@@ -33,6 +41,9 @@ export async function EvidenceReviewScreen({ actor, params, mode }: { actor: Act
     id: item.id, type: item.type, originalName: item.originalName, fileSize: item.fileSize, status: item.status,
     rejectionReason: item.rejectionReason, createdAt: item.createdAt.toISOString(), verifiedAt: item.verifiedAt?.toISOString() ?? null,
     duplicateCount: item.duplicateCount,
+    expiresAt: evidenceExpiresAt(item.createdAt).toISOString(),
+    daysLeft: daysUntilExpiry(item.createdAt, now),
+    remaining: remainingLabel(daysUntilExpiry(item.createdAt, now)),
     uploadedBy: item.uploadedBy.displayName, verifiedBy: item.verifiedBy?.displayName ?? null,
     bill: { id: item.bill.id, drawSequence: item.bill.drawSequence, title: item.bill.title, status: item.bill.status, totalStake: item.bill.totalStake.toFixed(2), agentCode: item.bill.agent.code, agentName: item.bill.agent.name, drawName: item.bill.draw.name },
     payment: item.payment ? { amount: item.payment.amount.toFixed(2), paidAt: item.payment.paidAt.toISOString(), paymentMethod: item.payment.paymentMethod, note: item.payment.note, verificationStatus: item.payment.verificationStatus } : null,
@@ -44,8 +55,12 @@ export async function EvidenceReviewScreen({ actor, params, mode }: { actor: Act
     <p><Link href="/">← หน้าภาพรวม</Link></p>
     <header className="page-hero"><div className="page-hero-copy"><p className="page-eyebrow">{verified ? "Verified Evidence" : "Evidence Review"}</p><h1>{verified ? "หลักฐานที่ตรวจแล้ว" : "ตรวจหลักฐานจากลูกค้า"}</h1><p>{verified ? "เก็บหลักฐานที่ตรวจสอบผ่านแล้วสำหรับเปิดดูและตรวจสอบย้อนหลัง" : "แสดงเฉพาะหลักฐานที่รอตรวจสอบหรือถูกตีกลับ เพื่อให้คิวงานชัดเจน"}</p></div><span className="review-total">{result.total} บิล</span></header>
     <nav className="evidence-view-switcher" aria-label="มุมมองหลักฐาน"><Link className={!verified ? "active" : undefined} href="/evidence">รอตรวจ / ตีกลับ</Link><Link className={verified ? "active" : undefined} href="/evidence/verified">ตรวจแล้ว</Link></nav>
+    <div className="evidence-retention-bar">
+      <p><strong>เก็บรูปหลักฐานไว้ 1 ปี</strong> นับจากวันที่แนบ ครบแล้วระบบลบให้อัตโนมัติ ดูเวลาที่เหลือได้ที่แต่ละรูป</p>
+      {summary && <DeleteAllEvidence total={summary.total} draws={summary.draws.map((draw) => ({ drawId: draw.drawId, label: `งวด ${drawDateLabel({ drawDate: draw.drawDate, name: draw.drawName })}`, count: draw.count }))} />}
+    </div>
     <EvidenceFilters mode={mode}/>
-    <ReviewQueue items={serialized} canDelete={can(actor.role, "evidence.delete")} emptyTitle={verified ? "ยังไม่มีหลักฐานที่ตรวจแล้ว" : "ไม่มีหลักฐานที่รอตรวจหรือตีกลับ"} emptyDescription={verified ? "หลักฐานที่ Admin ตรวจผ่านจะถูกเก็บและแสดงในหน้านี้" : "คิวตรวจว่างแล้ว หลักฐานที่ตรวจผ่านสามารถดูได้ในหน้าหลักฐานที่ตรวจแล้ว"}/>
+    <ReviewQueue items={serialized} canDelete={canDelete} emptyTitle={verified ? "ยังไม่มีหลักฐานที่ตรวจแล้ว" : "ไม่มีหลักฐานที่รอตรวจหรือตีกลับ"} emptyDescription={verified ? "หลักฐานที่ Admin ตรวจผ่านจะถูกเก็บและแสดงในหน้านี้" : "คิวตรวจว่างแล้ว หลักฐานที่ตรวจผ่านสามารถดูได้ในหน้าหลักฐานที่ตรวจแล้ว"}/>
     {pages > 1 && <nav className="review-pagination" aria-label="หน้ารายการ"><Link aria-disabled={page <= 1} href={page <= 1 ? buildPageLink(1) : buildPageLink(page - 1)}>ก่อนหน้า</Link><span>หน้า {page} จาก {pages}</span><Link aria-disabled={page >= pages} href={page >= pages ? buildPageLink(pages) : buildPageLink(page + 1)}>ถัดไป</Link></nav>}
   </section></main>;
 }

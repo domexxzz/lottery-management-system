@@ -60,7 +60,7 @@ export async function listResults(actor: Actor, drawId: string) {
 
   const draw = await prisma.draw.findFirst({
     where: { id: drawId, ...orgScope(actor) },
-    select: { id: true, name: true, status: true, cutoffAt: true },
+    select: { id: true, name: true, status: true, cutoffAt: true, lotteryType: true, officialNumber: true, drawDate: true, resultAt: true },
   });
   if (!draw) throw new NotFoundError("ไม่พบรอบ");
 
@@ -68,6 +68,8 @@ export async function listResults(actor: Actor, drawId: string) {
     prisma.prizeType.findMany({
       where: {
         ...orgScope(actor),
+        // แสดงเฉพาะรางวัลของประเภทหวยของงวดนี้ หวยลาวไม่ต้องลงผลรางวัลหวยไทย
+        lotteryType: draw.lotteryType,
         // เลขสลับเป็นเพียงปุ่มช่วยสร้างเลขของตัวบน ไม่ใช่ผลรางวัลแยก
         code: { notIn: [10, 11] },
         OR: [
@@ -146,13 +148,14 @@ export async function enterResultsBatch(
   const [draw, prizeType] = await Promise.all([
     prisma.draw.findFirst({
       where: { id: input.drawId, ...orgScope(actor) },
-      select: { id: true, status: true },
+      select: { id: true, status: true, lotteryType: true },
     }),
     prisma.prizeType.findMany({
       where: { id: { in: prizeTypeIds }, ...orgScope(actor) },
       select: {
         id: true,
         code: true,
+        lotteryType: true,
         digits: true,
         resultDigits: true,
         matchRule: true,
@@ -176,6 +179,7 @@ export async function enterResultsBatch(
     if (type.code === 10 || type.code === 11) {
       throw new ValidationError("เลขสลับเป็นตัวช่วยกรอกเลขตัวบน ไม่ต้องลงผลรางวัลแยก");
     }
+    if (type.lotteryType !== draw.lotteryType) throw new ValidationError(`รางวัล ${type.code} ไม่ใช่รางวัลของงวดประเภทนี้`);
     if (!type.isActive) throw new ConflictError(`รางวัล ${type.code} ถูกปิดใช้งานแล้ว`);
     const values = (result.values ?? [result.value ?? ""]).map((value) => value.trim()).filter(Boolean);
     const requiredCount = resultValueCount(type.code);

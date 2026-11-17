@@ -31,7 +31,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
   const drawOptions = await prisma.draw.findMany({
     where: orgScope(actor),
     orderBy: { cutoffAt: "desc" },
-    select: { id: true, name: true, status: true, drawDate: true, cutoffAt: true },
+    select: { id: true, name: true, status: true, drawDate: true, cutoffAt: true, lotteryType: true },
   });
   const organization = await prisma.organization.findUnique({
     where: { id: actor.organizationId },
@@ -114,7 +114,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
     </header>
 
     <AgentTable
-      draws={drawOptions.map((draw) => ({ id: draw.id, name: draw.name }))}
+      draws={drawOptions.map((draw) => ({ id: draw.id, name: draw.name, lotteryType: draw.lotteryType }))}
       selectedDrawId={currentDraw?.id ?? ""}
       from={from ?? ""}
       to={to ?? ""}

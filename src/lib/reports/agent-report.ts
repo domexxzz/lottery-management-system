@@ -8,7 +8,7 @@ import { sumMoney, ZERO } from "@/lib/money";
 const COUNTED_STATUSES: BillStatus[] = ["CONFIRMED", "LOCKED", "SETTLED"];
 const SETTLEMENT_STATUSES: SettlementStatus[] = ["DRAFT", "RECONCILED", "APPROVED"];
 
-export type AgentReportView = "summary" | "prizes" | "bills" | "settlements";
+export type AgentReportView = "summary" | "prizes" | "bills" | "winners" | "settlements";
 export type AgentSettlementFilter = "ALL" | "PENDING" | SettlementStatus;
 
 export type AgentReportFilter = {
@@ -34,6 +34,17 @@ export type AgentRoundReportRow = {
   settlementStatus: SettlementStatus | "PENDING";
 };
 
+export type SimpleAgentRound = {
+  drawId: string;
+  drawName: string;
+  cutoffAt: Date;
+  billCount: number;
+  winnerCount: number;
+  gross: Prisma.Decimal;
+  commission: Prisma.Decimal;
+  commissionFinal: boolean;
+};
+
 function parseStart(value?: string) {
   if (!value) return undefined;
   const parsed = new Date(`${value}T00:00:00+07:00`);
@@ -52,7 +63,7 @@ function settlementFilter(value?: string): AgentSettlementFilter {
 }
 
 function reportView(value?: string): AgentReportView {
-  return value === "prizes" || value === "bills" || value === "settlements" ? value : "summary";
+  return value === "prizes" || value === "bills" || value === "winners" || value === "settlements" ? value : "summary";
 }
 
 function applySettlementFilter(rows: AgentRoundReportRow[], filter: AgentSettlementFilter) {
@@ -189,9 +200,12 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
       ? prisma.billItem.groupBy({ by: ["prizeTypeId"], where: { bill: countedBillFilter, isWinner: true }, _count: { _all: true } })
       : Promise.resolve([]),
     wantsPrizes ? prisma.prizeType.findMany({ where: scope, select: { id: true, code: true, name: true } }) : Promise.resolve([]),
-    selectedView === "bills" && includedDrawIds.length
+    (selectedView === "bills" || selectedView === "winners") && includedDrawIds.length
       ? prisma.bill.findMany({
-          where: countedBillFilter,
+          where: {
+            ...countedBillFilter,
+            ...(selectedView === "winners" ? { totalPayout: { gt: 0 } } : {}),
+          },
           orderBy: { createdAt: "desc" },
           take: 200,
           select: { id: true, drawSequence: true, title: true, status: true, totalStake: true, totalPayout: true, createdAt: true, draw: { select: { name: true } }, _count: { select: { items: true } } },
@@ -231,4 +245,103 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
     dateTo: filter.dateTo ?? "",
     selectedDrawId: filter.drawId ?? "",
   };
+}
+
+/**
+ * หน้ารายงานแบบย่อสำหรับ Agent โหลดเฉพาะ 2 งวดล่าสุดและบิลที่ถูกรางวัล
+ * เพื่อให้เห็นยอดขาย ค่าคอม และผู้ถูกรางวัลได้ทันทีโดยไม่สร้าง matrix รายงานขนาดใหญ่
+ */
+export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string) {
+  requirePermission(actor, "bill.viewOwn");
+  if (actor.role !== "AGENT" || !actor.agentId) throw new ForbiddenError("รายงานนี้สำหรับ Agent เท่านั้น");
+
+  const scope = orgScope(actor);
+  const [agent, drawOptions] = await Promise.all([
+    prisma.agent.findFirst({
+      where: { ...scope, id: actor.agentId },
+      select: { code: true, name: true, commissionRate: true },
+    }),
+    prisma.draw.findMany({
+      where: scope,
+      orderBy: { cutoffAt: "desc" },
+      take: 50,
+      select: { id: true, name: true, cutoffAt: true },
+    }),
+  ]);
+  if (!agent) throw new ForbiddenError("ไม่พบบัญชี Agent");
+
+  const requestedIndex = selectedDrawId ? drawOptions.findIndex((draw) => draw.id === selectedDrawId) : -1;
+  const selectedIndex = requestedIndex >= 0 ? requestedIndex : 0;
+  const draws = drawOptions.slice(selectedIndex, selectedIndex + 2);
+
+  const drawIds = draws.map((draw) => draw.id);
+  if (drawIds.length === 0) return { agent, rounds: [] as SimpleAgentRound[], winners: [], drawOptions, selectedDrawId: "" };
+
+  const billFilter = {
+    ...scope,
+    agentId: actor.agentId,
+    drawId: { in: drawIds },
+    status: { in: COUNTED_STATUSES },
+  } satisfies Prisma.BillWhereInput;
+  const schema = databaseSchema().replaceAll('"', '""');
+  const billsTable = Prisma.raw(`"${schema}"."bills"`);
+  const itemsTable = Prisma.raw(`"${schema}"."bill_items"`);
+
+  const [billTotals, winnerTotals, settlements, winners] = await Promise.all([
+    prisma.bill.groupBy({
+      by: ["drawId"],
+      where: billFilter,
+      _count: { _all: true },
+      _sum: { totalStake: true },
+    }),
+    prisma.$queryRaw<Array<{ drawId: string; winners: number }>>(Prisma.sql`
+      SELECT b."drawId", COUNT(i.id) FILTER (WHERE i."isWinner")::int AS winners
+      FROM ${itemsTable} i
+      JOIN ${billsTable} b ON b.id = i."billId"
+      WHERE b."organizationId" = ${actor.organizationId}
+        AND b."agentId" = ${actor.agentId}
+        AND b."drawId" IN (${Prisma.join(drawIds)})
+        AND b.status::text IN (${Prisma.join(COUNTED_STATUSES)})
+      GROUP BY b."drawId"
+    `),
+    prisma.settlement.findMany({
+      where: { ...scope, agentId: actor.agentId, drawId: { in: drawIds } },
+      select: { drawId: true, commission: true },
+    }),
+    prisma.bill.findMany({
+      where: { ...billFilter, totalPayout: { gt: 0 } },
+      orderBy: [{ totalPayout: "desc" }, { createdAt: "desc" }],
+      take: 50,
+      select: {
+        id: true,
+        drawSequence: true,
+        title: true,
+        totalStake: true,
+        totalPayout: true,
+        createdAt: true,
+        draw: { select: { id: true, name: true } },
+      },
+    }),
+  ]);
+
+  const billsByDraw = new Map(billTotals.map((row) => [row.drawId, row]));
+  const winnersByDraw = new Map(winnerTotals.map((row) => [row.drawId, row.winners]));
+  const settlementByDraw = new Map(settlements.map((row) => [row.drawId, row]));
+  const rounds = draws.map((draw): SimpleAgentRound => {
+    const bill = billsByDraw.get(draw.id);
+    const gross = bill?._sum.totalStake ?? ZERO;
+    const settlement = settlementByDraw.get(draw.id);
+    return {
+      drawId: draw.id,
+      drawName: draw.name,
+      cutoffAt: draw.cutoffAt,
+      billCount: bill?._count._all ?? 0,
+      winnerCount: winnersByDraw.get(draw.id) ?? 0,
+      gross,
+      commission: settlement?.commission ?? gross.times(agent.commissionRate).dividedBy(100),
+      commissionFinal: Boolean(settlement),
+    };
+  });
+
+  return { agent, rounds, winners, drawOptions, selectedDrawId: draws[0]?.id ?? "" };
 }

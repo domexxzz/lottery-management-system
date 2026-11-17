@@ -4,7 +4,9 @@ import { getActor } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { listDraws } from "@/lib/draws/service";
 import { currentMonthOfficialDrawDates, officialDrawName, upcomingOfficialDrawDates } from "@/lib/draws/schedule";
-import { CreateDrawForm } from "./DrawForms";
+import { CreateDrawWizard } from "./DrawForms";
+import { prisma } from "@/lib/db";
+import { orgScope } from "@/lib/auth/context";
 import { DRAW_STATUS_LABEL, DrawTable, getDrawDisplayStatus } from "./DrawTable";
 import "./draws.css";
 
@@ -32,6 +34,11 @@ export default async function DrawsPage() {
   const createdDrawDates = selectableDrawDates
     .filter((date) => existingDrawNames.has(officialDrawName(date) ?? ""));
   const automaticDrawDate = upcomingDrawDates[0] ?? selectableDrawDates[0] ?? "";
+  // งวดหวยลาวที่สร้างไว้แล้วในช่วงใกล้ ๆ ใช้เตือนไม่ให้สร้างซ้ำวันเดียวกัน
+  const laoCreated = canManage ? await prisma.draw.findMany({
+    where: { ...orgScope(actor), lotteryType: { in: ["LAO", "LAO_SET"] }, drawDate: { gte: new Date(now.getTime() - 86_400_000) } },
+    select: { drawDate: true, lotteryType: true },
+  }) : [];
 
   return (
     <main className="workspace-page">
@@ -41,9 +48,12 @@ export default async function DrawsPage() {
 
         {canManage && <section className="create-draw-panel create-draw-panel-primary" aria-labelledby="create-draw-heading">
           <div className="draw-section-heading">
-            <div><p className="page-eyebrow">Create New Draw</p><h2 id="create-draw-heading">สร้างงวดใหม่</h2><p>เลือกเฉพาะงวดวันที่ 1 หรือ 16 ระบบกำหนดเวลาเปิด–ปิดรับให้อัตโนมัติ</p></div>
+            <div><p className="page-eyebrow">Create New Draw</p><h2 id="create-draw-heading">สร้างงวดใหม่</h2><p>กดสร้างงวด เลือกประเภทหวย แล้วตั้งวันและเวลา ระบบใส่ค่ามาตรฐานให้ แก้ได้ก่อนยืนยัน</p></div>
           </div>
-          <CreateDrawForm drawDates={selectableDrawDates} automaticDrawDate={automaticDrawDate} createdDrawDates={createdDrawDates} />
+          <CreateDrawWizard
+            thai={{ drawDates: selectableDrawDates, automaticDrawDate, createdDrawDates }}
+            laoCreated={laoCreated.flatMap((row) => row.drawDate ? [{ date: row.drawDate.toISOString().slice(0, 10), lotteryType: row.lotteryType }] : [])}
+          />
           <p className="draw-form-note">เมื่อถึงเวลาปิดรับ งานอัตโนมัติจะล็อกบิลที่ยืนยันแล้วและยกเลิกบิลร่างที่ค้างอยู่</p>
         </section>}
 

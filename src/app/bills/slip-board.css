@@ -93,6 +93,8 @@
 .slip-restriction-box td small { display: block; margin-top: .1rem; color: #3f4c59; font-size: .82rem; font-weight: 650; }
 .slip-restriction-box.is-reduced td strong { color: #7a4500; }
 .slip-restriction-box.is-full td strong { color: #b4233a; }
+.slip-full-number-list { display: flex; max-height: 220px; flex-wrap: wrap; align-content: flex-start; gap: .45rem; padding: .75rem; overflow-y: auto; }
+.slip-full-number-list > strong { display: inline-flex; min-width: 54px; min-height: 38px; align-items: center; justify-content: center; padding: .35rem .55rem; border: 1px solid #efb0ba; border-radius: 9px; color: #b4233a; background: #fff; font-size: 1rem; font-weight: 900; font-variant-numeric: tabular-nums; }
 .slip-restriction-near { border-top: 1.5px dashed #ee9aa6; }
 .app-page .slip-restriction-near h4 { margin: 0; padding: .55rem .85rem .15rem; color: #8a3a00; font-size: .92rem; font-weight: 900; }
 .slip-restriction-near td strong { color: #9a4a00 !important; }
@@ -424,4 +426,116 @@
   .bill-edit-rows, .bill-edit-rows fieldset { grid-template-columns: 1fr; }
   .bill-change-history li { grid-template-columns: 32px 1fr; }
   .bill-history-who { grid-column: 2; justify-items: start; white-space: normal; }
+}
+
+/* เลือกประเภทหวย (มีธงบอก) */
+.slip-lottery-switch { display: inline-flex; flex-wrap: wrap; gap: .35rem; }
+.slip-lottery-switch a { display: inline-flex; align-items: center; gap: .4rem; min-height: 38px; padding: 0 .85rem; border: 1px solid #c8dbef; border-radius: 10px; color: #2d4a6b; background: #fff; font-size: .9rem; font-weight: 750; text-decoration: none; white-space: nowrap; }
+.slip-lottery-switch a:hover { border-color: var(--sb-blue); color: var(--sb-blue); }
+.slip-lottery-switch a[aria-current="page"] { border-color: #123b62; color: #fff; background: #123b62; box-shadow: 0 4px 10px rgb(18 59 98 / 22%); }
+.slip-lottery-switch a svg { flex: none; border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / 8%); }
+
+/* ช่องงวดใช้ AppDropdown (มีธง) ให้ขนาดเท่าช่องอื่นในแถบกรอง */
+.slip-filter-select .app-dropdown { margin-top: 0; }
+.slip-filter-select .app-dropdown-trigger { min-height: 46px; padding: 0 .7rem; border-color: #c8dbef; border-radius: 12px; color: var(--sb-text); font-size: .92rem; font-weight: 600; }
+
+/* ประกาศ 3 กล่อง: ใกล้เต็ม (ส้ม) · เต็ม (แดง) · อั้น (เหลือง) */
+.slip-restriction-boxes.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.slip-restriction-box.is-near { border-color: #f2b77a; background: #fff8f1; }
+.slip-restriction-box.is-near h3 { color: #8a3a00; background: #ffe3c7; }
+.slip-restriction-box.is-near td strong { color: #9a4a00; }
+.slip-rank { display: inline-grid; width: 22px; height: 22px; margin-right: .45rem; place-items: center; border-radius: 50%; color: #fff; background: #e07b1a; font-size: .75rem; vertical-align: 3px; }
+.slip-restriction-draw-head strong svg { vertical-align: -2px; margin-right: .2rem; }
+.slip-restriction-draw-head > span.is-closed { color: #5b6976; background: #edf1f5; }
+/* แต่ละงวดกว้างเต็มแถว กล่อง 3 กล่องจะได้ไม่เบียด */
+.slip-restriction-draws { grid-template-columns: 1fr; }
+@media (max-width: 900px) { .slip-restriction-boxes.is-three { grid-template-columns: 1fr; } }
+
+/*
+ * มือถือ: หน้าประวัติรายการ
+ * - ด้านบนเหลือช่องค้นหากับปุ่ม "ตัวกรอง" ตัวกรองอื่นเปิดเป็น Bottom Sheet
+ * - ตัวกรองที่ใช้อยู่แสดงเป็นชิป กดเพื่อเอาออก
+ * - สถานะหลัก 3 ปุ่ม ที่เหลือรวมใน "เพิ่มเติม"
+ */
+.slip-filter-toggle, .slip-filter-chips, .slip-filter-backdrop, .slip-filter-sheet-head, .app-page .slip-filter-card button.slip-filter-done, .slip-tab-more { display: none; }
+.slip-filter-sheet { display: contents; }
+
+@container slipboard (max-width: 620px) {
+  .slip-breadcrumb, .slip-board-head p { display: none; }
+  .slip-sequence-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; padding: .5rem; }
+  .slip-sequence-overview .is-sequence { grid-column: auto; }
+  .slip-sequence-overview > div { padding: .45rem .55rem; }
+  .slip-sequence-overview strong { font-size: 1rem; }
+  .slip-sequence-overview small, .slip-sequence-overview p { display: none; }
+
+  /* แท็บสถานะ */
+  .slip-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .4rem; overflow: visible; padding-bottom: 0; }
+  .slip-tab.is-overflow { display: none; }
+  .slip-tab { min-height: 56px; justify-items: center; align-content: center; gap: 0; padding: .4rem .3rem; border-radius: 12px; text-align: center; }
+  .slip-tab:hover { transform: none; }
+  .slip-tab span { overflow: hidden; max-width: 100%; font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }
+  .slip-tab strong { font-size: 1.1rem; }
+  .slip-tab-more { position: relative; display: block; min-width: 0; }
+  .slip-tab-more > summary { display: grid; min-height: 56px; align-content: center; justify-items: center; padding: .4rem .3rem; border: 1px solid var(--sb-border); border-radius: 12px; color: var(--sb-text); background: #fff; cursor: pointer; list-style: none; text-align: center; }
+  .slip-tab-more > summary::-webkit-details-marker { display: none; }
+  .slip-tab-more > summary span { overflow: hidden; max-width: 100%; color: var(--sb-muted); font-size: .74rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .slip-tab-more > summary strong { font-size: 1.1rem; font-weight: 800; line-height: 1.1; }
+  .slip-tab-more.is-active > summary { border-color: transparent; color: #fff; }
+  .slip-tab-more.is-active > summary span { color: rgb(255 255 255 / 88%); }
+  .slip-tab-more.slip-tab-lost.is-active > summary { background: linear-gradient(135deg, #f0606f, #c82f43); }
+  .slip-tab-more.slip-tab-cancelled.is-active > summary { background: linear-gradient(135deg, #f4ab36, #d17f00); }
+  .slip-tab-more[open] > summary { box-shadow: 0 0 0 3px rgb(11 108 240 / 16%); }
+  .slip-tab-more-menu { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; display: grid; min-width: 200px; padding: .35rem; border: 1px solid var(--sb-border); border-radius: 14px; background: #fff; box-shadow: 0 16px 36px rgb(20 70 130 / 18%); }
+  .slip-tab-more-menu a { display: flex; min-height: 46px; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 .8rem; border-radius: 10px; color: var(--sb-text); font-weight: 700; text-decoration: none; }
+  .slip-tab-more-menu a[aria-current="page"] { color: var(--sb-blue); background: var(--sb-soft); }
+
+  /* ค้นหา + ปุ่มตัวกรอง + ชิป */
+  .slip-filter-card, .slip-filter-card.has-agent { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "search toggle" "chips chips"; align-items: center; gap: .5rem; padding: .6rem; }
+  .app-page .slip-filter-card .slip-search input { font-size: 16px; }
+  .app-page .slip-filter-card .slip-filter-toggle { grid-area: toggle; display: inline-flex; min-height: 46px; align-items: center; gap: .4rem; margin: 0; padding: 0 .85rem; border: 1px solid #c8dbef; border-radius: 12px; color: #123b62; background: #fff; box-shadow: none; font-size: .9rem; font-weight: 750; white-space: nowrap; }
+  .slip-filter-toggle b { display: grid; min-width: 20px; height: 20px; place-items: center; padding: 0 .3rem; border-radius: 10px; color: #fff; background: var(--sb-blue); font-size: .72rem; }
+  .slip-filter-chips { grid-area: chips; display: flex; min-width: 0; flex-wrap: wrap; gap: .4rem; }
+  .app-page .slip-filter-card .slip-filter-chips button { display: inline-flex; min-height: 40px; max-width: 100%; align-items: center; gap: .35rem; margin: 0; padding: 0 .3rem 0 .75rem; border: 1px solid #bcd5f0; border-radius: 999px; color: #123b62; background: #eef5fd; box-shadow: none; font-size: .82rem; font-weight: 700; }
+  .slip-filter-chips span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slip-filter-chips i { display: grid; width: 28px; height: 28px; flex: none; place-items: center; border-radius: 50%; color: #45607d; background: #fff; font-size: 1rem; font-style: normal; }
+
+  /* Bottom Sheet ตัวกรอง */
+  .slip-filter-sheet { position: fixed; z-index: 1300; right: 0; bottom: 0; left: 0; display: flex; max-height: 86dvh; flex-direction: column; gap: .9rem; padding: 0 1rem calc(1rem + env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; border-radius: 22px 22px 0 0; background: #fff; box-shadow: 0 -18px 50px rgb(8 32 70 / 28%); transform: translateY(105%); visibility: hidden; transition: transform .24s ease, visibility 0s linear .24s; }
+  .slip-filter-sheet.is-open { transform: none; visibility: visible; transition: transform .24s ease, visibility 0s; }
+  .app-page .slip-filter-card .slip-filter-backdrop { position: fixed; z-index: 1250; inset: 0; display: block; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: rgb(8 28 56 / 45%); box-shadow: none; }
+  .slip-filter-sheet-head { position: sticky; z-index: 1; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 -1rem; padding: 1rem 1rem .7rem; border-bottom: 1px solid var(--sb-line); background: #fff; }
+  .app-page .slip-filter-sheet-head h2 { margin: 0; color: var(--sb-text); font-size: 1.1rem; font-weight: 800; }
+  .app-page .slip-filter-card .slip-filter-sheet-head button { display: grid; width: 44px; min-height: 44px; height: 44px; place-items: center; margin: 0; padding: 0; border: 0; border-radius: 12px; color: var(--sb-muted); background: var(--sb-soft); box-shadow: none; font-size: 1.5rem; line-height: 1; }
+  .slip-filter-dates { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .slip-filter-card .date-picker-trigger, .slip-filter-select .app-dropdown-trigger, .slip-filter-select select { min-height: 48px; font-size: 16px; }
+  .slip-filter-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: .5rem; padding-top: .3rem; }
+  .app-page .slip-filter-card button.slip-filter-done { display: block; min-height: 48px; margin: 0; border: 0; border-radius: 12px; color: #fff; background: var(--sb-blue); box-shadow: none; font-size: .95rem; font-weight: 800; }
+  .app-page .slip-filter-card button.slip-clear-filter { min-height: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slip-filter-sheet, .slip-filter-sheet.is-open { transition: none; }
+}
+
+/* ผลลัพธ์หลังสร้างบิลสำเร็จ */
+.placed-bill-panel { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 1rem 1.25rem; padding: 1.1rem 1.25rem; border: 1px solid #9fdcbc; border-radius: 18px; background: linear-gradient(135deg, #effbf4, #ffffff); box-shadow: 0 12px 28px rgb(15 94 54 / 10%); }
+.placed-bill-check { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 50%; color: #fff; background: linear-gradient(135deg, #1fbf6f, #0d8a4b); font-size: 1.6rem; font-weight: 900; box-shadow: 0 8px 18px rgb(18 163 92 / 28%); }
+.placed-bill-copy { display: grid; min-width: 0; gap: .45rem; }
+.app-page .placed-bill-copy h2 { margin: 0; color: #0f5e36; font-size: 1.3rem; font-weight: 850; }
+.placed-bill-copy p { margin: 0; color: #5a6f63; font-size: .85rem; }
+.placed-bill-copy dl { display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin: 0; }
+.placed-bill-copy dl > div { display: grid; min-width: 0; }
+.placed-bill-copy dt { color: #5d7391; font-size: .75rem; }
+.placed-bill-copy dd { overflow: hidden; margin: 0; color: #0d2847; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.placed-bill-copy .is-total dd { color: #0b6cf0; font-size: 1.1rem; }
+.placed-bill-actions { display: grid; gap: .45rem; min-width: 190px; }
+.placed-bill-actions a { display: flex; min-height: 44px; align-items: center; justify-content: center; padding: 0 1rem; border-radius: 12px; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.placed-bill-next { color: #fff; background: linear-gradient(135deg, #1f86ff, #0752c2); box-shadow: 0 8px 18px rgb(11 108 240 / 25%); }
+.placed-bill-next:hover { color: #fff; }
+.placed-bill-secondary { border: 1px solid #c8dbef; color: #2d4a6b; background: #fff; }
+@container slipboard (max-width: 620px) {
+  .placed-bill-panel { grid-template-columns: auto minmax(0, 1fr); padding: 1rem; }
+  .placed-bill-check { width: 44px; height: 44px; font-size: 1.35rem; }
+  .placed-bill-actions { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; min-width: 0; }
+  .placed-bill-next { grid-column: 1 / -1; min-height: 48px; }
+  .placed-bill-copy dl { display: grid; grid-template-columns: 1fr 1fr; }
 }

@@ -94,6 +94,7 @@ export async function listPrizeTypes(actor: Actor) {
       digits: true,
       resultDigits: true,
       matchRule: true,
+      lotteryType: true,
       payoutRate: true,
       maxStakePerItem: true,
       isActive: true,

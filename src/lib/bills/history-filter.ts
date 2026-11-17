@@ -28,7 +28,7 @@ export function readDrawScope(value: string | undefined): DrawScope {
 
 export type ParsedHistoryFilter = {
   tab: BetTab;
-  lotteryType: "THAI_GOVERNMENT" | undefined;
+  lotteryType: "THAI_GOVERNMENT" | "LAO" | "LAO_SET" | undefined;
   query: string;
   from: string;
   to: string;
@@ -53,7 +53,7 @@ export function parseHistoryFilter(params: HistoryParams): ParsedHistoryFilter {
   const to = bangkokBoundary(params.to) ? params.to ?? "" : "";
   return {
     tab: readBetTab(params.tab),
-    lotteryType: params.lottery === "THAI_GOVERNMENT" ? "THAI_GOVERNMENT" : undefined,
+    lotteryType: params.lottery === "THAI_GOVERNMENT" || params.lottery === "LAO" || params.lottery === "LAO_SET" ? params.lottery : undefined,
     query: (params.q ?? "").trim().slice(0, 80),
     from,
     to,

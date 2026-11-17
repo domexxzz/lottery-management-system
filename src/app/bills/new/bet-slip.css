@@ -208,31 +208,193 @@
   .bs-list { min-height: 0; }
   .bs-entries { max-height: 320px; }
 }
+/* ส่วนที่ใช้เฉพาะมือถือ ซ่อนบนจอใหญ่ (ดูโหมดรับบิลด้านล่าง) */
+.bs-lottery-switch, .bs-sheet-head, .bs-sheet-backdrop, .bs-sheet-missing, .app-page .bet-slip .bs-peek, .app-page .bet-slip button.bs-sheet-confirm { display: none; }
+.bs-sheet { display: contents; }
+
+/*
+ * มือถือ: โหมดรับบิล
+ * ลำดับงานจริง  Agent/ลูกค้า → ประเภทและราคา → กดเลข → ตรวจรายการ → ยืนยัน
+ * - หัวหน้าย่อเหลือแถบเดียว: ประเภทหวย · งวด · เวลาปิดรับ · กติกา
+ * - การ์ดรายการถูกแยกด้วย display: contents ช่อง Agent/ลูกค้าขึ้นก่อนแป้น
+ *   ส่วนรายการเลขย้ายไปอยู่ใน Bottom Sheet
+ * - ด้านล่างเหลือแถบเดียว (เมนูด่วนของแอปถูกซ่อนในหน้านี้) และยกตามคีย์บอร์ด
+ * - พื้นที่กดทุกปุ่มอย่างน้อย 44px
+ */
 @container betslip (max-width: 759px) {
-  .bs-header { align-items: stretch; flex-direction: column; }
-  .bs-title-icon { width: 46px; height: 46px; }
-  .bs-draw-panel { grid-template-columns: minmax(0, 1fr) auto; width: 100%; }
-  .bs-countdown { grid-column: 1 / -1; justify-content: center; margin-top: .1rem; padding-top: .4rem; border-top: 1px solid #dce8f5; border-left: 0; }
-  .bs-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pad" "list" "review"; }
-  .bs-entries { max-height: none; }
-  /* มือถือ: แถบยืนยันเล็ก ๆ ติดด้านล่าง เหนือแถบเมนูของแอป เหลือแค่ยอดรวมกับปุ่ม */
-  .bs-review { position: sticky; bottom: calc(var(--mobile-nav-height, 0px) + env(safe-area-inset-bottom) + .5rem); z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .5rem; padding: .55rem .7rem; box-shadow: 0 -6px 24px rgb(20 70 130 / 18%); }
-  .bs-review > :is(.bs-card-head, .bs-finish-flow, .bs-checks, .bs-review-note, .bs-info-links) { display: none; }
-  .bs-review .bs-summary { padding: 0; }
-  .bs-review .bs-summary > div:not(.is-total) { display: none; }
-  .bs-review .bs-summary .is-total { flex-direction: column; align-items: flex-start; gap: 0; margin: 0; padding: 0 .2rem; background: none; }
-  .bs-review .bs-summary .is-total dt { font-size: .75rem; }
-  .bs-review .bs-summary .is-total dd { overflow: visible; font-size: 1.15rem; text-align: left; }
-  .bs-review .bs-error { grid-column: 1 / -1; margin: 0; }
+  .bs-breadcrumb, .lottery-type-change:has(+ .bet-slip) { display: none; }
+  .bet-slip { gap: .75rem; }
+
+  /* หัวหน้า */
+  .bs-header { display: block; }
+  .bs-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .bet-slip .bs-draw-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "switch rules" "select countdown"; align-items: center; gap: .45rem .5rem; padding: .55rem; border: 1px solid var(--bs-border); border-radius: 16px; background: rgb(255 255 255 / 94%); box-shadow: 0 8px 22px rgb(20 70 130 / 10%); }
+  .bs-draw-panel { display: contents; }
+  .bs-lottery-switch { grid-area: switch; display: inline-flex; min-height: 44px; min-width: 0; align-items: center; gap: .5rem; padding: 0 .35rem; color: var(--bs-text); text-decoration: none; }
+  .bs-lottery-switch strong { overflow: hidden; font-size: 1.02rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+  .bs-lottery-switch span { flex: none; padding: .22rem .55rem; border: 1px solid #c9dcf1; border-radius: 999px; color: var(--bs-blue-dark); background: #fff; font-size: .75rem; font-weight: 750; }
+  .app-page .bet-slip .bs-draw-bar .bs-rules-button { grid-area: rules; min-height: 44px; padding: 0 .8rem; border-radius: 12px; box-shadow: none; font-size: .85rem; }
+  .bs-draw-select { grid-area: select; min-width: 0; min-height: 44px; padding: 0 .5rem; }
+  .bs-draw-flag { width: 28px; height: 28px; }
+  .bs-draw-select select, .bs-draw-select strong { font-size: 16px; }
+  .bs-open-state { display: none; }
+  .bs-countdown { grid-area: countdown; min-height: 44px; flex-direction: column; align-items: flex-end; justify-content: center; gap: 0; padding: 0 .35rem; border-left: 0; line-height: 1.15; }
+  .bs-countdown small { font-size: .7rem; }
+  .bs-countdown strong { font-size: 1rem; }
+
+  /* ลำดับงาน: Agent/ลูกค้า → แป้น → แถบยืนยัน */
+  .bs-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "fields" "pad" "review"; gap: .75rem; }
+  .bs-list { display: contents; }
+  .bs-list > .bs-card-head { display: none; }
+  .bs-list-fields { grid-area: fields; gap: .6rem; padding: .85rem; border: 1px solid var(--bs-border); border-radius: var(--bs-radius); background: var(--bs-surface); box-shadow: 0 8px 22px rgb(20 70 130 / 8%); }
+  .bs-sequence-field { display: none; }
+  .bs-field select, .bs-list .customer-combobox > input { min-height: 48px; font-size: 16px; }
+
+  /* แป้นแทงเลข */
+  .bs-step { gap: .6rem; padding: .85rem; }
+  .app-page .bet-slip .bs-step-title { font-size: .95rem; }
+  .app-page .bet-slip .bs-tab { min-height: 56px; }
+  .bs-options { gap: .5rem; }
+  .app-page .bet-slip .bs-option { min-height: 44px; padding: 0 1rem; font-size: .9rem; }
+  .app-page .bet-slip .bs-stepper button, .bs-stepper input { min-height: 48px; }
+  .bs-chips { gap: .55rem; }
+  .app-page .bet-slip .bs-chip { width: 48px; min-height: 48px; height: 48px; font-size: .76rem; }
+  .bs-digits { gap: .55rem; }
+  .bs-digits span { width: 56px; height: 60px; font-size: 1.8rem; }
+  .bs-keypad { gap: .45rem; }
+  .app-page .bet-slip .bs-key { min-height: 56px; }
+
+  /* แถบยืนยันแถบเดียวด้านล่าง ยกตามคีย์บอร์ด */
+  .bs-review { position: sticky; bottom: calc(env(safe-area-inset-bottom) + .5rem + var(--bs-keyboard-offset, 0px)); z-index: 6; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .5rem; padding: .45rem; border-radius: 18px; box-shadow: 0 -6px 26px rgb(20 70 130 / 20%); }
+  .bs-review > :is(.bs-card-head, .bs-summary, .bs-finish-flow, .bs-checks, .bs-review-note, .bs-info-links) { display: none; }
+  .bs-review .bs-error { grid-column: 1 / -1; grid-row: 1; margin: 0; }
   .bs-review-actions { display: flex; padding: 0; }
   .app-page .bet-slip .bs-review button.bs-draft { display: none; }
-  .app-page .bet-slip .bs-review button.bs-confirm { min-height: 44px; padding: 0 1rem; font-size: .92rem; }
+  .app-page .bet-slip .bs-review button.bs-confirm { min-height: 52px; padding: 0 1.1rem; font-size: .95rem; white-space: nowrap; }
+  .app-page .bet-slip .bs-peek { display: flex; min-width: 0; min-height: 52px; align-items: center; gap: .6rem; padding: .3rem .55rem; border: 0; border-radius: 13px; color: var(--bs-text); background: var(--bs-soft); box-shadow: none; text-align: left; }
+  .bs-peek-count { display: grid; min-width: 32px; height: 32px; flex: none; place-items: center; padding: 0 .35rem; border-radius: 10px; color: #fff; background: var(--bs-blue); font-size: .95rem; font-weight: 800; }
+  .bs-peek-text { display: grid; min-width: 0; }
+  .bs-peek-text strong { overflow: hidden; font-size: .92rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+  .bs-peek-text small { overflow: hidden; color: var(--bs-muted); font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }
+  .dashboard-shell .app-page .bet-slip .bs-peek-text small.is-missing { color: #c2410c !important; font-weight: 700; }
+  .bs-peek-arrow { margin-left: auto; color: var(--bs-blue); font-size: .8rem; }
+  /* ระหว่างพิมพ์ชื่อลูกค้า ซ่อนแถบไว้ไม่ให้บังรายชื่อที่ค้นเจอ */
+  .bet-slip:has(.bs-list-fields input:focus) .bs-review { visibility: hidden; }
+
+  /* Bottom Sheet รายการในบิล */
+  .bs-sheet { position: fixed; z-index: 1300; right: 0; bottom: var(--bs-keyboard-offset, 0px); left: 0; display: flex; max-height: min(80dvh, 680px); flex-direction: column; padding-bottom: env(safe-area-inset-bottom); border-radius: 22px 22px 0 0; background: #fff; box-shadow: 0 -18px 50px rgb(8 32 70 / 28%); transform: translateY(105%); visibility: hidden; transition: transform .24s ease, visibility 0s linear .24s; }
+  .bs-sheet.is-open { transform: none; visibility: visible; transition: transform .24s ease, visibility 0s; }
+  .app-page .bet-slip .bs-sheet-backdrop { position: fixed; z-index: 1250; inset: 0; display: block; width: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; background: rgb(8 28 56 / 45%); box-shadow: none; }
+  .bs-sheet-head { position: relative; display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 1.1rem 1rem .7rem; border-bottom: 1px solid var(--bs-border); }
+  .bs-sheet-grip { position: absolute; top: .45rem; left: 50%; width: 40px; height: 4px; border-radius: 2px; background: #c9d7e6; transform: translateX(-50%); }
+  .bs-sheet-head > div { display: grid; min-width: 0; }
+  .app-page .bet-slip .bs-sheet-head h2 { margin: 0; color: var(--bs-text); font-size: 1.08rem; font-weight: 800; }
+  .bs-sheet-head small { overflow: hidden; color: var(--bs-muted); font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
+  .app-page .bet-slip .bs-sheet-close { display: grid; width: 44px; min-height: 44px; height: 44px; flex: none; place-items: center; padding: 0; border: 0; border-radius: 12px; color: var(--bs-muted); background: var(--bs-soft); box-shadow: none; font-size: 1.5rem; line-height: 1; }
+  .bs-entries { flex: 1 1 auto; max-height: none; min-height: 0; padding: .7rem 1rem; overscroll-behavior: contain; }
+  .bs-entry { padding: .5rem .55rem; }
+  .app-page .bet-slip .bs-icon-button { width: 44px; min-height: 44px; height: 44px; border-radius: 10px; }
+  .bs-entry-input { width: 88px; min-height: 44px; font-size: 16px; }
+  .bs-list-foot { margin-top: 0; padding: .75rem 1rem 1rem; }
+  .bs-sheet-missing { display: block; margin: 0; color: #c2410c; font-size: .82rem; font-weight: 700; text-align: center; }
+  .app-page .bet-slip button.bs-sheet-confirm { display: block; width: 100%; }
 }
 @container betslip (max-width: 420px) {
-  .bs-step, .bs-list-fields, .bs-entries, .bs-list-foot { padding-inline: .8rem; }
-  .bs-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .bs-digits span { width: 54px; height: 58px; font-size: 1.7rem; }
-  .app-page .bet-slip .bs-chip { width: 40px; min-height: 40px; height: 40px; font-size: .68rem; }
+  .bs-step { padding-inline: .7rem; }
+  .bs-digits span { width: 52px; height: 56px; font-size: 1.65rem; }
+  /* ชิป 7 อันเรียง 4 + 3 ให้แต่ละอันยังกว้าง 48px */
+  .bs-chips { display: grid; width: 100%; grid-template-columns: repeat(4, 48px); justify-content: center; gap: .5rem .9rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-sheet, .bs-sheet.is-open { transition: none; }
+}
+/* หน้าแทงเลขบนมือถือ: ซ่อนเมนูด่วนของแอปให้เหลือแถบยืนยันแถบเดียว เมนูหลักยังเปิดได้จากปุ่มด้านบน */
+@media (max-width: 760px) {
+  .dashboard-shell:has(.bet-slip) .mobile-bottom-nav { display: none; }
+  .dashboard-content:has(.bet-slip) { padding-bottom: 0; }
 }
 
 /* ---------------------------------------------------------------- โหมดมืด */
+
+/* ---------------------------------------------------------------- ปุ่มและ popup กติกา */
+.bs-draw-bar { flex-wrap: wrap; align-items: center; gap: .6rem; }
+.app-page .bet-slip .bs-rules-button { display: inline-flex; min-height: 52px; align-items: center; gap: .45rem; padding: 0 1.05rem; border: 1px solid var(--bs-border); border-radius: 14px; color: var(--bs-blue-dark); background: rgb(255 255 255 / 92%); box-shadow: 0 10px 26px rgb(20 70 130 / 11%); font-size: .92rem; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.app-page .bet-slip .bs-rules-button:hover { background: var(--bs-soft); }
+.app-page .bet-slip .bs-rules-button:focus-visible { outline: 3px solid rgb(11 108 240 / 35%); outline-offset: 2px; }
+
+.bs-rules-dialog { width: min(760px, calc(100vw - 2rem)); max-height: min(86vh, 900px); padding: 0; border: 0; border-radius: 20px; color: var(--bs-text); background: #fff; box-shadow: 0 30px 80px rgb(8 32 70 / 30%); }
+.bs-rules-dialog::backdrop { background: rgb(8 28 56 / 45%); backdrop-filter: blur(3px); }
+.bs-rules-body { display: grid; gap: 1.1rem; padding: 1.3rem 1.4rem 1.2rem; }
+.bs-rules-head { position: sticky; top: -1.3rem; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin: -1.3rem -1.4rem 0; padding: 1.3rem 1.4rem .9rem; border-bottom: 1px solid var(--bs-border); background: #fff; }
+.bs-rules-head p { margin: 0; color: var(--bs-blue); font-size: .75rem; font-weight: 800; letter-spacing: .04em; }
+.app-page .bs-rules-head h2 { margin: .15rem 0 0; color: var(--bs-text); font-size: 1.25rem; font-weight: 800; }
+.app-page .bet-slip .bs-rules-close { display: grid; width: 36px; height: 36px; flex: none; place-items: center; padding: 0; border: 0; border-radius: 10px; color: var(--bs-muted); background: var(--bs-soft); font-size: 1.4rem; line-height: 1; cursor: pointer; }
+.app-page .bs-rules-body h3 { margin: 0 0 .55rem; color: var(--bs-text); font-size: 1rem; font-weight: 800; }
+.bs-rules-table-wrap { overflow-x: auto; border: 1px solid var(--bs-border); border-radius: 12px; }
+.bs-rules-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.bs-rules-table th, .bs-rules-table td { padding: .55rem .8rem; border-bottom: 1px solid #e6eef8; text-align: left; vertical-align: top; }
+.bs-rules-table thead th { color: var(--bs-muted); background: #f6faff; font-size: .78rem; font-weight: 700; }
+.bs-rules-table tbody:last-child tr:last-child td { border-bottom: 0; }
+.bs-rules-table td small { color: var(--bs-muted); font-size: .78rem; }
+.bs-rules-group th { color: var(--bs-blue-dark); background: var(--bs-soft); font-size: .8rem; font-weight: 800; }
+.bs-rules-table th:last-child, .bs-rules-rate { text-align: right; white-space: nowrap; }
+.bs-rules-rate { color: var(--bs-green); font-size: 1rem; font-weight: 800; }
+.bs-rules-note { margin: .5rem 0 0; color: var(--bs-muted); font-size: .8rem; }
+.bs-rules-list { display: grid; gap: .4rem; margin: 0; padding-left: 1.15rem; color: #2a4466; font-size: .88rem; line-height: 1.55; }
+.bs-rules-empty { margin: 0; color: var(--bs-muted); font-size: .85rem; }
+.bs-rules-numbers { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: .6rem; padding: .45rem 0; border-top: 1px dashed #e0e9f4; font-size: .85rem; }
+.bs-rules-numbers:first-of-type { border-top: 0; }
+.bs-rules-numbers > div { display: flex; flex-wrap: wrap; gap: .35rem; }
+.bs-rules-numbers span { display: inline-flex; align-items: baseline; gap: .3rem; padding: .2rem .5rem; border-radius: 8px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bs-rules-numbers span small { font-size: .7rem; font-weight: 600; }
+.bs-rules-numbers .is-reduced { color: #9a5b00; background: #fff3dc; }
+.bs-rules-numbers .is-closed { color: #b4233a; background: #ffe7ea; }
+.bs-rules-numbers em { align-self: center; color: var(--bs-muted); font-size: .78rem; font-style: normal; }
+.bs-rules-foot { display: flex; justify-content: flex-end; }
+.app-page .bet-slip .bs-rules-foot button { min-height: 44px; padding: 0 1.4rem; border: 0; border-radius: 12px; color: #fff; background: linear-gradient(135deg, var(--bs-blue), var(--bs-blue-dark)); font-weight: 800; cursor: pointer; }
+
+@media (max-width: 560px) {
+  .bs-rules-body { padding: 1rem; }
+  .app-page .bet-slip .bs-rules-close { width: 44px; height: 44px; }
+  .bs-rules-head { top: -1rem; margin: -1rem -1rem 0; padding: 1rem 1rem .8rem; }
+  .bs-rules-numbers { grid-template-columns: minmax(0, 1fr); gap: .3rem; }
+}
+
+/* ---------------------------------------------------------------- ความปลอดภัยระหว่างสร้างบิล */
+/* นับถอยหลัง: เหลือ ≤ 5 นาทีเป็นสีส้ม ≤ 1 นาทีเป็นสีแดง */
+.bs-countdown strong.is-soon { color: #c2410c; }
+.bs-countdown strong.is-urgent { color: var(--bs-red); animation: bs-blink 1s steps(2, start) infinite; }
+@keyframes bs-blink { to { opacity: .55; } }
+
+/* แจ้งเตือนก่อนปิดรับ ติดด้านบนให้เห็นแม้เลื่อนลงไปที่แป้น */
+.bs-cutoff-alert { position: sticky; z-index: 7; top: .5rem; display: flex; align-items: center; gap: .6rem; margin: 0; padding: .7rem 1rem; border: 1px solid #f5c27a; border-radius: 12px; color: #7a3d00; background: #fff4e0; box-shadow: 0 8px 20px rgb(122 61 0 / 12%); font-weight: 700; }
+.bs-cutoff-alert.is-urgent { border-color: #f3a3ad; color: #fff; background: var(--bs-red); box-shadow: 0 8px 20px rgb(226 71 90 / 30%); }
+
+/* กู้คืนร่าง */
+.bs-draft-offer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem; padding: .75rem 1rem; border: 1px solid #b9d7f7; border-radius: 14px; background: #eef6ff; }
+.bs-draft-offer > div { display: grid; min-width: 0; gap: .1rem; }
+.bs-draft-offer strong { color: var(--bs-text); }
+.bs-draft-offer small { color: var(--bs-muted); font-size: .82rem; }
+.bs-draft-offer > span { display: flex; gap: .5rem; }
+.app-page .bet-slip .bs-draft-offer button { min-height: 44px; padding: 0 1.1rem; border-radius: 11px; box-shadow: none; font-size: .9rem; font-weight: 800; }
+.app-page .bet-slip .bs-draft-offer .bs-draft-restore { border: 0; color: #fff; background: var(--bs-blue); }
+.app-page .bet-slip .bs-draft-offer .bs-draft-discard { border: 1px solid #c8dbef; color: #2d4a6b; background: #fff; }
+
+/* เลขที่ Server ปฏิเสธตอนยืนยัน */
+.bs-entry.is-rejected { border-color: #f3a3ad; background: #fff1f3; }
+.bs-entry.is-rejected .bs-entry-number { color: var(--bs-red); text-decoration: line-through; }
+.bs-entry-rejected { flex-basis: 100%; color: #b4233a; font-size: .76rem; font-weight: 700; }
+.app-page .bet-slip .bs-remove-rejected { min-height: 44px; border: 1px solid #f3a3ad; border-radius: 12px; color: #b4233a; background: #fff1f3; box-shadow: none; font-size: .9rem; font-weight: 800; }
+
+/* ระหว่างส่งบิล: ปุ่มยืนยันขึ้นสถานะกำลังสร้าง กันกดซ้ำ */
+.bet-slip[aria-busy="true"] .bs-confirm { cursor: progress; }
+
+@container betslip (max-width: 759px) {
+  /* topbar มือถือสูงราว 62px แถบเตือนต้องอยู่ใต้ topbar */
+  .bs-cutoff-alert { top: calc(68px + env(safe-area-inset-top)); font-size: .88rem; }
+  .bs-draft-offer > span { width: 100%; }
+  .bs-draft-offer > span > button { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-countdown strong.is-urgent { animation: none; }
+}
