@@ -17,7 +17,7 @@ export function MobileNavigation({ role }: { role: Role }) {
     ? [
         { href: "/bills", label: "รายการบิล", icon: "bill" as const, active: pathname.startsWith("/bills") },
         { href: "/draws", label: "งวด", icon: "draw" as const, active: pathname.startsWith("/draws") },
-        { href: "/messages", label: "ข้อความ", icon: "chat" as const, active: pathname.startsWith("/messages") },
+        { href: "/reports", label: "รายงาน", icon: "report" as const, active: pathname.startsWith("/reports") },
       ]
     : [
         { href: "/", label: "ภาพรวม", icon: "home" as const, active: pathname === "/" },

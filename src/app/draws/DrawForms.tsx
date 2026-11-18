@@ -98,12 +98,15 @@ export function CreateDrawForm({ drawDates, automaticDrawDate, createdDrawDates,
   );
 }
 
-export function LockDrawForm({ drawId }: { drawId: string }) {
+export function LockDrawForm({ drawId, paired = false }: { drawId: string; paired?: boolean }) {
   const [state, formAction, pending] = useActionState(lockDrawAction, INITIAL);
 
   return (
     <form action={formAction} onSubmit={(event) => {
-      if (!window.confirm("ปิดรับงวดนี้และยกเลิกบิลร่างที่ค้างอยู่ใช่ไหม?")) event.preventDefault();
+      const confirmation = paired
+        ? "ปิดรับหวยลาวและหวยลาวชุดคู่นี้พร้อมกัน และยกเลิกบิลร่างที่ค้างอยู่ใช่ไหม?"
+        : "ปิดรับงวดนี้และยกเลิกบิลร่างที่ค้างอยู่ใช่ไหม?";
+      if (!window.confirm(confirmation)) event.preventDefault();
     }}>
       <input type="hidden" name="drawId" value={drawId} />
       {state.error !== null && (
@@ -113,7 +116,7 @@ export function LockDrawForm({ drawId }: { drawId: string }) {
       )}
       {state.message !== null && <p role="status">{state.message}</p>}
       <button type="submit" disabled={pending}>
-        {pending ? "กำลังปิดงวด..." : "ปิดงวดตอนนี้"}
+        {pending ? "กำลังปิดงวด..." : paired ? "ปิดคู่งวดตอนนี้" : "ปิดงวดตอนนี้"}
       </button>
     </form>
   );
@@ -121,17 +124,20 @@ export function LockDrawForm({ drawId }: { drawId: string }) {
 
 export function DeleteDrawForm({ drawId, drawName, billCount }: { drawId: string; drawName: string; billCount: number }) {
   const [state, formAction, pending] = useActionState(deleteDrawAction, INITIAL);
+  const confirmation = billCount > 0
+    ? `ลบงวด “${drawName}” พร้อมบิล ${billCount} ใบ รายการเลข และหลักฐานทั้งหมดถาวรใช่ไหม? การดำเนินการนี้ย้อนกลับไม่ได้`
+    : `ลบงวด “${drawName}” ถาวรใช่ไหม? การดำเนินการนี้ย้อนกลับจากหน้าเว็บไม่ได้`;
 
   return (
     <form className="delete-draw-form" action={formAction} onSubmit={(event) => {
-      if (!window.confirm(`ลบงวดว่าง “${drawName}” ถาวรใช่ไหม? การดำเนินการนี้ย้อนกลับจากหน้าเว็บไม่ได้`)) event.preventDefault();
+      if (!window.confirm(confirmation)) event.preventDefault();
     }}>
       <input type="hidden" name="drawId" value={drawId} />
       {state.error !== null && <p className="error" role="alert">{state.error}</p>}
       {state.message !== null && <p role="status">{state.message}</p>}
-      {billCount > 0 && <p className="notice">งวดนี้มีบิล {billCount} ใบ จึงลบไม่ได้ เพราะระบบต้องเก็บประวัติบิลไว้</p>}
-      <button type="submit" className="danger-button" disabled={pending || billCount > 0}>
-        {pending ? "กำลังลบ..." : billCount > 0 ? "ลบไม่ได้ — มีบิลแล้ว" : "ลบงวด"}
+      {billCount > 0 && <p className="notice">งวดนี้มีบิล {billCount} ใบ การลบจะลบบิล รายการเลข และหลักฐานของงวดนี้ทั้งหมด</p>}
+      <button type="submit" className="danger-button" disabled={pending}>
+        {pending ? "กำลังลบ..." : billCount > 0 ? `ลบงวดพร้อม ${billCount} บิล` : "ลบงวด"}
       </button>
     </form>
   );
@@ -154,7 +160,7 @@ const LAO_LABEL: Record<LaoType, string> = { LAO: "หวยลาว", LAO_SET:
 /**
  * สร้างงวดหวยลาว หรือหวยลาวชุด
  *
- * ระบบใส่ค่ามาตรฐานให้ (วันจันทร์–ศุกร์ถัดไป เปิด 10:00 ปิด 20:00 ออกผล 20:30) แก้ได้ทุกช่อง
+ * ระบบใส่ค่ามาตรฐานให้ (วันจันทร์–ศุกร์ถัดไป เปิด 10:00 รับถึง 20:30 ออกผล 20:30) แก้ได้ทุกช่อง
  * เลือกสร้างอีกประเภทของวันเดียวกันพร้อมกันได้ เพราะใช้ผลชุดเดียวกัน
  */
 export function CreateLaoDrawForm({ lotteryType, createdDates }: { lotteryType: LaoType; createdDates: { date: string; lotteryType: string }[] }) {
@@ -197,7 +203,7 @@ export function CreateLaoDrawForm({ lotteryType, createdDates }: { lotteryType: 
         <label htmlFor="laoOpensAt">วันเวลาเปิดรับ<DateTimePicker id="laoOpensAt" value={opensAt} onChange={setOpensAt} required /></label>
         <label htmlFor="laoCutoffAt">วันเวลาปิดรับ<DateTimePicker id="laoCutoffAt" value={cutoffAt} onChange={setCutoffAt} required /></label>
       </section>
-      <p className="draw-form-note">ค่าเริ่มต้น: ออกผลจันทร์–ศุกร์ 20:30 น. เปิดรับ 10:00 ปิดรับ 20:00 แก้ได้ทุกช่อง</p>
+      <p className="draw-form-note">ค่าเริ่มต้น: ออกผลจันทร์–ศุกร์ 20:30 น. เปิดรับ 10:00 รับถึง 20:30 แก้ได้ทุกช่อง</p>
       {weekend && <p className="draw-duplicate-warning" role="status"><strong>วันที่เลือกเป็นวันเสาร์หรืออาทิตย์</strong><span>ปกติหวยลาวไม่ออกวันนี้ ตรวจให้แน่ใจก่อนสร้าง</span></p>}
       {(mainExists || (withCompanion && companionExists)) && <p className="draw-duplicate-warning" role="status"><strong>กำลังสร้างงวดซ้ำ</strong><span>งวด{[mainExists ? LAO_LABEL[lotteryType] : null, withCompanion && companionExists ? LAO_LABEL[companion] : null].filter(Boolean).join(" และ ")}ของวันนี้มีอยู่แล้ว ระบบจะเก็บงวดใหม่เป็นคนละงวด</span></p>}
 

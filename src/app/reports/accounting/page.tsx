@@ -31,7 +31,7 @@ function recentMonthOptions(today: string) {
 
 /**
  * สรุปบัญชี: แต่ละงวดได้หรือเสียเท่าไร แยกค่าคอมราย Agent
- * ดูได้ทีละงวด รายเดือน 3/6 เดือน รายปี หรือกำหนดช่วงเอง และดาวน์โหลด CSV ไปทำบัญชีต่อได้
+ * ดูได้ทีละงวด รายเดือน 3/6 เดือน รายปี หรือกำหนดช่วงเอง และดาวน์โหลด Excel ไปทำบัญชีต่อได้
  */
 export default async function AccountingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await getActor();
@@ -62,6 +62,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     ? (selectedDraw ? `${lotteryLabel(selectedDraw.lotteryType)} งวด ${drawDateLabel(selectedDraw)}` : "เลือกงวดที่ต้องการ")
     : report.range.label;
   const csvHref = accountingHref("/api/reports/accounting", query, {});
+  const excelHref = `${csvHref}${csvHref.includes("?") ? "&" : "?"}format=xlsx`;
 
   return (
     <main className="workspace-page accounting-page">
@@ -71,7 +72,10 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
           <h1>สรุปบัญชี · {title}</h1>
           <p>ยอดสุทธิ = ยอดขาย − ค่าคอม · กำไร/ขาดทุน = ยอดสุทธิ − จ่ายรางวัล</p>
         </div>
-        <a className="acc-csv" href={csvHref}>⇩ ดาวน์โหลด CSV</a>
+        <div className="acc-export">
+          <a className="acc-csv is-primary" href={excelHref}>⇩ ดาวน์โหลด Excel</a>
+          <a className="acc-csv" href={csvHref}>CSV</a>
+        </div>
       </header>
 
       <AccountingFilters

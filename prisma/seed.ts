@@ -112,7 +112,7 @@ async function main() {
   for (const pt of LAO_PRIZE_TYPES) {
     await prisma.prizeType.upsert({
       where: { organizationId_code: { organizationId: org.id, code: pt.code } },
-      update: { lotteryType: pt.lotteryType },
+      update: { lotteryType: pt.lotteryType, isActive: pt.isActive },
       create: {
         organizationId: org.id,
         code: pt.code,
@@ -121,7 +121,7 @@ async function main() {
         matchRule: pt.matchRule,
         lotteryType: pt.lotteryType,
         payoutRate: pt.payoutRate,
-        isActive: true,
+        isActive: pt.isActive,
       },
     });
   }

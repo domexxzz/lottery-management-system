@@ -137,6 +137,7 @@ export async function AgentBillBoard({
   const firstRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastRow = Math.min(page * pageSize, total);
   const exportHref = historyHref("/api/bills/export", { ...filter, page: 1 });
+  const excelHref = `${exportHref}${exportHref.includes("?") ? "&" : "?"}format=xlsx`;
   const now = new Date();
   const focus = scope.focusDraw;
   const stage = focus ? drawStage(focus, now) : null;
@@ -157,7 +158,8 @@ export async function AgentBillBoard({
           <p>{scope.scope === "current" ? "บิลของงวดปัจจุบัน (เปิดรับอยู่ หรือออกรางวัลมาไม่เกิน 2 วัน) เปิดหน้ามาจะเห็นงานของงวดนี้ก่อน" : "ค้นหา ตรวจสอบ และติดตามผลรายการย้อนหลัง"}</p>
         </div>
         <div className="slip-head-actions">
-          <a href={exportHref} className="slip-outline-button">⇩ ส่งออก CSV</a>
+          <a href={excelHref} className="slip-outline-button">⇩ ดาวน์โหลด Excel</a>
+          <a href={exportHref} className="slip-export-csv">CSV</a>
           <Link href="/bills/new" className="slip-primary-button">＋ สร้างบิลใหม่</Link>
         </div>
       </header>

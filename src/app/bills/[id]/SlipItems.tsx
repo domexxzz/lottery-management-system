@@ -1,11 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { LotteryFlag } from "../ThaiFlag";
 
 export type SlipItemRow = {
   id: string;
   order: number;
   number: string;
+  lotteryType: string;
+  lotteryLabel: string;
   prizeTypeName: string;
   stake: number;
   rate: string | null;
@@ -21,25 +24,34 @@ function baht(value: number): string {
   return value.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function LotteryBadge({ type, label }: { type: string; label: string }) {
+  return (
+    <span className={`slip-lottery-badge is-${type.toLowerCase()}`}>
+      <LotteryFlag lotteryType={type} />
+      <b>{label}</b>
+    </span>
+  );
+}
+
 /**
  * รายการเลขในบิล สลับตาราง/การ์ดและค้นหาเลขได้ทันทีโดยไม่โหลดหน้าใหม่
  * แสดงครั้งละ 50 รายการ บิลใหญ่จึงไม่ทำให้หน้าหน่วง
  */
-export function SlipItems({ rows, totalStake, prizeTotal }: { rows: SlipItemRow[]; totalStake: number; prizeTotal: number | null }) {
+export function SlipItems({ rows, totalStake, prizeTotal, heading = "รายการเลขในบิล" }: { rows: SlipItemRow[]; totalStake: number; prizeTotal: number | null; heading?: string }) {
   const [view, setView] = useState<"table" | "card">("card");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(PAGE);
 
   const filtered = useMemo(() => {
     const search = query.trim();
-    return search ? rows.filter((row) => row.number.includes(search) || row.prizeTypeName.includes(search)) : rows;
+    return search ? rows.filter((row) => row.number.includes(search) || row.prizeTypeName.includes(search) || row.lotteryLabel.includes(search)) : rows;
   }, [rows, query]);
   const visible = filtered.slice(0, limit);
 
   return (
     <section className="slip-panel slip-items-panel" aria-labelledby="slip-items-heading">
       <header className="slip-panel-head slip-items-head">
-        <h2 id="slip-items-heading">รายการเลขในบิล <span className="slip-pill">{rows.length} รายการ</span></h2>
+        <h2 id="slip-items-heading">{heading} <span className="slip-pill">{rows.length} รายการ</span></h2>
         <div className="slip-items-tools">
           <div className="slip-segmented" role="group" aria-label="รูปแบบการแสดงผล">
             <button type="button" aria-pressed={view === "table"} onClick={() => setView("table")}>ตาราง</button>
@@ -63,6 +75,7 @@ export function SlipItems({ rows, totalStake, prizeTotal }: { rows: SlipItemRow[
               <tr>
                 <th scope="col">ลำดับ</th>
                 <th scope="col">ตัวเลข</th>
+                <th scope="col">ประเภทหวย</th>
                 <th scope="col">ประเภทรางวัล</th>
                 <th scope="col" className="num">ยอดเดิมพัน</th>
                 <th scope="col" className="num">อัตราจ่าย</th>
@@ -75,6 +88,7 @@ export function SlipItems({ rows, totalStake, prizeTotal }: { rows: SlipItemRow[
                 <tr key={row.id}>
                   <td>{row.order}</td>
                   <td><strong className="slip-table-number">{row.number}</strong></td>
+                  <td><LotteryBadge type={row.lotteryType} label={row.lotteryLabel} /></td>
                   <td>{row.prizeTypeName}</td>
                   <td className="num">{baht(row.stake)}</td>
                   <td className="num">{row.rate === null ? "—" : `${row.rate} เท่า`}</td>
@@ -86,7 +100,7 @@ export function SlipItems({ rows, totalStake, prizeTotal }: { rows: SlipItemRow[
             {!query && filtered.length <= limit && (
               <tfoot>
                 <tr>
-                  <th scope="row" colSpan={3}>รวม {rows.length} รายการ</th>
+                  <th scope="row" colSpan={4}>รวม {rows.length} รายการ</th>
                   <td className="num"><strong>{baht(totalStake)}</strong></td>
                   <td colSpan={2} />
                   <td className={`num ${prizeTotal !== null && prizeTotal > 0 ? "is-plus" : ""}`}><strong>{prizeTotal === null ? "รอผล" : baht(prizeTotal)}</strong></td>
@@ -100,7 +114,10 @@ export function SlipItems({ rows, totalStake, prizeTotal }: { rows: SlipItemRow[
           {visible.map((row) => (
             <li key={row.id} className={`slip-item is-${row.status.toLowerCase()}`}>
               <header className="slip-item-head">
-                <strong>ลำดับ {row.order}</strong>
+                <span className="slip-item-head-left">
+                  <strong>ลำดับ {row.order}</strong>
+                  <LotteryBadge type={row.lotteryType} label={row.lotteryLabel} />
+                </span>
                 <span className={`slip-status slip-status-${row.status.toLowerCase()}`}>{row.statusLabel}</span>
               </header>
               <div className="slip-item-body">

@@ -19,21 +19,39 @@ export type LaoPrizeDefinition = {
   lotteryType: LaoLotteryType;
   payoutRate: string;
   segment: LaoSegment;
+  isActive: boolean;
 };
 
+/** หวยลาวชุดรับแทงใหม่เฉพาะ 4 ตัวตรงและ 4 ตัวโต๊ด */
+export const LAO_SET_ACTIVE_CODES = [201, 203] as const;
+
+/** ราคาเหมาต่อเลขต่อประเภท หวยลาวชุดไม่รับราคาอื่น */
+export const LAO_SET_PACKAGE_PRICES = [30, 60, 120] as const;
+
+/** ผลตอบแทนรวมของแต่ละแพ็กเกจ ตรงตามรูปอัตราจ่าย */
+export const LAO_SET_PACKAGE_PAYOUTS = [
+  { price: 30, exact: 25_500, permutation: 1_125 },
+  { price: 60, exact: 51_000, permutation: 2_250 },
+  { price: 120, exact: 102_000, permutation: 4_500 },
+] as const;
+
+export function isSupportedLaoSetPrizeCode(code: number): boolean {
+  return LAO_SET_ACTIVE_CODES.some((supported) => supported === code);
+}
+
 export const LAO_PRIZE_TYPES: readonly LaoPrizeDefinition[] = [
-  { code: 101, name: "3 ตัวตรง", digits: 3, matchRule: "EXACT", lotteryType: "LAO", payoutRate: "650.0000", segment: "LAST3" },
-  { code: 102, name: "3 ตัวโต๊ด", digits: 3, matchRule: "PERMUTATION", lotteryType: "LAO", payoutRate: "100.0000", segment: "LAST3" },
-  { code: 103, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", lotteryType: "LAO", payoutRate: "75.0000", segment: "LAST2" },
-  { code: 104, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", lotteryType: "LAO", payoutRate: "75.0000", segment: "FIRST2" },
-  { code: 201, name: "4 ตัวตรง", digits: 4, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "50000.0000", segment: "LAST4" },
-  { code: 202, name: "3 ตัวท้ายตรง", digits: 3, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "17000.0000", segment: "LAST3" },
-  { code: 203, name: "4 ตัวโต๊ด", digits: 4, matchRule: "PERMUTATION", lotteryType: "LAO_SET", payoutRate: "2000.0000", segment: "LAST4" },
-  { code: 204, name: "3 ตัวท้ายโต๊ด", digits: 3, matchRule: "PERMUTATION", lotteryType: "LAO_SET", payoutRate: "1250.0000", segment: "LAST3" },
-  { code: 205, name: "3 ตัวหน้าตรง", digits: 3, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "600.0000", segment: "FIRST3" },
+  { code: 101, name: "3 ตัวตรง", digits: 3, matchRule: "EXACT", lotteryType: "LAO", payoutRate: "650.0000", segment: "LAST3", isActive: true },
+  { code: 102, name: "3 ตัวโต๊ด", digits: 3, matchRule: "PERMUTATION", lotteryType: "LAO", payoutRate: "100.0000", segment: "LAST3", isActive: true },
+  { code: 103, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", lotteryType: "LAO", payoutRate: "75.0000", segment: "LAST2", isActive: true },
+  { code: 104, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", lotteryType: "LAO", payoutRate: "75.0000", segment: "FIRST2", isActive: true },
+  { code: 201, name: "4 ตัวตรง", digits: 4, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "850.0000", segment: "LAST4", isActive: true },
+  { code: 202, name: "3 ตัวท้ายตรง", digits: 3, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "17000.0000", segment: "LAST3", isActive: false },
+  { code: 203, name: "4 ตัวโต๊ด", digits: 4, matchRule: "PERMUTATION", lotteryType: "LAO_SET", payoutRate: "37.5000", segment: "LAST4", isActive: true },
+  { code: 204, name: "3 ตัวท้ายโต๊ด", digits: 3, matchRule: "PERMUTATION", lotteryType: "LAO_SET", payoutRate: "1250.0000", segment: "LAST3", isActive: false },
+  { code: 205, name: "3 ตัวหน้าตรง", digits: 3, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "600.0000", segment: "FIRST3", isActive: false },
   // 2 ตัวล่าง = 2 ตัวหน้าของเลข 4 ตัว · 2 ตัวบน = 2 ตัวท้าย (เดิมชื่อ 2 ตัวหน้า/2 ตัวหลัง)
-  { code: 206, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "500.0000", segment: "FIRST2" },
-  { code: 207, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "500.0000", segment: "LAST2" },
+  { code: 206, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "500.0000", segment: "FIRST2", isActive: false },
+  { code: 207, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "500.0000", segment: "LAST2", isActive: false },
 ];
 
 const SEGMENT_BY_CODE = new Map(LAO_PRIZE_TYPES.map((prize) => [prize.code, prize.segment]));
@@ -81,8 +99,8 @@ export function laoResultForCode(code: number, raw: string): string | null {
   return laoBreakdown(raw)[SEGMENT_KEY[segment]];
 }
 
-/** เวลามาตรฐานของงวดหวยลาว (เวลาไทย): เปิด 10:00 ปิด 20:00 ออกผล 20:30 */
-export const LAO_DEFAULT_TIMES = { opens: "10:00", cutoff: "20:00", result: "20:30" } as const;
+/** เวลามาตรฐานของงวดหวยลาว (เวลาไทย): เปิด 10:00 รับถึง 20:30 ออกผล 20:30 */
+export const LAO_DEFAULT_TIMES = { opens: "10:00", cutoff: "20:30", result: "20:30" } as const;
 
 /** หวยลาวออกวันจันทร์–ศุกร์ */
 export function isLaoDrawDay(dateText: string): boolean {

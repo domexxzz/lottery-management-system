@@ -73,6 +73,8 @@ export function SlipDetail({ bill, settledAt, showDrawLink, beforeItems }: { bil
       id: item.id,
       order: index + 1,
       number: item.number,
+      lotteryType: bill.draw.lotteryType,
+      lotteryLabel: bill.draw.lotteryType === "THAI_GOVERNMENT" ? "หวยไทย" : lotteryLabel(bill.draw.lotteryType),
       prizeTypeName: item.prizeType.name,
       stake: Number(item.stake),
       rate: bill.status === "DRAFT" ? null : compactRate(item.payoutRateSnapshot),

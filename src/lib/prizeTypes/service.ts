@@ -5,6 +5,7 @@ import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { validatePrizeShape } from "@/lib/results/matching";
+import { isSupportedLaoSetPrizeCode } from "@/lib/lao/rules";
 
 /**
  * Rulebook เก็บประเภทรางวัลทั้งหมดเพื่อรักษาประวัติ แต่หน้าแทงแสดงเฉพาะรายการที่เปิดใช้
@@ -90,11 +91,11 @@ export async function listPrizeTypes(actor: Actor) {
     select: {
       id: true,
       code: true,
+      lotteryType: true,
       name: true,
       digits: true,
       resultDigits: true,
       matchRule: true,
-      lotteryType: true,
       payoutRate: true,
       maxStakePerItem: true,
       isActive: true,
@@ -135,6 +136,7 @@ export async function updatePrizeType(
     select: {
       id: true,
       code: true,
+      lotteryType: true,
       name: true,
       digits: true,
       resultDigits: true,
@@ -145,6 +147,9 @@ export async function updatePrizeType(
     },
   });
   if (!existing) throw new NotFoundError("ไม่พบประเภทรางวัล");
+  if (existing.lotteryType === "LAO_SET" && input.isActive && !isSupportedLaoSetPrizeCode(existing.code)) {
+    throw new ValidationError("หวยลาวชุดเปิดรับได้เฉพาะ 4 ตัวตรงและ 4 ตัวโต๊ด");
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.prizeType.update({

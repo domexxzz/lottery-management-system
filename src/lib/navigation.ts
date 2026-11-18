@@ -28,8 +28,6 @@ export const MENU_ITEMS: readonly MenuItem[] = [
   { href: "/audit", label: "ประวัติการตรวจผลรางวัล", icon: "audit", roles: AUDIT_ROLES },
   { href: "/analytics", label: "วิเคราะห์เชิงลึก", icon: "analytics", roles: OWNER_ROLES },
   { href: "/chat", label: "ผู้ช่วยล็อตเตอรี่", icon: "chat", roles: OWNER_ROLES },
-  // เปิดให้ทุกบทบาท กฎว่าใครคุยกับใครได้บังคับที่ชั้น service
-  { href: "/messages", label: "ข้อความ", icon: "chat", roles: ALL_ROLES },
   { href: "/prize-types", label: "Rulebook รางวัล", icon: "book", roles: MANAGEMENT_ROLES },
   { href: "/agents", label: "ภาพรวม Agent", icon: "agent", roles: MANAGEMENT_ROLES },
   { href: "/users", label: "จัดการผู้ใช้งาน", icon: "lock", roles: OWNER_ROLES },

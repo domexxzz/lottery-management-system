@@ -39,9 +39,10 @@ describe("checkStakeField", () => {
     expect(checkStakeField("0")).toBe("ต้องมากกว่า 0");
   });
 
-  test("ปฏิเสธยอดเดิมพันต่ำกว่า 5 บาท", () => {
-    expect(checkStakeField("1")).toBe("ขั้นต่ำ 5 บาท");
-    expect(checkStakeField("4.99")).toBe("ขั้นต่ำ 5 บาท");
+  test("ปฏิเสธยอดเดิมพันต่ำกว่า 1 บาท", () => {
+    expect(checkStakeField("0.5")).toBe("ขั้นต่ำ 1 บาท");
+    expect(checkStakeField("0.99")).toBe("ขั้นต่ำ 1 บาท");
+    expect(checkStakeField("1")).toBeNull();
   });
 
   test("ปฏิเสธข้อความที่ไม่ใช่ตัวเลข", () => {

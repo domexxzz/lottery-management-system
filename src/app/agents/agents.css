@@ -457,6 +457,7 @@
 .agent-table-card{display:flex;min-width:0;flex-direction:column;gap:.7rem;padding:.85rem;border:1px solid #dfe8ed;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgb(43 91 129 / 6%)}
 .agent-table-toolbar{display:grid;grid-template-columns:minmax(200px,1.4fr) minmax(170px,1fr) minmax(140px,.7fr) auto auto;align-items:center;gap:.5rem}
 .agent-table-csv{padding:.55rem .8rem;border:1px solid #b9dee0;border-radius:9px;color:#127f8c;background:#f1fafa;font-size:.68rem;font-weight:700;text-decoration:none;white-space:nowrap}
+.agent-table-csv.is-primary{border-color:#127f8c;color:#fff;background:#127f8c}
 .agent-table-wrap{margin:0}
 .agent-table{width:100%;min-width:860px;border-collapse:collapse}
 .agent-table th{padding:.55rem .65rem;color:#5c7280;background:#f4f8fa;font-size:.64rem;font-weight:700;text-align:left;white-space:nowrap}

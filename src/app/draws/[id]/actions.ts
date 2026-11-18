@@ -53,7 +53,7 @@ async function settleWhenResultsComplete(actor: Actor, drawId: string): Promise<
   }
   try {
     const previews = await calculateSettlement(actor, drawId);
-    return { kind: "calculated", agents: previews.length };
+    return { kind: "calculated", agents: new Set(previews.map((preview) => preview.agentId)).size };
   } catch (error) {
     if (error instanceof AppError) return { kind: "failed", error: error.message };
     throw error;
@@ -218,7 +218,10 @@ export async function calculateSettlementAction(
   try {
     const previews = await calculateSettlement(actor, drawId);
     revalidatePath(`/draws/${drawId}`);
-    return { error: null, message: `คำนวณแล้ว ${previews.length} Agent` };
+    revalidatePath("/draws");
+    revalidatePath("/draws/all");
+    revalidatePath("/reports");
+    return { error: null, message: `คำนวณแล้ว ${new Set(previews.map((preview) => preview.agentId)).size} Agent` };
   } catch (error) {
     return fail(error);
   }
@@ -256,6 +259,9 @@ export async function approveSettlementAction(
   }
 
   revalidatePath(`/draws/${drawId}`);
+  revalidatePath("/draws");
+  revalidatePath("/draws/all");
+  revalidatePath("/reports");
   return { error: null, message: "ปิดบัญชีงวดแล้ว" };
 }
 
@@ -326,12 +332,16 @@ export async function enterLaoResultAction(_prev: ActionState, formData: FormDat
   }
   const messages: string[] = [];
   let failed: string | null = null;
-  for (const saved of outcome.saved) {
-    const settle = saved.autoApproved ? await settleWhenResultsComplete(actor, saved.drawId) : { kind: "skipped" as const };
-    revalidatePath(`/draws/${saved.drawId}`);
+  // คู่งวดใช้ calculateSettlement เดียวกัน ซึ่งคำนวณทั้งสองฝั่ง จึงเรียกเพียงครั้งเดียว
+  const firstSaved = outcome.saved[0];
+  if (firstSaved) {
+    const settle = firstSaved.autoApproved ? await settleWhenResultsComplete(actor, firstSaved.drawId) : { kind: "skipped" as const };
     const state = savedState("บันทึกผลแล้ว", settle);
     if (state.error) failed = state.error;
     else if (state.message) messages.push(state.message);
+  }
+  for (const saved of outcome.saved) {
+    revalidatePath(`/draws/${saved.drawId}`);
   }
   revalidatePath("/draws");
   revalidatePath("/reports");

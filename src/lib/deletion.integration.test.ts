@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
 import { createDraftBill, replaceDraftItems, softDeleteBillBeforeCutoff } from "@/lib/bills/service";
 import { deleteDrawPermanently } from "@/lib/draws/service";
+import type { PrivateObjectStorage } from "@/lib/storage/types";
 
 let f: Fixtures;
 
@@ -46,10 +47,49 @@ describe("การลบบิลแบบเก็บประวัติ", (
     expect(await prisma.auditEvent.count({ where: { entityType: "Bill", entityId: billId, action: "DELETE" } })).toBe(1);
   });
 
-  test("ไม่ลบงวดที่มีบิล และ Owner ลบได้เฉพาะงวดว่าง", async () => {
-    await draftBill();
+  test("Owner ลบงวดที่มีบิลได้พร้อมข้อมูลลูกทั้งหมด แต่ Admin ลบไม่ได้", async () => {
+    const billId = await draftBill();
+    const deletedStorageKeys: string[] = [];
+    const storage: PrivateObjectStorage = {
+      upload: async () => undefined,
+      delete: async (key) => { deletedStorageKeys.push(key); },
+      getObjectMetadata: async () => ({ size: 0, contentType: undefined, metadata: {} }),
+      download: async () => Buffer.alloc(0),
+      getSignedUrl: async () => "https://example.test/evidence",
+      objectExists: async () => false,
+    };
+    const attachment = await prisma.billAttachment.create({
+      data: {
+        organizationId: f.org.id,
+        billId,
+        type: "ORDER_EVIDENCE",
+        storageKey: `tests/${billId}/draw-delete.jpg`,
+        originalName: "draw-delete.jpg",
+        mimeType: "image/jpeg",
+        fileSize: 128,
+        checksum: `draw-delete-${billId}`,
+        uploadedById: f.users.admin.id,
+      },
+    });
+
     await expect(deleteDrawPermanently(f.actors.ADMIN, f.draw.id)).rejects.toThrow(/ไม่มีสิทธิ์/);
-    await expect(deleteDrawPermanently(f.actors.OWNER, f.draw.id)).rejects.toThrow(/ต้องเก็บประวัติบิล/);
+    const outcome = await deleteDrawPermanently(f.actors.OWNER, f.draw.id, storage);
+
+    expect(outcome.billsDeleted).toBe(1);
+    expect(outcome.billItemsDeleted).toBe(1);
+    expect(outcome.attachmentsDeleted).toBe(1);
+    expect(await prisma.draw.findUnique({ where: { id: f.draw.id } })).toBeNull();
+    expect(await prisma.bill.findUnique({ where: { id: billId } })).toBeNull();
+    expect(await prisma.billAttachment.findUnique({ where: { id: attachment.id } })).toBeNull();
+    expect(deletedStorageKeys).toEqual([attachment.storageKey]);
+    const audit = await prisma.auditEvent.findFirstOrThrow({
+      where: { entityType: "Draw", entityId: f.draw.id, action: "DELETE" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit.reason).toMatch(/ข้อมูลที่ผูกกับงวดถาวร/);
+  });
+
+  test("Owner ลบงวดว่างได้", async () => {
 
     const emptyDraw = await prisma.draw.create({
       data: {

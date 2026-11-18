@@ -14,7 +14,7 @@ describe("csvCell", () => {
     expect(csvCell("ก, ข")).toBe('"ก, ข"');
   });
 
-  test.each(["=1+1", "+1", "-1", "@SUM(A1)"])("กัน formula injection: %s", (value) => {
+  test.each(["=1+1", "+1", "-1+2", "@SUM(A1)"])("กัน formula injection: %s", (value) => {
     expect(csvCell(value)).toBe(`"'${value}"`);
   });
 
@@ -22,10 +22,8 @@ describe("csvCell", () => {
     expect(csvCell("A-001")).toBe('"A-001"');
   });
 
-  test("ยอดเงินติดลบถูกมองเป็นสูตร จึงถูกบังคับเป็นข้อความ", () => {
-    // ยอมรับผลข้างเคียงนี้ เพราะความปลอดภัยสำคัญกว่าการที่ Excel
-    // มองยอดติดลบเป็นตัวเลขอัตโนมัติ
-    expect(csvCell("-92897.00")).toBe('"\'-92897.00"');
+  test("ยอดเงินติดลบยังเป็นตัวเลขสำหรับคำนวณต่อใน Excel", () => {
+    expect(csvCell("-92897.00")).toBe('"-92897.00"');
   });
 });
 

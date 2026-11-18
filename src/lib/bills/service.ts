@@ -17,6 +17,7 @@ import {
 import { loadCapOverrides, loadNumberUsage, lockDrawNumberCap } from "@/lib/draws/number-cap";
 import { assertBillEvidenceReady } from "@/lib/evidence/service";
 import { billSequencePeriod, buildInternalBillNumber } from "./numbering";
+import { LAO_SET_ACTIVE_CODES } from "@/lib/lao/rules";
 
 export type ItemInput = {
   prizeTypeId: string;
@@ -184,7 +185,12 @@ async function loadPrizeRules(
   lotteryType?: LotteryType,
 ): Promise<Map<string, PrizeTypeRule>> {
   const rows = await client.prizeType.findMany({
-    where: { organizationId, isActive: true, ...(lotteryType ? { lotteryType } : {}) },
+    where: {
+      organizationId,
+      isActive: true,
+      ...(lotteryType ? { lotteryType } : {}),
+      ...(lotteryType === "LAO_SET" ? { code: { in: [...LAO_SET_ACTIVE_CODES] } } : {}),
+    },
     select: {
       id: true,
       code: true,
@@ -483,8 +489,12 @@ async function confirmInTx(
   tx: Prisma.TransactionClient,
   actor: Actor,
   billId: string,
-  options: { requireEvidence: boolean },
-): Promise<{ billNumber: string; drawSequence: number; totalStake: string }> {
+  options: {
+    requireEvidence: boolean;
+    /** บิลหลายประเภทหวย: ส่วนที่ 2 เป็นต้นไปใช้เลขบิลของส่วนแรก ไม่ออกเลขใหม่ */
+    shareSequence?: { drawSequence: number; sequencePeriod: string };
+  },
+): Promise<{ billNumber: string; drawSequence: number; sequencePeriod: string; totalStake: string }> {
   const bill = await tx.bill.findFirst({
     where: { id: billId, ...billScope(actor) },
     include: {
@@ -551,10 +561,11 @@ async function confirmInTx(
   }
 
   const confirmedAt = new Date();
-  const sequencePeriod = billSequencePeriod(confirmedAt);
   // ตัวนับแยก Agent/เดือนและเพิ่มแบบ atomic ใน transaction เดียวกับการยืนยัน
   // Agent แต่ละคนจึงเริ่มจากบิล 1 เมื่อขึ้นเดือนใหม่ และกดยืนยันพร้อมกันก็ไม่ชนกัน
-  const sequence = await tx.agentBillCounter.upsert({
+  // บิลหลายประเภทหวยออกเลขครั้งเดียวที่ส่วนแรก ส่วนที่เหลือใช้เลขเดียวกัน (แยกด้วยงวด)
+  const sequencePeriod = options.shareSequence?.sequencePeriod ?? billSequencePeriod(confirmedAt);
+  const drawSequence = options.shareSequence?.drawSequence ?? (await tx.agentBillCounter.upsert({
     where: { agentId_period: { agentId: bill.agentId, period: sequencePeriod } },
     create: {
       organizationId: bill.organizationId,
@@ -564,8 +575,7 @@ async function confirmInTx(
     },
     update: { lastSequence: { increment: 1 } },
     select: { lastSequence: true },
-  });
-  const drawSequence = sequence.lastSequence;
+  })).lastSequence;
   const billNumber = buildInternalBillNumber({
     agentCode: bill.agent.code,
     lotteryType: bill.draw.lotteryType,
@@ -613,13 +623,14 @@ async function confirmInTx(
     after: { status: updated.status, billNumber: updated.billNumber, drawSequence: updated.drawSequence, sequencePeriod: updated.sequencePeriod },
   });
 
-  return { billNumber, drawSequence, totalStake: total.toFixed(2) };
+  return { billNumber, drawSequence, sequencePeriod, totalStake: total.toFixed(2) };
 }
 
 /**
  * แทงเลขจากหน้าโพย: สร้างบิล ใส่รายการ และยืนยันในทรานแซกชันเดียว
  *
  * ถ้าข้อใดไม่ผ่าน ทุกอย่าง rollback จึงไม่มีบิลร่างค้างในระบบ
+ * บิลประเภทเดียว เรียกผ่าน placeSlip ด้วยงวดเดียว
  */
 export async function placeBill(
   actor: Actor,
@@ -632,107 +643,170 @@ export async function placeBill(
     submissionKey?: string;
   },
 ): Promise<{ billId: string; billNumber: string; drawSequence: number; duplicate?: boolean }> {
+  const placed = await placeSlip(actor, {
+    title: input.title,
+    representativeUserId: input.representativeUserId,
+    submissionKey: input.submissionKey,
+    parts: [{ drawId: input.drawId, items: input.items }],
+  });
+  const first = placed.bills[0]!;
+  return { billId: first.billId, billNumber: first.billNumber, drawSequence: placed.drawSequence, ...(placed.duplicate ? { duplicate: true } : {}) };
+}
+
+export type SlipPartInput = { drawId: string; items: readonly ItemInput[] };
+export type PlacedSlip = {
+  /** id ของบิลใบหลัก (ส่วนแรก) เมื่อบิลมีหลายประเภทหวย null เมื่อมีประเภทเดียว */
+  slipId: string | null;
+  /** เลขบิลที่ผู้ใช้เห็น ใช้ร่วมกันทุกส่วนของบิล */
+  drawSequence: number;
+  /** บิลย่อยต่องวด เรียงตามลำดับที่ส่งมา ใบแรกเป็นใบหลัก (เก็บหลักฐาน) */
+  bills: { billId: string; drawId: string; billNumber: string }[];
+  duplicate?: boolean;
+};
+
+/**
+ * บิลเดียวหลายประเภทหวย: ผู้ใช้กดยืนยันครั้งเดียว ได้เลขบิลเดียว
+ * ระบบเก็บเป็นบิลย่อยต่องวดที่ผูกด้วย slipId และใช้เลขบิลเดียวกัน
+ * การตัดสินผล เพดานเลข เลขอั้น และรายงานจึงทำงานต่องวดเหมือนบิลปกติทุกอย่าง
+ *
+ * ทุกส่วนอยู่ใน transaction เดียว ส่วนใดไม่ผ่าน (เช่นเลขเต็ม) ทั้งบิลไม่ถูกสร้าง
+ */
+export async function placeSlip(
+  actor: Actor,
+  input: {
+    title: string;
+    representativeUserId?: string;
+    submissionKey?: string;
+    parts: readonly SlipPartInput[];
+  },
+): Promise<PlacedSlip> {
   requirePermission(actor, "bill.create");
   requirePermission(actor, "bill.confirm");
 
   // กดยืนยันซ้ำ/เน็ตส่งซ้ำหลังบิลแรกสำเร็จแล้ว: คืนบิลเดิม ไม่ตรวจกฎซ้ำ (เช่นเลขเต็มเพราะบิลแรกเอง)
   const key = input.submissionKey;
   if (key) {
-    const existing = await findSubmittedBill(actor, key);
+    const existing = await findSubmittedSlip(actor, key);
     if (existing) return existing;
   }
 
   try {
-    return await placeBillOnce(actor, input);
+    return await placeSlipOnce(actor, input);
   } catch (error) {
     // สองคำขอเข้ามาพร้อมกัน: คำขอหลังรอ unique index จนคำขอแรก commit แล้วชน P2002
     if (key && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      const existing = await findSubmittedBill(actor, key);
+      const existing = await findSubmittedSlip(actor, key);
       if (existing) return existing;
     }
     throw error;
   }
 }
 
-async function findSubmittedBill(actor: Actor, submissionKey: string) {
-  const bill = await prisma.bill.findFirst({
+async function findSubmittedSlip(actor: Actor, submissionKey: string): Promise<PlacedSlip | null> {
+  const bills = await prisma.bill.findMany({
     where: { organizationId: actor.organizationId, submissionKey },
-    select: { id: true, billNumber: true, drawSequence: true, createdById: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, drawId: true, billNumber: true, drawSequence: true, createdById: true, slipId: true },
   });
-  if (!bill) return null;
+  const first = bills[0];
+  if (!first) return null;
   // รหัสสุ่มจาก browser ของผู้ใช้เอง ถ้าเป็นของคนอื่นถือว่าผิดปกติ ไม่คืนบิลของคนอื่นให้
-  if (bill.createdById !== actor.userId || bill.drawSequence === null) {
+  if (bills.some((bill) => bill.createdById !== actor.userId || bill.drawSequence === null)) {
     throw new ConflictError("คำขอนี้ถูกใช้ไปแล้ว กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง");
   }
-  return { billId: bill.id, billNumber: bill.billNumber ?? "", drawSequence: bill.drawSequence, duplicate: true };
+  return {
+    slipId: bills.length > 1 ? first.id : null,
+    drawSequence: first.drawSequence!,
+    bills: bills.map((bill) => ({ billId: bill.id, drawId: bill.drawId, billNumber: bill.billNumber ?? "" })),
+    duplicate: true,
+  };
 }
 
-async function placeBillOnce(
+async function placeSlipOnce(
   actor: Actor,
-  input: { drawId: string; title: string; items: readonly ItemInput[]; representativeUserId?: string; submissionKey?: string },
-): Promise<{ billId: string; billNumber: string; drawSequence: number }> {
-
+  input: { title: string; representativeUserId?: string; submissionKey?: string; parts: readonly SlipPartInput[] },
+): Promise<PlacedSlip> {
   const title = input.title.trim();
   if (title.length === 0) throw new ValidationError("กรุณากรอกชื่อลูกค้า");
-  if (input.items.length === 0) throw new ValidationError("ยังไม่มีรายการแทง");
 
-  const draw = await prisma.draw.findFirst({
-    where: { id: input.drawId, organizationId: actor.organizationId },
+  // รวมส่วนของงวดเดียวกันเข้าด้วยกัน และตัดส่วนที่ไม่มีรายการทิ้ง
+  const byDraw = new Map<string, ItemInput[]>();
+  for (const part of input.parts) byDraw.set(part.drawId, [...(byDraw.get(part.drawId) ?? []), ...part.items]);
+  const parts = [...byDraw.entries()].filter(([, items]) => items.length > 0);
+  if (parts.length === 0) throw new ValidationError("ยังไม่มีรายการแทง");
+
+  const draws = await prisma.draw.findMany({
+    where: { id: { in: parts.map(([drawId]) => drawId) }, organizationId: actor.organizationId },
     select: { id: true, status: true, cutoffAt: true },
   });
-  if (!draw) throw new NotFoundError("ไม่พบงวดที่เลือก");
-  if (draw.status !== "OPEN" || Date.now() >= draw.cutoffAt.getTime()) {
-    throw new ConflictError("หมดเวลาการเดิมพันสำหรับงวดนี้");
+  const drawById = new Map(draws.map((draw) => [draw.id, draw]));
+  for (const [drawId] of parts) {
+    const draw = drawById.get(drawId);
+    if (!draw) throw new NotFoundError("ไม่พบงวดที่เลือก");
+    if (draw.status !== "OPEN" || Date.now() >= draw.cutoffAt.getTime()) {
+      throw new ConflictError("หมดเวลาการเดิมพันสำหรับงวดนี้");
+    }
   }
 
   // Agent ส่ง representativeUserId มาไม่ได้ resolveAgentId ปฏิเสธถ้าไม่ใช่ตัวเอง
   const agentId = await resolveAgentId(actor, undefined, actor.role === "AGENT" ? undefined : input.representativeUserId);
-  const parsed = input.items.map((item) => ({
-    prizeTypeId: item.prizeTypeId,
-    number: item.number.trim(),
-    stake: toDecimal(item.stake),
-  }));
 
   return prisma.$transaction(async (tx) => {
     const rules = await loadPrizeRules(tx, actor.organizationId);
-    const created = await tx.bill.create({
-      data: {
-        organizationId: actor.organizationId,
-        agentId,
-        drawId: draw.id,
-        title,
-        status: "DRAFT",
-        createdById: actor.userId,
-        totalStake: totalStake(parsed),
-        submissionKey: input.submissionKey ?? null,
-      },
-      select: { id: true, title: true, agentId: true, drawId: true },
-    });
+    const bills: PlacedSlip["bills"] = [];
+    let shared: { drawSequence: number; sequencePeriod: string } | undefined;
 
-    await tx.billItem.createMany({
-      data: parsed.map((item) => ({
-        organizationId: actor.organizationId,
-        billId: created.id,
+    for (const [drawId, items] of parts) {
+      const parsed = items.map((item) => ({
         prizeTypeId: item.prizeTypeId,
-        number: item.number,
-        stake: item.stake,
-        payoutRateSnapshot: rules.get(item.prizeTypeId)?.payoutRate ?? new Prisma.Decimal(0),
-      })),
-    });
+        number: item.number.trim(),
+        stake: toDecimal(item.stake),
+      }));
+      const created = await tx.bill.create({
+        data: {
+          organizationId: actor.organizationId,
+          agentId,
+          drawId,
+          title,
+          status: "DRAFT",
+          createdById: actor.userId,
+          totalStake: totalStake(parsed),
+          submissionKey: input.submissionKey ?? null,
+          // ใบหลักเป็น null ส่วนอื่นชี้ไปที่ใบหลัก หลักฐานแนบที่ใบหลักใบเดียว
+          slipId: bills[0]?.billId ?? null,
+        },
+        select: { id: true, title: true, agentId: true, drawId: true, slipId: true },
+      });
 
-    await writeAudit(tx, {
-      organizationId: actor.organizationId,
-      actorId: actor.userId,
-      requestId: actor.requestId,
-      ipAddress: actor.ipAddress,
-      action: "CREATE",
-      entityType: "Bill",
-      entityId: created.id,
-      after: { ...created, itemCount: parsed.length, source: "BET_SLIP" },
-    });
+      await tx.billItem.createMany({
+        data: parsed.map((item) => ({
+          organizationId: actor.organizationId,
+          billId: created.id,
+          prizeTypeId: item.prizeTypeId,
+          number: item.number,
+          stake: item.stake,
+          payoutRateSnapshot: rules.get(item.prizeTypeId)?.payoutRate ?? new Prisma.Decimal(0),
+        })),
+      });
 
-    const confirmed = await confirmInTx(tx, actor, created.id, { requireEvidence: false });
-    return { billId: created.id, billNumber: confirmed.billNumber, drawSequence: confirmed.drawSequence };
+      await writeAudit(tx, {
+        organizationId: actor.organizationId,
+        actorId: actor.userId,
+        requestId: actor.requestId,
+        ipAddress: actor.ipAddress,
+        action: "CREATE",
+        entityType: "Bill",
+        entityId: created.id,
+        after: { ...created, itemCount: parsed.length, source: "BET_SLIP" },
+      });
+
+      // ส่วนแรกออกเลขบิลใหม่ ส่วนถัดไปใช้เลขเดียวกัน ผู้ใช้จึงเห็นเป็นบิลเดียว
+      const confirmed = await confirmInTx(tx, actor, created.id, { requireEvidence: false, shareSequence: shared });
+      shared ??= { drawSequence: confirmed.drawSequence, sequencePeriod: confirmed.sequencePeriod };
+      bills.push({ billId: created.id, drawId, billNumber: confirmed.billNumber });
+    }
+
+    return { slipId: bills.length > 1 ? bills[0]!.billId : null, drawSequence: shared!.drawSequence, bills };
   });
 }
 
