@@ -169,7 +169,7 @@ describe("รับบิลหวยลาว", () => {
 });
 
 describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนวณเงิน", () => {
-  test("ลงผลครั้งเดียวได้ทั้งสองงวด และเลขชุดรวมจ่ายทุกรางวัลที่เข้าเงื่อนไข", async () => {
+  test("ลงผลครั้งเดียวได้ทั้งสองงวด และเลขชุดเลือกจ่ายรางวัลสูงสุดต่อ Bet ID", async () => {
     await placeBill(f.actors.AGENT1, {
       drawId: lao.id,
       title: "หวยลาว",
@@ -179,7 +179,7 @@ describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนว
       drawId: laoSet.id,
       title: "หวยลาวชุด",
       items: [
-        bet(201, "9441", "30"), // เข้าเงื่อนไขครบ 8 รางวัล รวม 39,350
+        bet(201, "9441", "30"), // เข้าเงื่อนไขครบ 8 รางวัล เลือกจ่าย 4 ตัวตรง 25,500
         bet(201, "4194", "30"), // 4 ตัวโต๊ด 1,125
         bet(201, "0441", "30"), // 3 ตัวท้ายตรง 9,250
         bet(201, "0144", "30"), // 3 ตัวท้ายโต๊ด 925
@@ -213,43 +213,48 @@ describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนว
     expect(laoPreview!.winningItems).toBe(4);
 
     const [setPreview] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
-    expect(setPreview!.payout.toFixed(2)).toBe("55250.00");
-    expect(setPreview!.winningItems).toBe(19);
+    expect(setPreview!.payout.toFixed(2)).toBe("39350.00");
+    expect(setPreview!.winningItems).toBe(8);
     expect(setPreview!.gross.toFixed(2)).toBe("270.00");
     const setItems = await prisma.billItem.findMany({
       where: { bill: { drawId: laoSet.id } },
       select: { number: true, payout: true, isWinner: true },
     });
     expect(Object.fromEntries(setItems.map((item) => [item.number, { payout: Number(item.payout), isWinner: item.isWinner }]))).toEqual({
-      "9441": { payout: 39_350, isWinner: true },
+      "9441": { payout: 25_500, isWinner: true },
       "4194": { payout: 1_125, isWinner: true },
-      "0441": { payout: 10_525, isWinner: true },
+      "0441": { payout: 9_250, isWinner: true },
       "0144": { payout: 925, isWinner: true },
-      "9442": { payout: 2_200, isWinner: true },
+      "9442": { payout: 1_425, isWinner: true },
       "4942": { payout: 425, isWinner: true },
       "9412": { payout: 350, isWinner: true },
       "0041": { payout: 350, isWinner: true },
       "1234": { payout: 0, isWinner: false },
     });
     expect(await prisma.billItemWinningPrize.count({ where: { billItem: { bill: { drawId: laoSet.id } } } })).toBe(19);
+    expect(await prisma.billItemWinningPrize.count({ where: { isPaid: true, billItem: { bill: { drawId: laoSet.id } } } })).toBe(8);
+    expect(await prisma.billItemWinningPrize.count({ where: { isPaid: false, billItem: { bill: { drawId: laoSet.id } } } })).toBe(11);
   });
 
-  test("ตัวอย่างเลข 1234 ผล 561234 จ่ายครบ 8 รางวัลและคำนวณซ้ำไม่สร้าง ledger ซ้ำ", async () => {
+  test("Test A/H: เลข 1234 ชุด 30 ตรวจพบ 8 จ่ายสูงสุด 25,500 และคำนวณซ้ำไม่สร้าง ledger ซ้ำ", async () => {
     await placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "ก", items: [bet(201, "1234", "30")] });
     await lockDrawManually(f.actors.ADMIN, laoSet.id);
     await enterLaoResult(f.actors.ADMIN, laoSet.id, "561234");
     const [preview] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
-    expect(preview!.payout.toFixed(2)).toBe("39350.00");
-    expect(preview!.winningItems).toBe(8);
+    expect(preview!.payout.toFixed(2)).toBe("25500.00");
+    expect(preview!.winningItems).toBe(1);
     const item = await prisma.billItem.findFirstOrThrow({ where: { bill: { drawId: laoSet.id } } });
-    expect(item.payout.toFixed(2)).toBe("39350.00");
+    expect(item.payout.toFixed(2)).toBe("25500.00");
     expect(await prisma.billItemWinningPrize.count({ where: { billItemId: item.id } })).toBe(8);
+    expect(await prisma.billItemWinningPrize.count({ where: { billItemId: item.id, isPaid: true } })).toBe(1);
+    expect((await prisma.billItemWinningPrize.findFirstOrThrow({ where: { billItemId: item.id, isPaid: true } })).prizeKey).toBe("EXACT_4");
     const [recalculated] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
-    expect(recalculated!.payout.toFixed(2)).toBe("39350.00");
+    expect(recalculated!.payout.toFixed(2)).toBe("25500.00");
     expect(await prisma.billItemWinningPrize.count({ where: { billItemId: item.id } })).toBe(8);
+    expect(await prisma.billItemWinningPrize.count({ where: { billItemId: item.id, isPaid: true } })).toBe(1);
   });
 
-  test("เลขเดียวกันชุด 30/60/120 ถูกตรง จ่ายแยกครบทั้งสามรายการ", async () => {
+  test("Test B/C/D: เลขเดียวกันชุด 30/60/120 เลือกจ่ายสูงสุดแยกครบทั้งสาม Bet ID", async () => {
     await placeBill(f.actors.AGENT1, {
       drawId: laoSet.id,
       title: "สามราคาชุด",
@@ -258,8 +263,40 @@ describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนว
     await lockDrawManually(f.actors.ADMIN, laoSet.id);
     await enterLaoResult(f.actors.ADMIN, laoSet.id, "489441");
     const [preview] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
-    expect(preview!.payout.toFixed(2)).toBe("275450.00");
-    expect(preview!.winningItems).toBe(24);
+    expect(preview!.payout.toFixed(2)).toBe("178500.00");
+    expect(preview!.winningItems).toBe(3);
+    const items = await prisma.billItem.findMany({ where: { bill: { drawId: laoSet.id } }, orderBy: { stake: "asc" }, select: { id: true, stake: true, payout: true } });
+    expect(items.map((item) => [Number(item.stake), Number(item.payout)])).toEqual([[30, 25_500], [60, 51_000], [120, 102_000]]);
+    expect(await prisma.billItemWinningPrize.count({ where: { isPaid: true, billItem: { bill: { drawId: laoSet.id } } } })).toBe(3);
+    expect(await prisma.billItemWinningPrize.count({ where: { billItem: { bill: { drawId: laoSet.id } } } })).toBe(24);
+  });
+
+  test("Test E/G: หลายเงื่อนไขเลือกยอดสูงสุด และถูกเฉพาะ 2 ตัวหลังจ่าย 350", async () => {
+    await placeBill(f.actors.AGENT1, {
+      drawId: laoSet.id,
+      title: "เลือกสูงสุด",
+      items: [bet(201, "1239", "30"), bet(201, "1134", "30")],
+    });
+    await lockDrawManually(f.actors.ADMIN, laoSet.id);
+    await enterLaoResult(f.actors.ADMIN, laoSet.id, "561234");
+    const [preview] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
+    expect(preview!.payout.toFixed(2)).toBe("1775.00");
+    const items = await prisma.billItem.findMany({ where: { bill: { drawId: laoSet.id } }, orderBy: { number: "asc" }, select: { number: true, payout: true } });
+    expect(items.map((item) => [item.number, Number(item.payout)])).toEqual([["1134", 350], ["1239", 1_425]]);
+    const selected = await prisma.billItemWinningPrize.findMany({ where: { isPaid: true, billItem: { bill: { drawId: laoSet.id } } }, orderBy: { payout: "asc" }, select: { prizeKey: true, payout: true } });
+    expect(selected.map((row) => [row.prizeKey, Number(row.payout)])).toEqual([["LAST_2", 350], ["FIRST_3_EXACT", 1_425]]);
+  });
+
+  test("Test F: เลขและราคาชุดเดียวกันคนละบิลคำนวณแยกตาม Bet ID", async () => {
+    await placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "บิลหนึ่ง", items: [bet(201, "1234", "30")] });
+    await placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "บิลสอง", items: [bet(201, "1234", "30")] });
+    await lockDrawManually(f.actors.ADMIN, laoSet.id);
+    await enterLaoResult(f.actors.ADMIN, laoSet.id, "561234");
+    const [preview] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
+    expect(preview!.payout.toFixed(2)).toBe("51000.00");
+    expect(preview!.winningItems).toBe(2);
+    expect(await prisma.billItemWinningPrize.count({ where: { isPaid: true, billItem: { bill: { drawId: laoSet.id } } } })).toBe(2);
+    expect(await prisma.billItemWinningPrize.count({ where: { billItem: { bill: { drawId: laoSet.id } } } })).toBe(16);
   });
 
   test("งวดเดี่ยววันเดียวกันไม่ถูกปิดหรือบันทึกผลตามคู่งวด", async () => {

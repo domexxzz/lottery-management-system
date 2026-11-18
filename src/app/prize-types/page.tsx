@@ -102,7 +102,7 @@ export default async function PrizeTypesPage({
                 ))}</tbody>
               </table>
             </div>
-            <p className="rulebook-lao-set-foot">กรอกเลข 4 หลัก 1 รายการ ลุ้นครบทั้ง 8 รางวัล หากถูกหลายเงื่อนไข ระบบรวมจ่ายทุกรางวัลที่เข้าเงื่อนไข</p>
+            <p className="rulebook-lao-set-foot">กรอกเลข 4 หลัก 1 รายการ ระบบตรวจครบทั้ง 8 รางวัล แต่เลือกจ่ายรางวัลที่มีมูลค่าสูงที่สุดเพียง 1 รางวัลต่อรายการและราคาชุด</p>
           </div>
         ) : (
         <div className="rulebook-prize-list">

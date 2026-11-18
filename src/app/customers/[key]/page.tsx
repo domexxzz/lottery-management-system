@@ -58,7 +58,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
         stake: true,
         payout: true,
         prizeType: { select: { code: true, name: true } },
-        winningPrizes: { orderBy: [{ payout: "desc" }, { prizeKey: "asc" }], select: { prizeLabelSnapshot: true } },
+        winningPrizes: { orderBy: [{ payout: "desc" }, { prizeKey: "asc" }], select: { prizeLabelSnapshot: true, isPaid: true } },
         bill: {
           select: {
             id: true,
@@ -105,7 +105,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const latestBill = recentBills[0];
   const winningPrizeLabelByItemId = new Map(winningItems.map((item) => {
     const label = item.bill.draw.lotteryType === "LAO_SET" && item.winningPrizes.length > 0
-      ? item.winningPrizes.map((prize) => prize.prizeLabelSnapshot).join(", ")
+      ? item.winningPrizes.map((prize) => `${prize.prizeLabelSnapshot}${prize.isPaid ? " (เลือกจ่าย)" : " (ไม่จ่าย)"}`).join(", ")
       : null;
     return [item.id, label] as const;
   }));

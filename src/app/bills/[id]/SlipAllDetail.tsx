@@ -21,7 +21,7 @@ type SlipPart = {
     isWinner: boolean;
     payoutRateSnapshot: Prisma.Decimal;
     prizeType: { name: string };
-    winningPrizes: Array<{ id: string; prizeLabelSnapshot: string; payoutRateSnapshot: Prisma.Decimal; payout: Prisma.Decimal }>;
+    winningPrizes: Array<{ id: string; prizeLabelSnapshot: string; payoutRateSnapshot: Prisma.Decimal; payout: Prisma.Decimal; isPaid: boolean }>;
   }>;
 };
 
@@ -40,6 +40,7 @@ export function SlipAllDetail({ parts }: { parts: SlipPart[] }) {
       label: prize.prizeLabelSnapshot,
       rate: Number(prize.payoutRateSnapshot),
       payout: Number(prize.payout),
+      isPaid: prize.isPaid,
     }));
     return {
       id: item.id,
@@ -53,7 +54,7 @@ export function SlipAllDetail({ parts }: { parts: SlipPart[] }) {
       rate: part.status === "DRAFT" ? null : compactRate(item.payoutRateSnapshot),
       rateText: part.draw.lotteryType === "LAO_SET"
         ? winningPrizes.length > 0
-          ? `${winningPrizes.length} รางวัล`
+          ? `ตรวจพบ ${winningPrizes.length} รางวัล · จ่ายสูงสุด 1 รางวัล`
           : "ตามตาราง 8 รางวัล"
         : part.status === "DRAFT" ? "—" : `${compactRate(item.payoutRateSnapshot)} เท่า`,
       status,

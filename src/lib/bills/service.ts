@@ -859,7 +859,7 @@ export async function getBill(actor: Actor, billId: string) {
           prizeType: { select: { code: true, name: true, digits: true } },
           winningPrizes: {
             orderBy: [{ payout: "desc" }, { prizeKey: "asc" }],
-            select: { id: true, prizeKey: true, prizeLabelSnapshot: true, payoutRateSnapshot: true, payout: true },
+            select: { id: true, prizeKey: true, prizeLabelSnapshot: true, payoutRateSnapshot: true, payout: true, isPaid: true },
           },
         },
       },

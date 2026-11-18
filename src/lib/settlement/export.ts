@@ -29,7 +29,8 @@ const COLUMNS = [
   "อัตราจ่ายที่ล็อกไว้",
   "ผลที่ออก",
   "ถูกรางวัล",
-  "รางวัลที่ถูก",
+  "รางวัลที่เลือกจ่าย",
+  "รางวัลที่ตรวจพบแต่ไม่จ่าย",
   "ยอดจ่าย (บาท)",
 ] as const;
 
@@ -68,7 +69,7 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
             prizeType: { select: { code: true, name: true, matchRule: true } },
             winningPrizes: {
               orderBy: [{ payout: "desc" }, { prizeKey: "asc" }],
-              select: { prizeLabelSnapshot: true, payoutRateSnapshot: true, payout: true },
+              select: { prizeLabelSnapshot: true, payoutRateSnapshot: true, payout: true, isPaid: true },
             },
           },
         },
@@ -92,7 +93,12 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
     for (const item of bill.items) {
       const resultValue = resultByPrizeType.get(item.prizeTypeId);
       const isLaoSetEntry = draw.lotteryType === "LAO_SET" && item.prizeType.code === 201;
-      const winningPrizeText = item.winningPrizes
+      const paidPrizeText = item.winningPrizes
+        .filter((prize) => prize.isPaid)
+        .map((prize) => `${prize.prizeLabelSnapshot} (${Number(prize.payout).toLocaleString("th-TH")} บาท)`)
+        .join("; ");
+      const suppressedPrizeText = item.winningPrizes
+        .filter((prize) => !prize.isPaid)
         .map((prize) => `${prize.prizeLabelSnapshot} (${Number(prize.payout).toLocaleString("th-TH")} บาท)`)
         .join("; ");
       const winningRateText = item.winningPrizes
@@ -107,7 +113,7 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
           bill.agent.name,
           String(item.prizeType.code),
           item.prizeType.name,
-          isLaoSetEntry ? "ลุ้น 8 รางวัล จ่ายทุกรางวัลที่เข้าเงื่อนไข" : MATCH_RULE_LABEL[item.prizeType.matchRule] ?? item.prizeType.matchRule,
+          isLaoSetEntry ? "ตรวจ 8 รางวัล เลือกจ่ายรางวัลสูงสุด 1 รางวัลต่อรายการ" : MATCH_RULE_LABEL[item.prizeType.matchRule] ?? item.prizeType.matchRule,
           item.number,
           Number(item.stake),
           isLaoSetEntry
@@ -117,7 +123,8 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
             : Number(item.payoutRateSnapshot),
           resultValue ?? "ยังไม่มีผล",
           resultValue === undefined ? "รอผล" : item.isWinner ? "ถูก" : "ไม่ถูก",
-          winningPrizeText || "-",
+          paidPrizeText || "-",
+          suppressedPrizeText || "-",
           Number(item.payout),
         ]);
     }

@@ -98,11 +98,11 @@ export default async function PrintBillPage({
             return <tr key={item.id}>
               <td>
                 {item.prizeType.code}. {item.prizeType.name}{packageLabel ? ` · ${packageLabel}` : ""}
-                {item.winningPrizes.map((prize) => <small key={prize.id} className="sheet-winning-label">{prize.prizeLabelSnapshot}: {prize.payout.toNumber().toLocaleString("th-TH")} บาท</small>)}
+                {item.winningPrizes.map((prize) => <small key={prize.id} className="sheet-winning-label">{prize.isPaid ? "เลือกจ่าย" : "ตรวจพบแต่ไม่จ่าย"} · {prize.prizeLabelSnapshot}: {prize.payout.toNumber().toLocaleString("th-TH")} บาท</small>)}
               </td>
               <td className="number-cell">{item.number}</td>
               <td className="num">{item.stake.toFixed(2)}</td>
-              {!isSlip && <td className="num">{bill.draw.lotteryType === "LAO_SET" ? item.winningPrizes.length > 0 ? `${item.winningPrizes.length} รางวัล` : "ตามตาราง 8 รางวัล" : item.payoutRateSnapshot.toFixed(4)}</td>}
+              {!isSlip && <td className="num">{bill.draw.lotteryType === "LAO_SET" ? item.winningPrizes.length > 0 ? `ตรวจพบ ${item.winningPrizes.length} · จ่าย 1` : "ตามตาราง 8 รางวัล" : item.payoutRateSnapshot.toFixed(4)}</td>}
             </tr>;
           })}
         </tbody>

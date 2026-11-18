@@ -977,7 +977,7 @@ export function BetSlip({
             <h3 className="bs-step-title"><span>2</span>{isLaoSet ? "เลือกประเภท" : "กำหนดจำนวนเงิน"}</h3>
             {isLaoSet ? (
               <>
-                <p className="bs-step-help">เลือก 4 ตัวตรงเพียงรายการเดียว เลขชุด 4 หลักนี้จะลุ้น 8 รางวัล และรวมจ่ายทุกรางวัลที่เข้าเงื่อนไข</p>
+                <p className="bs-step-help">เลือก 4 ตัวตรงเพียงรายการเดียว ระบบตรวจครบ 8 รางวัล แล้วเลือกจ่ายรางวัลที่มีมูลค่าสูงที่สุด 1 รางวัลต่อชุดราคา</p>
                 <PrizeTypeOptions
                   group={group}
                   selectedIds={selectedIds}

@@ -157,6 +157,7 @@ function evaluateSettlement(
     payoutRateSnapshot: Prisma.Decimal;
     payout: Prisma.Decimal;
     resultValue: string;
+    isPaid: boolean;
   }> = [];
   const billPayouts = new Map<string, Prisma.Decimal>();
 
@@ -181,31 +182,41 @@ function evaluateSettlement(
       bucket.totalItems += 1;
 
       // แยกเฉพาะหวยลาวชุดจาก LotteryType ของงวดและรหัสรายการขาย 201
-      // หนึ่งเลขตรวจครบ 8 เงื่อนไขและรวมจ่ายทุกรางวัลที่เข้าเงื่อนไข
+      // ตรวจครบ 8 เงื่อนไข แต่เลือกจ่ายรางวัลที่มียอดสูงสุดเพียงรางวัลเดียวต่อ BillItem (Bet ID)
       if (laoSetRules && item.prizeType.code === 201) {
         const resultValue = results.byPrizeCode.get(201)?.[0];
         const matchedKeys = resultValue ? laoSetMatchedPrizeKeys(item.number, resultValue) : [];
-        const payoutsOfItem: Prisma.Decimal[] = [];
-        for (const key of matchedKeys) {
+        const candidates = matchedKeys.map((key) => {
           const rule = laoSetRules.get(key);
           if (!rule) throw new ConflictError(`Rulebook หวยลาวชุดไม่ครบ: ไม่พบ ${LAO_SET_PRIZE_LABELS[key]}`);
           const payout = itemPayout(item.stake, rule.payoutRate);
-          payoutsOfItem.push(payout);
-          bucket.payouts.push(payout);
-          bucket.winningItems += 1;
-          payoutsOfBill.push(payout);
+          return { key, rule, payout };
+        });
+        // เมื่อยอดเท่ากัน เลือกตัวแรกตามลำดับกติกาที่ laoSetMatchedPrizeKeys คืนมาเพื่อให้คำนวณซ้ำได้ผลเดิม
+        const selected = candidates.reduce<(typeof candidates)[number] | null>(
+          (highest, candidate) => !highest || candidate.payout.greaterThan(highest.payout) ? candidate : highest,
+          null,
+        );
+        for (const candidate of candidates) {
+          const isPaid = candidate.key === selected?.key;
           winningPrizeRows.push({
             organizationId: item.organizationId,
             billItemId: item.id,
-            prizeTypeId: rule.prizeTypeId,
-            prizeKey: key,
-            prizeLabelSnapshot: LAO_SET_PRIZE_LABELS[key],
-            payoutRateSnapshot: rule.payoutRate,
-            payout,
+            prizeTypeId: candidate.rule.prizeTypeId,
+            prizeKey: candidate.key,
+            prizeLabelSnapshot: LAO_SET_PRIZE_LABELS[candidate.key],
+            payoutRateSnapshot: candidate.rule.payoutRate,
+            payout: candidate.payout,
             resultValue: resultValue!,
+            isPaid,
           });
         }
-        if (payoutsOfItem.length > 0) winningItems.push({ itemId: item.id, payout: sumMoney(payoutsOfItem) });
+        if (selected) {
+          bucket.payouts.push(selected.payout);
+          bucket.winningItems += 1;
+          payoutsOfBill.push(selected.payout);
+          winningItems.push({ itemId: item.id, payout: selected.payout });
+        }
         continue;
       }
 
@@ -577,7 +588,7 @@ export async function listSettlements(actor: Actor, drawId: string) {
   };
   const winningItems = settlements.length === 0 ? [] : draw.lotteryType === "LAO_SET"
     ? (await prisma.billItemWinningPrize.findMany({
-        where: { ...orgScope(actor), billItem: { bill: billWhere } },
+        where: { ...orgScope(actor), isPaid: true, billItem: { bill: billWhere } },
         orderBy: [{ payout: "desc" }, { id: "asc" }],
         select: {
           id: true,
@@ -649,11 +660,15 @@ export async function laoSetSettlementImpact(actor: Actor, drawId: string) {
   const storedPayouts: Prisma.Decimal[] = [];
   const expectedPayouts: Prisma.Decimal[] = [];
   for (const item of items) {
-    const expected = sumMoney(laoSetMatchedPrizeKeys(item.number, draw.officialNumber).map((key) => {
+    const matchedPayouts = laoSetMatchedPrizeKeys(item.number, draw.officialNumber).map((key) => {
       const rule = rules.get(key);
       if (!rule) throw new ConflictError(`Rulebook หวยลาวชุดไม่ครบ: ไม่พบ ${LAO_SET_PRIZE_LABELS[key]}`);
       return itemPayout(item.stake, rule.payoutRate);
-    }));
+    });
+    const expected = matchedPayouts.reduce(
+      (highest, payout) => payout.greaterThan(highest) ? payout : highest,
+      ZERO,
+    );
     storedPayouts.push(item.payout);
     expectedPayouts.push(expected);
     if (!item.payout.equals(expected)) affectedItems += 1;

@@ -581,12 +581,15 @@ model BillItemWinningPrize {
   payoutRateSnapshot Decimal @db.Decimal(12, 4)
   payout             Decimal @db.Decimal(18, 2)
   resultValue        String
+  /// true = รางวัลสูงสุดที่เลือกจ่ายจริง, false = ตรวจพบแต่ไม่จ่ายเพราะมีรางวัลสูงกว่าใน Bet เดียวกัน
+  isPaid             Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([billItemId, prizeKey])
   @@index([organizationId, prizeTypeId])
+  @@index([billItemId, isPaid])
   @@index([organizationId, createdAt])
   @@map("bill_item_winning_prizes")
 }

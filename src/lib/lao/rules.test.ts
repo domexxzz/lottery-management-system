@@ -45,7 +45,7 @@ describe("แยกผลหวยลาว (ใช้ 4 ตัวท้าย�
     expect(keys("659999")).toEqual([]);
   });
 
-  test("ตัวอย่าง 1234 / ผล 561234 เข้าเงื่อนไขครบ 8 รางวัลและรวมจ่ายครบ", () => {
+  test("ตัวอย่าง 1234 / ผล 561234 ตรวจพบครบ 8 รางวัล โดยรางวัลสูงสุดคือ 4 ตัวตรง", () => {
     expect(laoBreakdown("561234")).toEqual({ last4: "1234", last3: "234", first3: "123", last2: "34", first2: "12" });
     expect(laoSetMatchedPrizes("1234", "561234", 30).map((prize) => prize.key)).toEqual([
       "EXACT_4",
@@ -57,7 +57,9 @@ describe("แยกผลหวยลาว (ใช้ 4 ตัวท้าย�
       "FIRST_2",
       "LAST_2",
     ]);
-    expect(laoSetMatchedPrizes("1234", "561234", 30).reduce((sum, prize) => sum + prize.payout, 0)).toBe(39_350);
+    const matches = laoSetMatchedPrizes("1234", "561234", 30);
+    expect(Math.max(...matches.map((prize) => prize.payout))).toBe(25_500);
+    expect(matches.find((prize) => prize.payout === 25_500)?.key).toBe("EXACT_4");
   });
 
   test("ผล 3344 แยกตรวจเลขที่กรอกตาม 4/3/2 ตัวทุกเงื่อนไข", () => {

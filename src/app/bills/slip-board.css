@@ -290,6 +290,7 @@
 .slip-prize-type small, .slip-package-label { width: fit-content; padding: .12rem .42rem; border-radius: 999px; color: #6a3fb8; background: #efe8ff; font-size: .7rem; font-weight: 800; white-space: nowrap; }
 .slip-result-cell { display: grid; justify-items: start; gap: .28rem; }
 .slip-winning-prize-label { display: inline-flex; width: fit-content; padding: .16rem .48rem; border: 1px solid #a7dfc0; border-radius: 999px; color: #08723f; background: #ecfaf2; font-size: .74rem; font-weight: 900; line-height: 1.2; white-space: nowrap; }
+.slip-winning-prize-label.is-suppressed { border-color: #d8e0e8; color: #6b7b8b; background: #f4f6f8; font-weight: 700; }
 .slip-number-label { color: #71859a; font-size: .66rem; font-weight: 700; }
 .slip-item-number span:has(.slip-package-label) { display: grid; justify-items: center; gap: .2rem; }
 .slip-items-table tfoot th, .slip-items-table tfoot td { padding: .85rem .9rem; border-top: 2px solid var(--sb-border); background: #f8fbff; text-align: left; }

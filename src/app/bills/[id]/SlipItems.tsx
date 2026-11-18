@@ -18,7 +18,7 @@ export type SlipItemRow = {
   status: "DRAFT" | "PENDING" | "WON" | "LOST" | "CANCELLED";
   statusLabel: string;
   /** รางวัลย่อยทั้งหมดที่เลขชุดนี้ถูก */
-  winningPrizes: Array<{ id: string; label: string; rate: number; payout: number }>;
+  winningPrizes: Array<{ id: string; label: string; rate: number; payout: number; isPaid: boolean }>;
   /** ผลได้เสีย = ยอดจ่ายรางวัลเต็ม (เดิมพัน × อัตราจ่าย) ไม่หักอะไร; null = รอผล */
   prize: number | null;
 };
@@ -100,7 +100,7 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
                   <td>
                     <span className="slip-result-cell">
                       <span className={`slip-status slip-status-${row.status.toLowerCase()}`}>{row.statusLabel}</span>
-                      {row.winningPrizes.map((prize) => <strong key={prize.id} className="slip-winning-prize-label">ถูกรางวัล {prize.label} · {baht(prize.payout)}</strong>)}
+                      {row.winningPrizes.map((prize) => <strong key={prize.id} className={`slip-winning-prize-label ${prize.isPaid ? "is-paid" : "is-suppressed"}`}>{prize.isPaid ? "เลือกจ่าย" : "ตรวจพบ · ไม่จ่าย"} {prize.label} · {baht(prize.payout)}</strong>)}
                     </span>
                   </td>
                   <td className={`num ${row.prize !== null && row.prize > 0 ? "is-plus" : ""}`}>{row.prize === null ? "รอผล" : baht(row.prize)}</td>
@@ -138,7 +138,7 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
                 </div>
                 <dl>
                   <div><dt>อัตราจ่าย</dt><dd>{row.rateText}</dd></div>
-                  <div><dt>ผลรางวัล</dt><dd>{row.prize === null ? "รอผล" : row.winningPrizes.length > 0 ? <><span>{row.statusLabel} {row.winningPrizes.length} รางวัล</span>{row.winningPrizes.map((prize) => <strong key={prize.id} className="slip-winning-prize-label">ถูกรางวัล {prize.label} · {baht(prize.payout)}</strong>)}</> : row.statusLabel}</dd></div>
+                  <div><dt>ผลรางวัล</dt><dd>{row.prize === null ? "รอผล" : row.winningPrizes.length > 0 ? <><span>ตรวจพบ {row.winningPrizes.length} รางวัล · เลือกจ่าย 1 รางวัล</span>{row.winningPrizes.map((prize) => <strong key={prize.id} className={`slip-winning-prize-label ${prize.isPaid ? "is-paid" : "is-suppressed"}`}>{prize.isPaid ? "เลือกจ่าย" : "ตรวจพบ · ไม่จ่าย"} {prize.label} · {baht(prize.payout)}</strong>)}</> : row.statusLabel}</dd></div>
                 </dl>
               </div>
               <footer className="slip-item-foot">
