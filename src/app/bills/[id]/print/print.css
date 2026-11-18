@@ -94,6 +94,12 @@
   letter-spacing: 0.1em;
 }
 
+.sheet-winning-label {
+  display: block;
+  margin-top: .5mm;
+  font-weight: bold;
+}
+
 .sheet-items tfoot th,
 .sheet-items tfoot td {
   border-top: 2px solid #000;

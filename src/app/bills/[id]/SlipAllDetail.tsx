@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { BET_STATUS_LABEL, compactRate, drawDateLabel, itemBetStatus, lotteryLabel, type BetStatus } from "@/lib/bills/betting";
 import { LotteryFlag } from "../ThaiFlag";
 import { SlipItems, type SlipItemRow } from "./SlipItems";
-import { laoSetPackageLabel } from "@/lib/lao/rules";
+import { laoSetPackageLabel, laoSetWinningPrize } from "@/lib/lao/rules";
 
 type SlipPart = {
   id: string;
@@ -12,7 +12,7 @@ type SlipPart = {
   totalStake: Prisma.Decimal;
   totalPayout: Prisma.Decimal;
   agent: { code: string; name: string };
-  draw: { name: string; drawDate: Date | null; lotteryType: string };
+  draw: { name: string; drawDate: Date | null; lotteryType: string; officialNumber: string | null };
   items: Array<{
     id: string;
     number: string;
@@ -34,6 +34,9 @@ export function SlipAllDetail({ parts }: { parts: SlipPart[] }) {
   const rows: SlipItemRow[] = parts.flatMap((part) => part.items.map((item) => {
     order += 1;
     const status = itemBetStatus(part.status, item.isWinner);
+    const winningPrize = part.draw.lotteryType === "LAO_SET" && status === "WON" && part.draw.officialNumber
+      ? laoSetWinningPrize(item.number, part.draw.officialNumber, item.stake)
+      : null;
     return {
       id: item.id,
       order,
@@ -49,6 +52,7 @@ export function SlipAllDetail({ parts }: { parts: SlipPart[] }) {
         : part.status === "DRAFT" ? "—" : `${compactRate(item.payoutRateSnapshot)} เท่า`,
       status,
       statusLabel: BET_STATUS_LABEL[status],
+      winningPrizeLabel: winningPrize?.label ?? null,
       prize: status === "WON" ? Number(item.payout) : status === "LOST" || status === "CANCELLED" ? 0 : null,
     };
   }));

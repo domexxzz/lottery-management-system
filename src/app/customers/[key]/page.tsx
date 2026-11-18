@@ -7,6 +7,7 @@ import { visibleBillNumber } from "@/lib/bills/numbering";
 import { customerNameFromProfileKey } from "@/lib/customers/profile-key";
 import { prisma } from "@/lib/db";
 import { DashboardIcon as Icon } from "@/app/DashboardIcon";
+import { laoSetWinningPrize } from "@/lib/lao/rules";
 import "./profile.css";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +63,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           select: {
             id: true,
             drawSequence: true,
-            draw: { select: { id: true, name: true, cutoffAt: true } },
+            draw: { select: { id: true, name: true, cutoffAt: true, lotteryType: true, officialNumber: true } },
           },
         },
       },
@@ -102,6 +103,12 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const payoutRatio = gross > 0 ? payout / gross * 100 : 0;
   const primaryAgent = agentRows[0]?.agent;
   const latestBill = recentBills[0];
+  const winningPrizeLabelByItemId = new Map(winningItems.map((item) => {
+    const label = item.bill.draw.lotteryType === "LAO_SET" && item.bill.draw.officialNumber
+      ? laoSetWinningPrize(item.number, item.bill.draw.officialNumber, item.stake)?.label ?? null
+      : null;
+    return [item.id, label] as const;
+  }));
 
   return <main className="customer-profile-page">
     <div className="customer-topbar"><p className="customer-back"><Link href="/bills">← กลับหน้ารายการบิล</Link></p><span>ข้อมูลแบบอ่านอย่างเดียว</span></div>
@@ -113,7 +120,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
 
     <section className="customer-panel customer-winning-history" aria-label="ประวัติการถูกรางวัล">
       <header><div><p>Prize History</p><h2>ประวัติการถูกรางวัล</h2></div><span>{winningItemCount} รายการ</span></header>
-      {winningItems.length === 0 ? <p className="customer-empty">ลูกค้ารายนี้ยังไม่มีประวัติถูกรางวัล</p> : <><div className="customer-table-wrap"><table><thead><tr><th>งวด</th><th>เลขบิล</th><th>ประเภทรางวัล</th><th>เลขที่ถูก</th><th className="num">เงินที่ลง</th><th className="num">เงินรางวัล</th></tr></thead><tbody>{winningItems.map((item) => <tr key={item.id}><td><Link href={`/draws/${item.bill.draw.id}`}>{item.bill.draw.name}</Link><small>{DATE_TIME.format(item.bill.draw.cutoffAt)}</small></td><td><Link href={`/bills/${item.bill.id}#bill-items`}>{visibleBillNumber(item.bill.drawSequence)}</Link></td><td><strong>{item.prizeType.code}. {item.prizeType.name}</strong></td><td><b className="winning-number">{item.number}</b></td><td className="num">{MONEY.format(Number(item.stake))}</td><td className="num payout">{MONEY.format(Number(item.payout))}</td></tr>)}</tbody></table></div>{winningItemCount > winningItems.length && <p className="customer-history-note">แสดง 100 รายการล่าสุดจากทั้งหมด {winningItemCount} รายการ</p>}</>}
+      {winningItems.length === 0 ? <p className="customer-empty">ลูกค้ารายนี้ยังไม่มีประวัติถูกรางวัล</p> : <><div className="customer-table-wrap"><table><thead><tr><th>งวด</th><th>เลขบิล</th><th>ประเภทรางวัล</th><th>เลขที่ถูก</th><th className="num">เงินที่ลง</th><th className="num">เงินรางวัล</th></tr></thead><tbody>{winningItems.map((item) => <tr key={item.id}><td><Link href={`/draws/${item.bill.draw.id}`}>{item.bill.draw.name}</Link><small>{DATE_TIME.format(item.bill.draw.cutoffAt)}</small></td><td><Link href={`/bills/${item.bill.id}#bill-items`}>{visibleBillNumber(item.bill.drawSequence)}</Link></td><td><strong>{winningPrizeLabelByItemId.get(item.id) ?? `${item.prizeType.code}. ${item.prizeType.name}`}</strong></td><td><b className="winning-number">{item.number}</b></td><td className="num">{MONEY.format(Number(item.stake))}</td><td className="num payout">{MONEY.format(Number(item.payout))}</td></tr>)}</tbody></table></div>{winningItemCount > winningItems.length && <p className="customer-history-note">แสดง 100 รายการล่าสุดจากทั้งหมด {winningItemCount} รายการ</p>}</>}
     </section>
 
     <section className="customer-insight-grid">

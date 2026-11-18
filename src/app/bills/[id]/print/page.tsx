@@ -3,7 +3,7 @@ import { getActor } from "@/lib/auth/context";
 import { getBill } from "@/lib/bills/service";
 import { statusLabel } from "@/lib/bills/lifecycle";
 import { NotFoundError } from "@/lib/errors";
-import { laoSetPackageLabel } from "@/lib/lao/rules";
+import { laoSetPackageLabel, laoSetWinningPrize } from "@/lib/lao/rules";
 import "./print.css";
 
 export const dynamic = "force-dynamic";
@@ -95,9 +95,13 @@ export default async function PrintBillPage({
         <tbody>
           {bill.items.map((item) => {
             const packageLabel = bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.stake) : null;
+            const winningPrize = bill.draw.lotteryType === "LAO_SET" && bill.status === "SETTLED" && item.isWinner && bill.draw.officialNumber
+              ? laoSetWinningPrize(item.number, bill.draw.officialNumber, item.stake)
+              : null;
             return <tr key={item.id}>
               <td>
                 {item.prizeType.code}. {item.prizeType.name}{packageLabel ? ` · ${packageLabel}` : ""}
+                {winningPrize && <small className="sheet-winning-label">ถูกรางวัล: {winningPrize.label}</small>}
               </td>
               <td className="number-cell">{item.number}</td>
               <td className="num">{item.stake.toFixed(2)}</td>

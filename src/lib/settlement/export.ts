@@ -4,7 +4,7 @@ import { NotFoundError } from "@/lib/errors";
 import { visibleBillNumber } from "@/lib/bills/numbering";
 import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
 import type { TableWorkbookCell } from "@/lib/excel/table-workbook";
-import { laoSetPackageLabel } from "@/lib/lao/rules";
+import { laoSetPackageLabel, laoSetWinningPrize } from "@/lib/lao/rules";
 
 /**
  * ไฟล์สำหรับกระทบยอดด้วยมือ (LOT-22)
@@ -29,6 +29,7 @@ const COLUMNS = [
   "อัตราจ่ายที่ล็อกไว้",
   "ผลที่ออก",
   "ถูกรางวัล",
+  "รางวัลที่ถูก",
   "ยอดจ่าย (บาท)",
 ] as const;
 
@@ -87,6 +88,9 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
     for (const item of bill.items) {
       const resultValue = resultByPrizeType.get(item.prizeTypeId);
       const isLaoSetEntry = draw.lotteryType === "LAO_SET" && item.prizeType.code === 201;
+      const winningPrize = isLaoSetEntry && resultValue !== undefined && item.isWinner
+        ? laoSetWinningPrize(item.number, resultValue, item.stake)
+        : null;
       rows.push([
           lotteryLabel(draw.lotteryType),
           drawDateLabel(draw),
@@ -102,6 +106,7 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
           isLaoSetEntry ? `ตามตาราง ${laoSetPackageLabel(item.stake) ?? ""}`.trim() : Number(item.payoutRateSnapshot),
           resultValue ?? "ยังไม่มีผล",
           resultValue === undefined ? "รอผล" : item.isWinner ? "ถูก" : "ไม่ถูก",
+          winningPrize?.label ?? "-",
           Number(item.payout),
         ]);
     }

@@ -12,7 +12,7 @@ import {
 } from "@/lib/bills/betting";
 import { LotteryFlag } from "../ThaiFlag";
 import { SlipItems, type SlipItemRow } from "./SlipItems";
-import { laoSetPackageLabel } from "@/lib/lao/rules";
+import { laoSetPackageLabel, laoSetWinningPrize } from "@/lib/lao/rules";
 
 type SlipItem = {
   id: string;
@@ -37,7 +37,7 @@ type SlipBill = {
   confirmedAt: Date | null;
   createdBy: { displayName: string };
   agent: { code: string; name: string };
-  draw: { name: string; drawDate: Date | null; lotteryType: string; cutoffAt: Date; status: string };
+  draw: { name: string; drawDate: Date | null; lotteryType: string; cutoffAt: Date; status: string; officialNumber: string | null };
   items: SlipItem[];
 };
 
@@ -70,6 +70,9 @@ function profitOf(status: BetStatus, item: SlipItem): number | null {
 export function SlipDetail({ bill, settledAt, showDrawLink, beforeItems }: { bill: SlipBill; settledAt: Date | null; showDrawLink: boolean; beforeItems?: ReactNode }) {
   const rows: SlipItemRow[] = bill.items.map((item, index) => {
     const status = itemBetStatus(bill.status, item.isWinner);
+    const winningPrize = bill.draw.lotteryType === "LAO_SET" && status === "WON" && bill.draw.officialNumber
+      ? laoSetWinningPrize(item.number, bill.draw.officialNumber, item.stake)
+      : null;
     return {
       id: item.id,
       order: index + 1,
@@ -85,6 +88,7 @@ export function SlipDetail({ bill, settledAt, showDrawLink, beforeItems }: { bil
         : bill.status === "DRAFT" ? "—" : `${compactRate(item.payoutRateSnapshot)} เท่า`,
       status,
       statusLabel: BET_STATUS_LABEL[status],
+      winningPrizeLabel: winningPrize?.label ?? null,
       prize: status === "WON" ? Number(item.payout) : status === "LOST" || status === "CANCELLED" ? 0 : null,
     };
   });

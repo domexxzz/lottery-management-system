@@ -858,7 +858,7 @@ export async function getBill(actor: Actor, billId: string) {
         include: { prizeType: { select: { code: true, name: true, digits: true } } },
       },
       agent: { select: { code: true, name: true } },
-      draw: { select: { name: true, cutoffAt: true, status: true, drawDate: true, lotteryType: true } },
+      draw: { select: { name: true, cutoffAt: true, status: true, drawDate: true, lotteryType: true, officialNumber: true } },
       createdBy: { select: { displayName: true } },
       cancelledBy: { select: { displayName: true } },
       cancelRequestedBy: { select: { displayName: true } },
