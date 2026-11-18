@@ -243,14 +243,19 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
         });
       }
     }
-    if (seen.has(key)) {
+    // หวยลาวชุดราคา 30/60/120 เป็นคนละประเภทย่อย จึงแทงเลขและประเภทตรง/โต๊ด
+    // เดียวกันได้พร้อมกันทุกชุด แต่แพ็กเกจราคาเดิมซ้ำยังถือว่าเป็นรายการซ้ำ
+    const duplicateKey = LAO_SET_ACTIVE_CODES.some((code) => code === rule.code)
+      ? `${key}:package-${item.stake.toFixed(2)}`
+      : key;
+    if (seen.has(duplicateKey)) {
       issues.push({
         itemIndex: index,
         code: "DUPLICATE_ITEM",
-        message: `รายการที่ ${index + 1}: ซ้ำกับรายการก่อนหน้า (${rule.name} ${item.number})`,
+        message: `รายการที่ ${index + 1}: ซ้ำกับรายการก่อนหน้า (${rule.name} ${item.number}${duplicateKey === key ? "" : ` ชุด ${item.stake.toFixed(0)} บาท`})`,
       });
     }
-    seen.add(key);
+    seen.add(duplicateKey);
 
     stakePerNumber.set(key, (stakePerNumber.get(key) ?? ZERO).plus(item.stake));
     billTotal = billTotal.plus(item.stake);

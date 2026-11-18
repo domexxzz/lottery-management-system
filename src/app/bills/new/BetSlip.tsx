@@ -486,7 +486,9 @@ export function BetSlip({
         ? [
             ...sameDraw.filter((existing) => !accepted.some((next) => {
               const rule = rules.get(next.prizeTypeId);
-              return rule && entryKey(existing.prizeTypeId, existing.number, rules.get(existing.prizeTypeId)?.matchRule ?? "EXACT") === entryKey(next.prizeTypeId, next.number, rule.matchRule);
+              return rule
+                && existing.stake === next.stake
+                && entryKey(existing.prizeTypeId, existing.number, rules.get(existing.prizeTypeId)?.matchRule ?? "EXACT") === entryKey(next.prizeTypeId, next.number, rule.matchRule);
             })),
             ...accepted,
           ].map((entry) => ({ ...entry, drawId: targetDraw }))
@@ -865,7 +867,7 @@ export function BetSlip({
               const restriction = restrictionOf(entry, entry.drawId);
               const rejectedReason = rejectedReasons.get(`${entry.prizeTypeId}:${entry.number}`);
               return (
-                <li key={`${entry.drawId}:${entry.prizeTypeId}:${entry.number}`} className={`bs-entry is-${section.lottery?.type.toLowerCase() ?? "x"} ${restriction?.kind === "REDUCED_RATE" ? "is-restricted" : ""} ${rejectedReason ? "is-rejected" : ""}`}>
+                <li key={`${entry.drawId}:${entry.prizeTypeId}:${entry.number}:${entry.stake}`} className={`bs-entry is-${section.lottery?.type.toLowerCase() ?? "x"} ${restriction?.kind === "REDUCED_RATE" ? "is-restricted" : ""} ${rejectedReason ? "is-rejected" : ""}`}>
                   <span className="bs-entry-main">
                     <span className={`bs-badge bs-badge-${badgeKey(rule)}`}>{rule?.name ?? "-"}</span>
                     {section.lottery?.type === "LAO_SET" && <em className="bs-entry-package">{laoSetPackageLabel(entry.stake)}</em>}

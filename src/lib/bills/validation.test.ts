@@ -145,6 +145,20 @@ describe("ยอดเดิมพัน", () => {
 });
 
 describe("รายการซ้ำ", () => {
+  test("หวยลาวชุดเลขเดียวกันเล่นชุด 30/60/120 พร้อมกันได้ แต่ชุดราคาเดิมซ้ำไม่ได้", () => {
+    const rules = new Map([[LAO_SET_EXACT.id, LAO_SET_EXACT]]);
+    expect(run({ rules, items: [
+      { prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(30) },
+      { prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(60) },
+      { prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(120) },
+    ] })).toEqual([]);
+    const duplicate = run({ rules, items: [
+      { prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(30) },
+      { prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(30) },
+    ] });
+    expect(codes(duplicate)).toContain("DUPLICATE_ITEM");
+  });
+
   test("ตรวจพบเลขซ้ำในประเภทรางวัลเดียวกัน", () => {
     const issues = run({
       items: [

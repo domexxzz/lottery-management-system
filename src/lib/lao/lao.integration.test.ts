@@ -100,9 +100,14 @@ describe("รับบิลหวยลาว", () => {
     const placed = await placeBill(f.actors.AGENT1, {
       drawId: laoSet.id,
       title: "ก",
-      items: [bet(201, "1234", "30"), bet(203, "2143", "60"), bet(201, "5678", "120")],
+      items: [
+        bet(201, "1234", "30"), bet(201, "1234", "60"), bet(201, "1234", "120"),
+        bet(203, "2143", "60"),
+      ],
     });
     expect(placed.billNumber).toMatch(/^A00103\d{6}0001$/);
+    const packageItems = await prisma.billItem.findMany({ where: { billId: placed.billId, prizeTypeId: pt[201] }, orderBy: { stake: "asc" } });
+    expect(packageItems.map((item) => item.stake.toFixed(0))).toEqual(["30", "60", "120"]);
     await expect(placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "ประเภทเดิม", items: [bet(202, "123", "5")] }))
       .rejects.toThrow(/ประเภทรางวัล/);
     await expect(placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "ราคาอื่น", items: [bet(201, "9999", "50")] }))
