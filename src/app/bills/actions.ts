@@ -7,7 +7,7 @@ import { requireActor } from "@/lib/auth/context";
 import {
   confirmBill,
   createDraftBill,
-  placeBill,
+  placeSlip,
   replaceDraftItems,
   softDeleteBillBeforeCutoff,
   updateBillBeforeCutoff,
@@ -193,17 +193,71 @@ function readSlip(formData: FormData) {
   } as const;
 }
 
-/** หน้าสร้างบิล: สร้างและยืนยันบิลในขั้นตอนเดียว */
+const SlipItemSchema = z.object({
+  prizeTypeId: z.string().min(1),
+  number: z.string().regex(/^\d{1,6}$/, "เลขไม่ถูกต้อง"),
+  stake: z.number().int("ยอดเดิมพันต้องเป็นจำนวนเต็ม").positive("ยอดเดิมพันต้องมากกว่า 0").max(MAX_STAKE_PER_ITEM, "ยอดเดิมพันต่อรายการต้องไม่เกิน 1,000 บาท"),
+});
+
+/** บิลเดียวหลายประเภทหวย: รายการแยกตามงวด */
+const PartsSchema = z
+  .array(z.object({ drawId: z.string().min(1, "ไม่พบงวดที่เปิดรับ"), items: z.array(SlipItemSchema) }))
+  .min(1, "ยังไม่มีรายการแทง")
+  .max(6, "บิลเดียวรวมได้ไม่เกิน 6 งวด")
+  .refine((parts) => parts.some((part) => part.items.length > 0), "ยังไม่มีรายการแทง")
+  .refine((parts) => parts.reduce((sum, part) => sum + part.items.length, 0) <= 500, "รายการในโพยเดียวต้องไม่เกิน 500 รายการ");
+
+/**
+ * อ่านบิลจากหน้าสร้างบิล
+ * หน้าใหม่ส่ง parts (หลายประเภทหวยได้) ฟอร์มเดิมส่ง drawId + items ประเภทเดียว
+ */
+function readSlipParts(formData: FormData) {
+  const rawParts = formData.get("parts");
+  if (rawParts === null) {
+    const single = readSlip(formData);
+    if (!("data" in single) || !single.data) return { error: ("error" in single ? single.error : undefined) ?? "ข้อมูลไม่ถูกต้อง" } as const;
+    const { drawId, items, ...rest } = single.data;
+    return { data: { ...rest, parts: [{ drawId, items }] } } as const;
+  }
+  let parts: unknown;
+  try {
+    parts = JSON.parse(String(rawParts));
+  } catch {
+    return { error: "รายการแทงไม่ถูกต้อง" } as const;
+  }
+  const parsedParts = PartsSchema.safeParse(parts);
+  if (!parsedParts.success) return { error: parsedParts.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง" } as const;
+  const title = String(formData.get("title") ?? "").trim();
+  if (title.length === 0) return { error: "กรุณากรอกชื่อลูกค้า" } as const;
+  if (title.length > 120) return { error: "ชื่อลูกค้ายาวเกินไป" } as const;
+  const representativeUserId = String(formData.get("representativeUserId") ?? "").trim() || undefined;
+  const rawKey = String(formData.get("submissionKey") ?? "").trim();
+  const submissionKey = /^[A-Za-z0-9-]{16,64}$/.test(rawKey) ? rawKey : undefined;
+  return {
+    data: {
+      title,
+      representativeUserId,
+      submissionKey,
+      parts: parsedParts.data.map((part) => ({
+        drawId: part.drawId,
+        items: part.items.map((item) => ({ ...item, stake: String(item.stake) })),
+      })),
+    },
+  } as const;
+}
+
+/** หน้าสร้างบิล: สร้างและยืนยันบิลในขั้นตอนเดียว (หลายประเภทหวยได้ ผู้ใช้เห็นเป็นบิลเดียว) */
 export async function placeBillAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const actor = await requireActor();
-  const slip = readSlip(formData);
+  const slip = readSlipParts(formData);
   if ("error" in slip) return { error: slip.error ?? "ข้อมูลไม่ถูกต้อง" };
 
   let billId: string;
   let duplicate = false;
   try {
-    const placed = await placeBill(actor, slip.data);
-    billId = placed.billId;
+    const placed = await placeSlip(actor, slip.data);
+    // เปิดหน้าส่วนแรกของบิล หน้านั้นแสดงทุกประเภทหวยในบิลเดียวกัน
+    billId = placed.bills[0]!.billId;
     duplicate = placed.duplicate === true;
   } catch (error) {
     if (error instanceof BillItemsRejectedError) return { error: error.message, rejected: error.rejected };

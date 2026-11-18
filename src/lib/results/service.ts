@@ -160,6 +160,17 @@ export async function enterResultsBatch(
         resultDigits: true,
         matchRule: true,
         isActive: true,
+        // ประเภทที่เพิ่งปิดใช้งานยังต้องลงผลได้ หากงวดนี้มีบิลเก่าที่แทงไว้แล้ว
+        billItems: {
+          where: {
+            bill: {
+              drawId: input.drawId,
+              status: { notIn: ["DRAFT", "CANCELLED"] },
+            },
+          },
+          take: 1,
+          select: { id: true },
+        },
       },
     }),
   ]);
@@ -180,7 +191,9 @@ export async function enterResultsBatch(
       throw new ValidationError("เลขสลับเป็นตัวช่วยกรอกเลขตัวบน ไม่ต้องลงผลรางวัลแยก");
     }
     if (type.lotteryType !== draw.lotteryType) throw new ValidationError(`รางวัล ${type.code} ไม่ใช่รางวัลของงวดประเภทนี้`);
-    if (!type.isActive) throw new ConflictError(`รางวัล ${type.code} ถูกปิดใช้งานแล้ว`);
+    if (!type.isActive && type.billItems.length === 0) {
+      throw new ConflictError(`รางวัล ${type.code} ถูกปิดใช้งานแล้ว`);
+    }
     const values = (result.values ?? [result.value ?? ""]).map((value) => value.trim()).filter(Boolean);
     const requiredCount = resultValueCount(type.code);
     if (values.length !== requiredCount) {

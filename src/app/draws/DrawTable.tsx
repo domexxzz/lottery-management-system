@@ -82,7 +82,7 @@ export function DrawTable({
             </button> : <DrawReviewButton href={`/draws/${draw.id}#result-entry-list`} drawName={draw.name} label={draw.status === "RESULT_PENDING" ? "ตรวจผลรางวัล" : "ดูผลรางวัล"} />}
           </td>}
           {(canManage || canDelete) && <td><div className="draw-management-actions">
-            {canManage && draw.status === "OPEN" && <LockDrawForm drawId={draw.id} />}
+            {canManage && draw.status === "OPEN" && <LockDrawForm drawId={draw.id} paired={draw.laoFamilyId !== null} />}
             {canDelete && <DeleteDrawForm drawId={draw.id} drawName={draw.name} billCount={draw._count.bills} />}
           </div></td>}
         </tr>;

@@ -16,6 +16,7 @@ export function PlacedBillPanel({
   itemCount,
   totalStake,
   lotteryType,
+  parts = [],
   draftScope,
   duplicate,
 }: {
@@ -24,6 +25,8 @@ export function PlacedBillPanel({
   itemCount: number;
   totalStake: string;
   lotteryType: string;
+  /** บิลหลายประเภทหวย: ยอดของแต่ละส่วน (ว่าง = ประเภทเดียว) */
+  parts?: { label: string; itemCount: number; totalStake: string }[];
   draftScope: string;
   duplicate: boolean;
 }) {
@@ -44,6 +47,16 @@ export function PlacedBillPanel({
           <div><dt>จำนวนรายการ</dt><dd>{itemCount.toLocaleString("th-TH")} รายการ</dd></div>
           <div className="is-total"><dt>ยอดรวม</dt><dd>{total} บาท</dd></div>
         </dl>
+        {parts.length > 1 && (
+          <ul className="placed-bill-parts" aria-label="ประเภทหวยในบิลนี้">
+            {parts.map((part) => (
+              <li key={part.label}>
+                <span>{part.label}</span>
+                <b>{part.itemCount.toLocaleString("th-TH")} รายการ · {Number(part.totalStake).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท</b>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       <nav className="placed-bill-actions" aria-label="ทำต่อหลังสร้างบิล">
         <Link href={`/bills/new?lottery=${lotteryType}`} className="placed-bill-next">＋ สร้างบิลถัดไป</Link>

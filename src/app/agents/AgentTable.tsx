@@ -72,6 +72,7 @@ export function AgentTable({
   const [openId, setOpenId] = useState<string | null>(null);
   // รูปแบบการแสดงผล: การ์ด (ค่าเริ่มต้น) หรือตาราง
   const [view, setView] = useState<"table" | "card">("card");
+  const excelHref = `${csvHref}${csvHref.includes("?") ? "&" : "?"}format=xlsx`;
 
   const rows = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("th-TH");
@@ -151,7 +152,8 @@ export function AgentTable({
         <button type="button" aria-pressed={view === "table"} onClick={() => setView("table")}>ตาราง</button>
         <button type="button" aria-pressed={view === "card"} onClick={() => setView("card")}>การ์ด</button>
       </div>
-      <a className="agent-table-csv" href={csvHref}>ดาวน์โหลด CSV</a>
+      <a className="agent-table-csv is-primary" href={excelHref}>ดาวน์โหลด Excel</a>
+      <a className="agent-table-csv" href={csvHref}>CSV</a>
     </div>
 
     <div className="agent-table-period" role="group" aria-label="ดูยอดตามช่วงวันที่">

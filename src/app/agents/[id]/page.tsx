@@ -129,18 +129,8 @@ export default async function AgentProfilePage({
     <header className="agent-profile-hero">
       <div className="agent-profile-person"><span>{agent.code.slice(0, 2)}</span><div><p>Agent Intelligence Profile</p><h1>{agent.code} · {agent.name}</h1><div><b className={`profile-status status-${agent.status.toLowerCase()}`}>{AGENT_STATUS[agent.status]}</b><small>{agent.user ? `บัญชี ${agent.user.login}` : "ยังไม่ผูกบัญชีผู้ใช้"}</small></div></div></div>
       <div className="agent-profile-hero-actions">
-        {/*
-          * ปุ่มนี้ขึ้นเฉพาะเมื่อ Agent ผูกบัญชีผู้ใช้ไว้แล้ว
-          * ถ้ายังไม่ผูกก็ไม่มีใครให้ทักและกดไปก็ได้แต่หน้าว่าง
-          *
-          * หน้านี้เปิดได้เฉพาะคนที่มีสิทธิ์ report.viewAllAgents ซึ่งคือ
-          * Owner และ Admin ทั้งคู่คุยกับตัวแทนได้อยู่แล้วตามกฎใน policy.ts
-          */}
         {agent.user && (
           <div className="agent-profile-buttons">
-            <Link className="agent-profile-chat" href={`/messages?user=${agent.user.id}`}>
-              ส่งข้อความ
-            </Link>
             {/* หน้าแก้ไขผู้ใช้ต้องมีสิทธิ์ user.manage จึงซ่อนปุ่มจากคนที่ไม่มีสิทธิ์ */}
             {can(actor.role, "user.manage") && (
               <Link className="agent-profile-edit" href={`/users/${agent.user.id}/edit`}>

@@ -9,7 +9,7 @@ import {
   type BetPrizeType,
   type MatchRuleName,
 } from "@/lib/bills/betting";
-import { LAO_PRIZE_TYPES, type LaoSegment } from "@/lib/lao/rules";
+import { LAO_PRIZE_TYPES, LAO_SET_PACKAGE_PAYOUTS, LAO_SET_PACKAGE_PRICES, type LaoSegment } from "@/lib/lao/rules";
 import type { SlipRestriction } from "./BetSlip";
 
 /**
@@ -63,6 +63,9 @@ function resultNote(lotteryType: string): string {
   if (lotteryType === "THAI_GOVERNMENT") {
     return "ตัดสินจากผลสลากกินแบ่งรัฐบาลที่ประกาศทางการ เลขบนอ้างอิงรางวัลที่ 1 ส่วนเลขล่างอ้างอิงเลขท้าย 2 ตัว";
   }
+  if (lotteryType === "LAO_SET") {
+    return "ตัดสินจาก 4 ตัวท้ายของเลขที่ออก (ผลยาว 4–6 หลัก) เช่น ออก 651234 ใช้ 1234 · 4 ตัวตรงต้องเรียงตรง · 4 ตัวโต๊ดสลับตำแหน่งได้แต่ต้องมีเลขครบทุกตัว";
+  }
   return "ตัดสินจาก 4 ตัวท้ายของเลขที่ออก (ผลยาว 4–6 หลัก) เช่น ออก 651234 ใช้ 1234 · 3 ตัวท้าย 234 · 3 ตัวหน้า 123 · 2 ตัวบน 34 · 2 ตัวล่าง 12";
 }
 
@@ -85,6 +88,7 @@ export function RulesDialog({
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const groups = groupPrizeTypes(prizeTypes);
+  const isLaoSet = lotteryType === "LAO_SET";
   const example = groups.filter((group) => group.key !== "run").at(-1)?.prizeTypes[0];
   const nameById = new Map(prizeTypes.map((prizeType) => [prizeType.id, prizeType.name]));
 
@@ -125,7 +129,22 @@ export function RulesDialog({
 
           <section>
             <h3>อัตราจ่าย</h3>
-            {groups.length === 0 ? <p className="bs-rules-empty">ยังไม่มีประเภทที่เปิดรับ</p> : (
+            {isLaoSet ? (
+              <div className="bs-rules-table-wrap">
+                <table className="bs-rules-table">
+                  <thead><tr><th>ราคาเล่นต่อเลข/ประเภท</th><th>4 ตัวตรง</th><th>4 ตัวโต๊ด</th></tr></thead>
+                  <tbody>
+                    {LAO_SET_PACKAGE_PAYOUTS.map((item) => (
+                      <tr key={item.price}>
+                        <td><strong>{item.price.toLocaleString("th-TH")} บาท</strong></td>
+                        <td className="bs-rules-rate">{item.exact.toLocaleString("th-TH")}</td>
+                        <td className="bs-rules-rate">{item.permutation.toLocaleString("th-TH")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : groups.length === 0 ? <p className="bs-rules-empty">ยังไม่มีประเภทที่เปิดรับ</p> : (
               <div className="bs-rules-table-wrap">
                 <table className="bs-rules-table">
                   <thead><tr><th>ประเภท</th><th>ถูกเมื่อ</th><th>จ่ายบาทละ</th></tr></thead>
@@ -147,14 +166,16 @@ export function RulesDialog({
                 </table>
               </div>
             )}
-            {example && <p className="bs-rules-note">ตัวอย่าง: แทง {example.name} 10 บาท ถูกได้ {(Number(example.payoutRate) * 10).toLocaleString("th-TH")} บาท (10 × {compactRate(example.payoutRate)})</p>}
+            {isLaoSet
+              ? <p className="bs-rules-note">เลือกได้เฉพาะ {LAO_SET_PACKAGE_PRICES.join(" / ")} บาท ไม่สามารถกรอกราคาอื่นได้ เงินรางวัลในตารางคือยอดรวมที่ได้รับเมื่อถูก</p>
+              : example && <p className="bs-rules-note">ตัวอย่าง: แทง {example.name} 10 บาท ถูกได้ {(Number(example.payoutRate) * 10).toLocaleString("th-TH")} บาท (10 × {compactRate(example.payoutRate)})</p>}
           </section>
 
           <section>
             <h3>กติกาการแทง</h3>
             <ul className="bs-rules-list">
               <li>{resultNote(lotteryType)}</li>
-              <li>แทงขั้นต่ำ {MIN_STAKE_PER_ITEM} บาท สูงสุด {MAX_STAKE_PER_ITEM.toLocaleString("th-TH")} บาท ต่อเลขต่อรายการ ยอดรวมทั้งบิลไม่จำกัด</li>
+              <li>{isLaoSet ? `หวยลาวชุดเล่นได้เฉพาะราคา ${LAO_SET_PACKAGE_PRICES.join(" / ")} บาทต่อเลขต่อประเภท` : `แทงขั้นต่ำ ${MIN_STAKE_PER_ITEM} บาท สูงสุด ${MAX_STAKE_PER_ITEM.toLocaleString("th-TH")} บาท ต่อเลขต่อรายการ ยอดรวมทั้งบิลไม่จำกัด`}</li>
               <li>ได้เฉพาะประเภทที่แทง ถ้าเลขเดียวกันถูกหลายประเภทที่แทงไว้ ได้รับรวมทุกประเภท</li>
               <li>ปุ่ม &ldquo;สลับเลข&rdquo; ช่วยแตกเลขทุกชุดเป็นรายการแยก แต่ละรายการคิดเงินแยกกัน ไม่ใช่ประเภทรางวัลใหม่</li>
               <li>เลขอั้นจ่ายตามอัตราที่ลดลง และเลขปิดรับ/เลขเต็มแทงไม่ได้ ระบบตรวจซ้ำอีกครั้งตอนยืนยันบิล</li>

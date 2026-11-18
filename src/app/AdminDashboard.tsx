@@ -54,7 +54,7 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
     prisma.billAttachment.count({ where: { ...scope, status: "REJECTED", verifiedAt: { gte: todayStart }, verifiedById: actor.userId } }),
     prisma.draw.count({ where: { ...scope, status: "SETTLED", ...(filters.drawId ? { id: filters.drawId } : {}) } }),
     prisma.bill.count({ where: { ...billWhere, cancelRequestedAt: { not: null }, cancelledAt: null } }),
-    prisma.bill.count({ where: { ...billWhere, status: { in: ["CONFIRMED", "LOCKED"] }, attachments: { none: { type: "ORDER_EVIDENCE", replacedBy: null, status: { not: "REJECTED" } } } } }),
+    prisma.bill.count({ where: { ...billWhere, status: { in: ["CONFIRMED", "LOCKED"] }, slipId: null, attachments: { none: { type: "ORDER_EVIDENCE", replacedBy: null, status: { not: "REJECTED" } } } } }),
     prisma.billAttachment.count({ where: { ...scope, status: "REJECTED", replacedBy: null, bill: billWhere } }),
     prisma.auditEvent.findMany({ where: scope, orderBy: { createdAt: "desc" }, take: 8, select: { id: true, action: true, entityType: true, reason: true, createdAt: true, actor: { select: { displayName: true } } } }),
     prisma.bill.count({ where: { ...billWhere, createdAt: { gte: todayStart } } }),

@@ -9,12 +9,14 @@ import { NotFoundError } from "@/lib/errors";
 import { ConfirmButton, DeleteBillForm, EditBillForm } from "./BillActions";
 import { EvidenceManager } from "./EvidenceManager";
 import { SlipDetail } from "./SlipDetail";
+import { SlipAllDetail } from "./SlipAllDetail";
 import { PlacedBillPanel } from "./PlacedBillPanel";
 import "./evidence.css";
 import "../slip-board.css";
 import { getStorageConfig } from "@/lib/storage/config";
 import { listBillAttachments } from "@/lib/evidence/service";
-import { BET_STATUS_LABEL, betStatusOf } from "@/lib/bills/betting";
+import { BET_STATUS_LABEL, betStatusOf, drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
+import { LotteryFlag } from "../ThaiFlag";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +25,13 @@ export default async function BillDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ placed?: string; edit?: string; dup?: string }>;
+  searchParams: Promise<{ placed?: string; edit?: string; dup?: string; view?: string }>;
 }) {
   const actor = await getActor();
   if (!actor) redirect("/login");
 
   const { id } = await params;
-  const { placed, edit, dup } = await searchParams;
+  const { placed, edit, dup, view } = await searchParams;
 
   let bill;
   try {
@@ -49,7 +51,9 @@ export default async function BillDetailPage({
   const canDeleteEvidence = can(actor.role, "evidence.delete");
 
   const evidenceConfig = getStorageConfig();
-  const [attachmentDetails, settlement, billHistory] = await Promise.all([
+  // บิลเดียวหลายประเภทหวย: ใบหลักคือส่วนแรก ส่วนอื่นชี้มาที่ใบหลักด้วย slipId
+  const primaryId = bill.slipId ?? bill.id;
+  const [attachmentDetails, settlement, billHistory, slipParts] = await Promise.all([
     listBillAttachments(actor, bill.id),
     bill.status === "SETTLED"
       ? prisma.settlement.findUnique({ where: { drawId_agentId: { drawId: bill.drawId, agentId: bill.agentId } }, select: { calculatedAt: true } })
@@ -59,7 +63,30 @@ export default async function BillDetailPage({
       orderBy: { createdAt: "desc" },
       select: { id: true, action: true, before: true, after: true, reason: true, createdAt: true, actor: { select: { displayName: true, role: true } } },
     }),
+    prisma.bill.findMany({
+      where: { organizationId: actor.organizationId, agentId: bill.agentId, OR: [{ id: primaryId }, { slipId: primaryId }] },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        status: true,
+        totalStake: true,
+        draw: { select: { name: true, drawDate: true, lotteryType: true } },
+        _count: { select: { items: true } },
+      },
+    }),
   ]);
+  const isMultiSlip = slipParts.length > 1;
+  // บิลหลายหวยเปิดมาที่ "ทั้งหมด" ก่อน ส่วน view=id ใช้ดู/แก้เฉพาะหวยนั้น
+  const viewAll = isMultiSlip && (view === undefined || view === "all");
+  const detailedParts = viewAll
+    ? await Promise.all(slipParts.map((part) => part.id === bill.id ? Promise.resolve(bill) : getBill(actor, part.id)))
+    : [];
+  const activeParts = slipParts.filter((part) => part.status !== "CANCELLED");
+  const slipTotal = activeParts.reduce((sum, part) => sum + Number(part.totalStake), 0);
+  const slipItemCount = activeParts.reduce((sum, part) => sum + part._count.items, 0);
+  // หลักฐานของบิลหลายประเภทหวยแนบที่ใบหลักใบเดียว
+  const isSecondaryPart = bill.slipId !== null;
+  const primaryPart = slipParts.find((part) => part.id === primaryId);
   const activeEvidence = bill.attachments.filter((attachment) => attachment.replacedBy === null);
   const hasOrderEvidence = activeEvidence.some(
     (attachment) => attachment.type === "ORDER_EVIDENCE" && attachment.status !== "REJECTED",
@@ -84,10 +111,15 @@ export default async function BillDetailPage({
           <PlacedBillPanel
             sequence={bill.drawSequence}
             customer={bill.title}
-            itemCount={bill.items.length}
-            totalStake={bill.totalStake.toFixed(2)}
+            itemCount={isMultiSlip ? slipItemCount : bill.items.length}
+            totalStake={isMultiSlip ? slipTotal.toFixed(2) : bill.totalStake.toFixed(2)}
             lotteryType={bill.draw.lotteryType}
-            draftScope={`${actor.userId}:${bill.draw.lotteryType}`}
+            parts={isMultiSlip ? activeParts.map((part) => ({
+              label: `${lotteryLabel(part.draw.lotteryType)} งวด ${drawDateLabel(part.draw)}`,
+              itemCount: part._count.items,
+              totalStake: part.totalStake.toFixed(2),
+            })) : []}
+            draftScope={`${actor.userId}:slip`}
             duplicate={dup === "1"}
           />
         )}
@@ -95,19 +127,58 @@ export default async function BillDetailPage({
           <Link href="/bills" className="slip-outline-button bill-detail-back">← กลับไปหน้าประวัติ</Link>
           <div className="bill-detail-title">
             <nav className="slip-breadcrumb" aria-label="ตำแหน่งหน้า"><Link href="/bills">ประวัติรายการ</Link><span aria-hidden="true">/</span><span>รายละเอียดบิล</span></nav>
-            <h1 id="bill-heading">รายละเอียดบิล {bill.drawSequence === null ? "ร่าง" : bill.drawSequence} <span className={`slip-status slip-status-${betStatus.toLowerCase()}`}>{BET_STATUS_LABEL[betStatus]}</span></h1>
+            <h1 id="bill-heading">รายละเอียดบิล {bill.drawSequence === null ? "ร่าง" : bill.drawSequence}{isMultiSlip ? ` · ${slipParts.length} ประเภทหวย` : ""} <span className={`slip-status slip-status-${betStatus.toLowerCase()}`}>{BET_STATUS_LABEL[betStatus]}</span></h1>
           </div>
           <nav className="bill-detail-tools" aria-label="เครื่องมือบิล">
-            {canEditBill && <Link href={`/bills/${bill.id}?edit=1#bill-edit`} className="slip-primary-button">แก้ไขบิล</Link>}
+            {canEditBill && <Link href={`/bills/${bill.id}?view=${bill.id}&edit=1#bill-edit`} className="slip-primary-button">แก้ไขบิล</Link>}
             <Link href={`/bills/${bill.id}/print`} target="_blank" className="slip-outline-button">พิมพ์บิล</Link>
             <Link href={`/bills/${bill.id}/print?format=slip`} target="_blank" className="slip-outline-button">พิมพ์สลิป</Link>
           </nav>
         </header>
 
+        {isMultiSlip && (
+          <nav className="bill-slip-parts" aria-label="ประเภทหวยในบิลนี้">
+            <p>
+              <strong>บิล {bill.drawSequence ?? "ร่าง"} มี {slipParts.length} ประเภทหวย</strong>
+              <span>รวม {slipItemCount.toLocaleString("th-TH")} รายการ · {slipTotal.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท · เลือกการ์ดเพื่อดูรายการของแต่ละหวย</span>
+            </p>
+            <div>
+              <Link
+                href={`/bills/${primaryId}?view=all#bill-items`}
+                aria-current={viewAll ? "page" : undefined}
+                className="is-all"
+              >
+                <span className="bill-slip-all-icon" aria-hidden="true">≡</span>
+                <span>
+                  <strong>ทั้งหมด</strong>
+                  <small>{slipItemCount} รายการ · {slipTotal.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท</small>
+                </span>
+              </Link>
+              {slipParts.map((part) => (
+                <Link
+                  key={part.id}
+                  href={`/bills/${part.id}?view=${part.id}#bill-items`}
+                  aria-current={!viewAll && part.id === bill.id ? "page" : undefined}
+                  className={`is-${part.draw.lotteryType.toLowerCase()}${part.status === "CANCELLED" ? " is-cancelled" : ""}`}
+                >
+                  <LotteryFlag lotteryType={part.draw.lotteryType} />
+                  <span>
+                    <strong>{lotteryLabel(part.draw.lotteryType)}</strong>
+                    <small>งวด {drawDateLabel(part.draw)} · {part._count.items} รายการ · {Number(part.totalStake).toLocaleString("th-TH")} บาท{part.status === "CANCELLED" ? " · ลบแล้ว" : ""}</small>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </nav>
+        )}
+
         {bill.status === "CANCELLED" && (
           <p className="slip-alert is-danger" role="status">ลบแล้วโดย {bill.cancelledBy?.displayName ?? "-"}{bill.cancelledAt ? ` · ${new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" }).format(bill.cancelledAt)}` : ""}</p>
         )}
 
+        {viewAll ? (
+          <SlipAllDetail parts={detailedParts} />
+        ) : (
         <SlipDetail
           bill={bill}
           settledAt={settlement?.calculatedAt ?? null}
@@ -166,8 +237,15 @@ export default async function BillDetailPage({
             </div>
           )}
         />
+        )}
 
         {/* ส่วนรองพับไว้ เปิดอัตโนมัติเฉพาะตอนที่ต้องลงมือ เช่นบิลร่างหรือหลักฐานถูกตีกลับ */}
+        {isSecondaryPart ? (
+          <p className="slip-panel bill-slip-evidence-note">
+            หลักฐานของบิลนี้แนบรวมไว้ที่ส่วน
+            {" "}<Link href={`/bills/${primaryId}#bill-evidence`}>{primaryPart ? lotteryLabel(primaryPart.draw.lotteryType) : "แรกของบิล"} →</Link>
+          </p>
+        ) : (
         <details className="slip-panel slip-collapse" open={bill.status === "DRAFT" || hasRejectedEvidence || placed === "1"}>
           <summary>
             <span>หลักฐานการสั่งซื้อและการชำระเงิน</span>
@@ -206,6 +284,7 @@ export default async function BillDetailPage({
             } : null}
           />
         </details>
+        )}
 
         {(canConfirm || canDeleteBill) && (
           <details className="slip-panel slip-collapse" open={canConfirm}>

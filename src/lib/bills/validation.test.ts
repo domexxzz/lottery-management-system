@@ -24,6 +24,16 @@ const THREE_TOD: PrizeTypeRule = {
   maxStakePerItem: null,
 };
 
+const LAO_SET_EXACT: PrizeTypeRule = {
+  id: "pt-lao-set-exact",
+  code: 201,
+  name: "4 ตัวตรง",
+  digits: 4,
+  matchRule: "EXACT",
+  payoutRate: d("850"),
+  maxStakePerItem: null,
+};
+
 const RULES = new Map([
   [THREE_TOP.id, THREE_TOP],
   [THREE_TOD.id, THREE_TOD],
@@ -39,10 +49,11 @@ function run(overrides: {
   draw?: { status: string; cutoffAt: Date };
   existing?: Prisma.Decimal;
   now?: Date;
+  rules?: Map<string, PrizeTypeRule>;
 }) {
   return validateBill({
     items: overrides.items ?? [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("100") }],
-    rules: RULES,
+    rules: overrides.rules ?? RULES,
     agent: {
       creditLimit: overrides.creditLimit === undefined ? null : overrides.creditLimit,
       perNumberLimit: overrides.perNumberLimit === undefined ? null : overrides.perNumberLimit,
@@ -88,6 +99,15 @@ describe("รูปแบบเลข", () => {
 });
 
 describe("ยอดเดิมพัน", () => {
+  test("หวยลาวชุดรับเฉพาะราคา 30 / 60 / 120 บาท", () => {
+    const rules = new Map([[LAO_SET_EXACT.id, LAO_SET_EXACT]]);
+    for (const stake of [30, 60, 120]) {
+      expect(run({ rules, items: [{ prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(stake) }] })).toEqual([]);
+    }
+    const issues = run({ rules, items: [{ prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(50) }] });
+    expect(codes(issues)).toContain("STAKE_NOT_ALLOWED");
+  });
+
   test("ปฏิเสธยอดเป็นศูนย์", () => {
     const issues = run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("0") }] });
     expect(codes(issues)).toContain("STAKE_NOT_POSITIVE");
@@ -98,13 +118,13 @@ describe("ยอดเดิมพัน", () => {
     expect(codes(issues)).toContain("STAKE_NOT_POSITIVE");
   });
 
-  test("ปฏิเสธยอดเดิมพันต่ำกว่า 5 บาท", () => {
-    const issues = run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("4.99") }] });
+  test("ปฏิเสธยอดเดิมพันต่ำกว่า 1 บาท", () => {
+    const issues = run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("0.99") }] });
     expect(codes(issues)).toContain("STAKE_BELOW_MINIMUM");
   });
 
-  test("ยอมรับยอดเดิมพันขั้นต่ำ 5 บาท", () => {
-    expect(run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("5") }] })).toEqual([]);
+  test("ยอมรับยอดเดิมพันขั้นต่ำ 1 บาท", () => {
+    expect(run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("1") }] })).toEqual([]);
   });
 
   test("ปฏิเสธยอดเกิน 1,000 บาทต่อรายการ", () => {

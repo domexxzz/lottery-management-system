@@ -82,7 +82,7 @@ export async function deleteDrawAction(
     revalidatePath("/reports");
     return {
       error: null,
-      message: `ลบงวดว่าง “${outcome.drawName}” แล้ว`,
+      message: `ลบงวด “${outcome.drawName}” และบิล ${outcome.billsDeleted} ใบแล้ว`,
     };
   } catch (error) {
     if (error instanceof AppError) return { error: error.message, message: null };

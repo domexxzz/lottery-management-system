@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { isLaoDrawDay, laoBreakdown, laoResultForCode, laoResultProblem, LAO_PRIZE_TYPES } from "./rules";
+import { isLaoDrawDay, laoBreakdown, laoResultForCode, laoResultProblem, LAO_DEFAULT_TIMES, LAO_PRIZE_TYPES, LAO_SET_ACTIVE_CODES } from "./rules";
 import { permutations } from "@/lib/bills/betting";
 import { isWinning } from "@/lib/results/matching";
 
@@ -18,6 +18,11 @@ describe("แยกผลหวยลาว (ใช้ 4 ตัวท้าย�
     const values = Object.fromEntries(LAO_PRIZE_TYPES.map((prize) => [prize.code, laoResultForCode(prize.code, "651234")]));
     expect(values).toEqual({ 101: "234", 102: "234", 103: "34", 104: "12", 201: "1234", 202: "234", 203: "1234", 204: "234", 205: "123", 206: "12", 207: "34" });
     expect(laoResultForCode(1, "651234")).toBeNull();
+  });
+
+  test("หวยลาวชุดเปิดรับเฉพาะ 4 ตัวตรงและ 4 ตัวโต๊ด", () => {
+    expect(LAO_SET_ACTIVE_CODES).toEqual([201, 203]);
+    expect(LAO_PRIZE_TYPES.filter((prize) => prize.lotteryType === "LAO_SET" && prize.isActive).map((prize) => prize.code)).toEqual([201, 203]);
   });
 
   test("ตรวจรูปแบบผล", () => {
@@ -46,6 +51,10 @@ describe("โต๊ดสลับหลักเอง ตัดแบบที
 });
 
 describe("วันออกหวยลาว", () => {
+  test("ค่าเริ่มต้นรับบิลถึง 20:30 น.", () => {
+    expect(LAO_DEFAULT_TIMES.cutoff).toBe("20:30");
+  });
+
   test("จันทร์–ศุกร์เท่านั้น", () => {
     expect(isLaoDrawDay("2026-11-16")).toBe(true); // จันทร์
     expect(isLaoDrawDay("2026-11-20")).toBe(true); // ศุกร์

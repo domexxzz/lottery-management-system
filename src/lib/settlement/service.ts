@@ -211,7 +211,7 @@ function groupByAmount<T>(rows: T[], idOf: (row: T) => string, amountOf: (row: T
  * รันซ้ำได้ — ใช้ upsert และเขียนทับผลเดิม ตัวเลขที่ได้จะเท่าเดิมเสมอ
  * ตราบใดที่บิลและผลรางวัลไม่เปลี่ยน
  */
-export async function calculateSettlement(
+async function calculateSettlementSingle(
   actor: Actor,
   drawId: string,
 ): Promise<SettlementPreview[]> {
@@ -306,6 +306,39 @@ export async function calculateSettlement(
   }, { timeout: 60_000, maxWait: 10_000 });
 }
 
+/**
+ * คำนวณงวดที่เลือก และถ้าเป็นคู่งวดลาวให้คำนวณอีกฝั่งด้วย
+ * คืนผลของงวดที่ผู้ใช้กดก่อนเสมอ เพื่อให้หน้าจอเดิมยังแสดงตัวเลขของงวดที่เลือกถูกต้อง
+ */
+export async function calculateSettlement(actor: Actor, drawId: string): Promise<SettlementPreview[]> {
+  requirePermission(actor, "settlement.calculate");
+  const selected = await prisma.draw.findFirst({
+    where: { id: drawId, ...orgScope(actor) },
+    select: { id: true, organizationId: true, lotteryType: true, laoFamilyId: true },
+  });
+  if (!selected) throw new NotFoundError("ไม่พบรอบ");
+
+  const paired = (selected.lotteryType === "LAO" || selected.lotteryType === "LAO_SET") && selected.laoFamilyId;
+  const siblings = paired
+    ? await prisma.draw.findMany({
+      where: {
+        organizationId: selected.organizationId,
+        laoFamilyId: selected.laoFamilyId,
+        lotteryType: { in: ["LAO", "LAO_SET"] },
+        id: { not: selected.id },
+      },
+      orderBy: { lotteryType: "asc" },
+      select: { id: true },
+    })
+    : [];
+
+  const previews: SettlementPreview[] = [];
+  for (const id of [selected.id, ...siblings.map((draw) => draw.id)]) {
+    previews.push(...await calculateSettlementSingle(actor, id));
+  }
+  return previews;
+}
+
 export async function reconcileSettlement(actor: Actor, settlementId: string): Promise<void> {
   requirePermission(actor, "settlement.reconcile");
 
@@ -343,7 +376,7 @@ export async function reconcileSettlement(actor: Actor, settlementId: string): P
  * Transaction boundary ที่ห้ามแยก: เปลี่ยนสถานะ Settlement ทุกใบ
  * + ปิดรอบ + เขียน Audit ต้องอยู่ด้วยกัน
  */
-export async function approveSettlement(actor: Actor, drawId: string): Promise<void> {
+async function approveSettlementSingle(actor: Actor, drawId: string): Promise<void> {
   requirePermission(actor, "settlement.approve");
 
   await prisma.$transaction(async (tx) => {
@@ -361,7 +394,13 @@ export async function approveSettlement(actor: Actor, drawId: string): Promise<v
       select: { id: true, status: true, net: true },
     });
 
-    if (settlements.length === 0) throw new ConflictError("ไม่มีรายการสรุปให้อนุมัติ");
+    if (settlements.length === 0) {
+      const billCount = await tx.bill.count({
+        where: { drawId: draw.id, status: { in: ["LOCKED", "SETTLED"] } },
+      });
+      // คู่งวดอาจมีบิลเฉพาะอีกประเภท ฝั่งที่ไม่มีบิลต้องปิดบัญชีตามคู่ได้
+      if (billCount > 0) throw new ConflictError("ไม่มีรายการสรุปให้อนุมัติ");
+    }
 
     const now = new Date();
     await tx.settlement.updateMany({
@@ -393,6 +432,34 @@ export async function approveSettlement(actor: Actor, drawId: string): Promise<v
       reason: "อนุมัติปิดบัญชีรอบ",
     });
   });
+}
+
+/** ปิดบัญชีงวดที่เลือกและคู่งวดลาวพร้อมกัน */
+export async function approveSettlement(actor: Actor, drawId: string): Promise<void> {
+  requirePermission(actor, "settlement.approve");
+  const selected = await prisma.draw.findFirst({
+    where: { id: drawId, ...orgScope(actor) },
+    select: { id: true, organizationId: true, lotteryType: true, laoFamilyId: true },
+  });
+  if (!selected) throw new NotFoundError("ไม่พบรอบ");
+  const paired = (selected.lotteryType === "LAO" || selected.lotteryType === "LAO_SET") && selected.laoFamilyId;
+  const siblings = paired
+    ? await prisma.draw.findMany({
+      where: {
+        organizationId: selected.organizationId,
+        laoFamilyId: selected.laoFamilyId,
+        lotteryType: { in: ["LAO", "LAO_SET"] },
+        id: { not: selected.id },
+      },
+      orderBy: { lotteryType: "asc" },
+      select: { id: true },
+    })
+    : [];
+  for (const id of [selected.id, ...siblings.map((draw) => draw.id)]) {
+    const draw = await prisma.draw.findUnique({ where: { id }, select: { status: true } });
+    if (draw?.status === "CLOSED") continue;
+    await approveSettlementSingle(actor, id);
+  }
 }
 
 export async function listSettlements(actor: Actor, drawId: string) {

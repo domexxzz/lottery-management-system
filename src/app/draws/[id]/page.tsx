@@ -21,7 +21,7 @@ import {
 import { GloResultImporter } from "./GloResultImporter";
 import { RestrictionManager } from "./RestrictionManager";
 import { CapOverrideManager, LaoResultForm } from "./LaoForms";
-import { isLaoLottery } from "@/lib/lao/rules";
+import { isLaoLottery, LAO_SET_ACTIVE_CODES } from "@/lib/lao/rules";
 import { listCapOverrides } from "@/lib/lao/service";
 import { listRestrictions } from "@/lib/draws/restrictions";
 import { capLabel, fullNumbersByDraw } from "@/lib/draws/number-cap";
@@ -106,7 +106,12 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
     ? await Promise.all([
         listRestrictions(actor, draw.id),
         prisma.prizeType.findMany({
-          where: { ...orgScope(actor), isActive: true, lotteryType: draw.lotteryType },
+          where: {
+            ...orgScope(actor),
+            isActive: true,
+            lotteryType: draw.lotteryType,
+            ...(draw.lotteryType === "LAO_SET" ? { code: { in: [...LAO_SET_ACTIVE_CODES] } } : {}),
+          },
           orderBy: { code: "asc" },
           select: { id: true, code: true, name: true, digits: true, payoutRate: true },
         }),
@@ -364,9 +369,10 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
 
             {canCalculate && (
               <p>
-                <a href={`/api/draws/${draw.id}/reconciliation`}>
-                  ดาวน์โหลดสรุป Settlement (CSV)
+                <a href={`/api/draws/${draw.id}/reconciliation?format=xlsx`}>
+                  ดาวน์โหลดสรุป Settlement (Excel)
                 </a>
+                <a href={`/api/draws/${draw.id}/reconciliation`}>CSV</a>
               </p>
             )}
 

@@ -173,9 +173,6 @@ model Organization {
   billAttachments        BillAttachment[]
   billPayments           BillPayment[]
   ownerChatConversations OwnerChatConversation[]
-  conversations          Conversation[]
-  directMessages         DirectMessage[]
-  directMessageFiles     DirectMessageAttachment[]
   restrictedNumbers      RestrictedNumber[]
   agentBillCounters      AgentBillCounter[]
 
@@ -208,10 +205,6 @@ model User {
   /// ว่างได้ หน้าจอจะใช้อักษรย่อของชื่อแทน
   avatarKey String?
 
-  /// เวลาที่เห็นผู้ใช้คนนี้ครั้งล่าสุด ใช้บอกสถานะออนไลน์ในหน้าสนทนา
-  /// อัปเดตเมื่อผู้ใช้เรียกข้อมูลแชท ไม่ใช่ presence แบบ realtime
-  lastSeenAt DateTime?
-
   /// เวลาที่ Owner ลบบัญชี บัญชีที่มีประวัติจะถูกซ่อนแทนการลบจริง
   /// เพื่อให้บิล รายงาน และ Audit ที่อ้างถึงยังถูกต้อง ชื่อผู้ใช้เดิมจึงไม่ถูกนำกลับมาใช้
   deletedAt DateTime?
@@ -235,9 +228,6 @@ model User {
   verifiedAttachments    BillAttachment[]        @relation("AttachmentVerifier")
   verifiedPayments       BillPayment[]           @relation("PaymentVerifier")
   ownerChatConversations OwnerChatConversation[] @relation("OwnerChatConversationOwner")
-  conversationsAsA       Conversation[]          @relation("ConversationUserA")
-  conversationsAsB       Conversation[]          @relation("ConversationUserB")
-  sentMessages           DirectMessage[]         @relation("DirectMessageSender")
   restrictedNumbers      RestrictedNumber[]      @relation("RestrictedNumberCreatedBy")
 
   @@unique([organizationId, login])
@@ -356,6 +346,9 @@ model Draw {
   lotteryType LotteryType @default(THAI_GOVERNMENT)
   /// วันที่ออกผลของงวด (วันที่ 1 หรือ 16) — null สำหรับงวดที่สร้างก่อนมีคอลัมน์นี้
   drawDate    DateTime?   @db.Date
+  /// รหัสคู่งวดหวยลาว/หวยลาวชุดที่สร้างพร้อมกัน ใช้ปิดรับและลงผลร่วมกัน
+  /// null หมายถึงเป็นงวดเดี่ยวและต้องไม่ไปผูกกับงวดอื่นที่ออกวันเดียวกัน
+  laoFamilyId String?
   /// เวลาเริ่มรับบิล
   opensAt     DateTime
   /// เวลาปิดรับบิล — ถึงเวลานี้ worker จะล็อกบิลทั้งรอบ
@@ -385,6 +378,7 @@ model Draw {
 
   @@index([organizationId, name])
   @@index([organizationId, status])
+  @@index([organizationId, laoFamilyId])
   @@index([organizationId, cutoffAt])
   @@index([status, cutoffAt])
   @@map("draws")
@@ -463,6 +457,10 @@ model Bill {
   /// รหัสการกดยืนยันจากหน้าสร้างบิล (สุ่มฝั่ง browser ต่อหนึ่งบิล)
   /// คำขอซ้ำจากการกดสองครั้งหรือเน็ตส่งซ้ำได้บิลเดิม ไม่สร้างบิลใหม่
   submissionKey  String?
+  /// บิลเดียวหลายประเภทหวย: ผู้ใช้เห็นเป็นบิลเดียว ใช้เลขบิล (drawSequence) เดียวกัน แต่เก็บแยกต่องวด
+  /// ส่วนที่ 2 เป็นต้นไปเก็บ id ของบิลใบหลัก (ส่วนแรก) ใบหลักและบิลประเภทเดียวเป็น null
+  /// หลักฐานแนบที่ใบหลักใบเดียว การตัดสินผล เพดานเลข และรายงานยังทำงานต่องวดเหมือนเดิม
+  slipId         String?
 
   status BillStatus @default(DRAFT)
 
@@ -495,8 +493,10 @@ model Bill {
   payment     BillPayment?
 
   @@unique([organizationId, billNumber])
-  @@unique([agentId, sequencePeriod, drawSequence])
-  @@unique([organizationId, submissionKey])
+  // บิลหลายประเภทหวยใช้เลขบิลเดียวกัน แยกกันด้วยงวด
+  @@unique([agentId, sequencePeriod, drawSequence, drawId])
+  @@unique([organizationId, submissionKey, drawId])
+  @@index([organizationId, slipId])
   @@index([organizationId, createdAt])
   @@index([organizationId, drawId, status])
   @@index([organizationId, agentId, drawId])
@@ -775,87 +775,4 @@ model OwnerChatMessage {
   @@unique([conversationId, sequence])
   @@index([conversationId, createdAt])
   @@map("owner_chat_messages")
-}
-
-/// ห้องสนทนาระหว่างคนสองคนในองค์กรเดียวกัน
-///
-/// เก็บคู่สนทนาเป็น userA/userB โดยบังคับเรียง id จากน้อยไปมากเสมอตอนสร้าง
-/// จึงทำ unique กันห้องซ้ำได้ ถ้าไม่เรียง คนสองคนจะสร้างห้องซ้อนกันสองห้อง
-/// แล้วข้อความจะกระจายไปคนละห้องโดยไม่มีใครรู้
-///
-/// ยังไม่รองรับห้องกลุ่มหลายคน ถ้าจะทำต้องแยกตารางผู้เข้าร่วมออกมา
-model Conversation {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  userAId String
-  userA   User   @relation("ConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
-  userBId String
-  userB   User   @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
-
-  /// เวลาอ่านล่าสุดของแต่ละฝั่ง ใช้คำนวณจำนวนข้อความที่ยังไม่อ่าน
-  /// และใช้บอกว่าอีกฝ่ายอ่านข้อความของเราแล้วหรือยัง
-  userALastReadAt DateTime?
-  userBLastReadAt DateTime?
-
-  /// เวลาข้อความล่าสุด ใช้เรียงห้องใน Sidebar โดยไม่ต้อง join ตารางข้อความ
-  lastMessageAt DateTime?
-
-  createdAt DateTime        @default(now())
-  messages  DirectMessage[]
-
-  @@unique([organizationId, userAId, userBId])
-  @@index([organizationId, lastMessageAt])
-  @@map("conversations")
-}
-
-/// ข้อความหนึ่งบรรทัดในห้องสนทนา
-///
-/// body ว่างได้เมื่อส่งเฉพาะรูปหรือไฟล์ แต่ต้องมีอย่างใดอย่างหนึ่งเสมอ
-/// ซึ่งบังคับที่ชั้น service ไม่ใช่ที่ฐานข้อมูล
-model DirectMessage {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
-  senderId String
-  sender   User   @relation("DirectMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
-
-  body        String?
-  createdAt   DateTime  @default(now())
-  /// เมื่อผู้ส่งยกเลิกข้อความ ให้เก็บแถวไว้เพื่อรักษาลำดับเวลา
-  /// แต่ซ่อนเนื้อหาและไฟล์แนบจากผู้ใช้ทั้งสองฝั่ง
-  cancelledAt DateTime?
-
-  attachments DirectMessageAttachment[]
-
-  @@index([conversationId, createdAt])
-  @@map("direct_messages")
-}
-
-/// ไฟล์แนบของข้อความ เก็บใน Private Storage เดียวกับหลักฐานบิล
-///
-/// ไม่เก็บ URL สาธารณะ หน้าจอขอ signed URL อายุสั้นทีละครั้ง
-/// ด้วยเหตุผลเดียวกับหลักฐานบิล คือไฟล์ของลูกค้าต้องไม่หลุดออกไปถาวร
-model DirectMessageAttachment {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  messageId String
-  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-
-  storageKey   String
-  originalName String
-  mimeType     String
-  fileSize     Int
-
-  createdAt DateTime @default(now())
-
-  @@index([messageId])
-  @@map("direct_message_attachments")
 }

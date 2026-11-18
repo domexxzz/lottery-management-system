@@ -12,13 +12,15 @@ import {
   MAX_STAKE_PER_ITEM,
   MIN_STAKE_PER_ITEM,
   type BetEntry,
+  type BetGroup,
   type BetPrizeType,
 } from "@/lib/bills/betting";
 import { placeBillAction, type ActionState } from "../actions";
-import { clearDraft, newSubmissionKey, readDraft, useServerClockOffset, writeDraft, type SlipDraft } from "./slip-safety";
+import { clearDraft, newSubmissionKey, readDraft, useServerClockOffset, writeDraft, type SlipDraft, type SlipEntry } from "./slip-safety";
 import { CustomerNameCombobox } from "./BillForm";
 import { LaoFlag, ThaiFlag } from "../ThaiFlag";
 import { RulesDialog } from "./RulesDialog";
+import { LAO_SET_PACKAGE_PAYOUTS, LAO_SET_PACKAGE_PRICES } from "@/lib/lao/rules";
 
 const INITIAL: ActionState = { error: null };
 const CHIPS = [5, 10, 20, 50, 100, 500, 1000] as const;
@@ -34,6 +36,15 @@ export type SlipDraw = {
   cutoffAt: string;
   cutoffLabel: string;
   open: boolean;
+};
+
+/** ประเภทหวยหนึ่งในบิล: งวดที่เปิดรับและประเภทรางวัลของหวยนั้น */
+export type SlipLottery = {
+  type: string;
+  label: string;
+  flag: "TH" | "LA";
+  draws: SlipDraw[];
+  prizeTypes: BetPrizeType[];
 };
 
 export type SlipRestriction = {
@@ -152,17 +163,53 @@ async function submitBill(previous: ActionState, formData: FormData): Promise<Ac
   }
 }
 
+function PrizeTypeOptions({
+  group,
+  selectedIds,
+  reverse,
+  isOpen,
+  isLaoSet = false,
+  toggleOption,
+  toggleReverse,
+}: {
+  group: BetGroup;
+  selectedIds: string[];
+  reverse: boolean;
+  isOpen: boolean;
+  isLaoSet?: boolean;
+  toggleOption: (prizeTypeId: string) => void;
+  toggleReverse: () => void;
+}) {
+  return (
+    <div className={`bs-options${isLaoSet ? " is-lao-set" : ""}`} aria-label="เลือกประเภทการแทง">
+      {group.prizeTypes.map((prizeType) => (
+        <button key={prizeType.id} type="button" aria-pressed={selectedIds.includes(prizeType.id)} className="bs-option" onClick={() => toggleOption(prizeType.id)} disabled={!isOpen}>
+          {prizeType.name}
+        </button>
+      ))}
+      {group.digits > 1 && (
+        <button type="button" aria-pressed={reverse} className="bs-option bs-option-reverse" onClick={toggleReverse} disabled={!isOpen}>
+          ⇄ {isLaoSet ? "ตัวสลับ" : "สลับเลข"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function BetSlip({
-  draws,
-  prizeTypes,
+  lotteries,
+  initialLottery,
   restrictions,
   representatives,
   ownNextBillSequence,
   serverNow,
   draftScope,
 }: {
-  draws: SlipDraw[];
-  prizeTypes: BetPrizeType[];
+  /** ประเภทหวยที่แทงได้ในบิลนี้ บิลเดียวรวมได้หลายประเภท */
+  lotteries: SlipLottery[];
+  /** ประเภทหวยที่เปิดแท็บไว้ตอนเข้าหน้า */
+  initialLottery: string;
+  /** เลขอั้น/เลขเต็ม แยกตามงวด */
   restrictions: Record<string, SlipRestriction[]>;
   /** null สำหรับ Agent ซึ่งสร้างบิลให้ตัวเองเท่านั้น */
   representatives: SlipRepresentative[] | null;
@@ -176,11 +223,25 @@ export function BetSlip({
   const [placeState, placeAction, placing] = useActionState(submitBill, INITIAL);
   const pending = placing;
 
-  const rules = useMemo(() => new Map(prizeTypes.map((prizeType) => [prizeType.id, prizeType])), [prizeTypes]);
+  // ---------------------------------------------------------------- ประเภทหวยในบิล
+  // บิลเดียวแทงได้หลายประเภทหวย แท็บด้านบนสลับแป้นไปยังหวยแต่ละประเภท
+  // รายการทุกประเภทอยู่ในบิลเดียวกัน แต่ละรายการรู้งวดของตัวเอง
+  const [activeType, setActiveType] = useState(() =>
+    lotteries.some((item) => item.type === initialLottery) ? initialLottery : lotteries[0]?.type ?? "");
+  const lottery = lotteries.find((item) => item.type === activeType) ?? lotteries[0];
+  const isLaoSet = lottery?.type === "LAO_SET";
+  const draws = useMemo(() => lottery?.draws ?? [], [lottery]);
+  const prizeTypes = useMemo(() => lottery?.prizeTypes ?? [], [lottery]);
+  // รหัสประเภทรางวัลไม่ซ้ำข้ามประเภทหวย จึงใช้แผนที่เดียวสำหรับทุกรายการในบิล
+  const rules = useMemo(() => new Map(lotteries.flatMap((item) => item.prizeTypes).map((prizeType) => [prizeType.id, prizeType])), [lotteries]);
+  const lotteryByPrize = useMemo(() => new Map(lotteries.flatMap((item) => item.prizeTypes.map((prizeType) => [prizeType.id, item] as const))), [lotteries]);
+  const drawById = useMemo(() => new Map(lotteries.flatMap((item) => item.draws).map((item) => [item.id, item])), [lotteries]);
   const groups = useMemo(() => groupPrizeTypes(prizeTypes), [prizeTypes]);
 
   const clockOffset = useServerClockOffset(serverNow);
-  const [drawId, setDrawId] = useState(draws[0]?.id ?? "");
+  const [drawByType, setDrawByType] = useState<Record<string, string>>(() =>
+    Object.fromEntries(lotteries.map((item) => [item.type, item.draws[0]?.id ?? ""])));
+  const drawId = (lottery && drawByType[lottery.type]) || draws[0]?.id || "";
   const draw = draws.find((item) => item.id === drawId) ?? draws[0];
   const isOpen = useStillOpen(draw, clockOffset);
   const cutoffAlert = useCutoffAlert(draw, clockOffset);
@@ -191,18 +252,21 @@ export function BetSlip({
     ? ownNextBillSequence
     : representative?.nextBillSequence ?? null;
 
-  const [groupKey, setGroupKey] = useState(groups.find((item) => item.digits === 3)?.key ?? groups[0]?.key ?? "");
+  // หมวดเลขและตัวเลือกจำแยกตามประเภทหวย สลับแท็บไปมาแล้วค่ายังอยู่
+  const [groupKeyByType, setGroupKeyByType] = useState<Record<string, string>>({});
+  const defaultGroupKey = groups.find((item) => item.digits === 3)?.key ?? groups[0]?.key ?? "";
+  const groupKey = (lottery && groupKeyByType[lottery.type]) || defaultGroupKey;
   const group = groups.find((item) => item.key === groupKey) ?? groups[0];
-  const [selectedByGroup, setSelectedByGroup] = useState<Record<string, string[]>>(() =>
-    Object.fromEntries(groups.map((item) => [item.key, item.prizeTypes[0] ? [item.prizeTypes[0].id] : []])),
-  );
+  const optionKey = `${lottery?.type ?? ""}:${group?.key ?? ""}`;
+  const [selectedByGroup, setSelectedByGroup] = useState<Record<string, string[]>>({});
   const [reverseByGroup, setReverseByGroup] = useState<Record<string, boolean>>({});
-  const selectedIds = group ? selectedByGroup[group.key] ?? [] : [];
-  const reverse = group ? reverseByGroup[group.key] ?? false : false;
+  const selectedIds = group ? selectedByGroup[optionKey] ?? (group.prizeTypes[0] ? [group.prizeTypes[0].id] : []) : [];
+  const reverse = group ? reverseByGroup[optionKey] ?? false : false;
 
-  const [amount, setAmount] = useState(10);
+  // หวยลาวชุดเป็นราคาเหมา 30/60/120 ส่วนหวยอื่นเริ่มที่ยอดขั้นต่ำและพิมพ์เองได้
+  const [amount, setAmount] = useState<number>(() => initialLottery === "LAO_SET" ? LAO_SET_PACKAGE_PRICES[0] : MIN_STAKE_PER_ITEM);
   const [digits, setDigits] = useState("");
-  const [entries, setEntries] = useState<BetEntry[]>([]);
+  const [entries, setEntries] = useState<SlipEntry[]>([]);
   const [editing, setEditing] = useState<number | null>(null);
   const [title, setTitle] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
@@ -235,12 +299,15 @@ export function BetSlip({
   // ---------------------------------------------------------------- ร่างบิลในเครื่อง
   const [offeredDraft, setOfferedDraft] = useState<SlipDraft | null>(null);
   const [draftChecked, setDraftChecked] = useState(false);
-  const openDrawIds = draws.filter((item) => item.open).map((item) => item.id).join(",");
+  const openDrawIds = lotteries.flatMap((item) => item.draws).filter((item) => item.open).map((item) => item.id).join(",");
   useEffect(() => {
     // อ่าน localStorage หลัง mount เท่านั้น ฝั่ง server ไม่มี
     const timer = window.setTimeout(() => {
       const saved = readDraft(draftScope);
-      if (saved && saved.entries.length > 0 && openDrawIds.split(",").includes(saved.drawId)) setOfferedDraft(saved);
+      // กู้คืนได้เฉพาะรายการของงวดที่ยังเปิดรับ
+      const open = new Set(openDrawIds.split(","));
+      const usable = saved ? { ...saved, entries: saved.entries.filter((entry) => open.has(entry.drawId)) } : null;
+      if (usable && usable.entries.length > 0) setOfferedDraft(usable);
       else if (saved) clearDraft(draftScope);
       setDraftChecked(true);
     }, 0);
@@ -256,8 +323,8 @@ export function BetSlip({
         return;
       }
       writeDraft(draftScope, {
-        version: 1,
-        drawId,
+        version: 2,
+        activeType,
         entries,
         title,
         representativeId,
@@ -266,11 +333,18 @@ export function BetSlip({
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [draftChecked, offeredDraft, entries, title, representativeId, drawId, draftScope]);
+  }, [draftChecked, offeredDraft, entries, title, representativeId, activeType, draftScope]);
 
   function restoreDraft() {
     if (!offeredDraft) return;
-    setDrawId(offeredDraft.drawId);
+    // เลือกงวดตามรายการที่กู้คืน และเปิดแท็บประเภทหวยเดิม
+    const restoredDraws: Record<string, string> = {};
+    for (const entry of offeredDraft.entries) {
+      const owner = lotteries.find((item) => item.draws.some((row) => row.id === entry.drawId));
+      if (owner) restoredDraws[owner.type] = entry.drawId;
+    }
+    setDrawByType((current) => ({ ...current, ...restoredDraws }));
+    if (lotteries.some((item) => item.type === offeredDraft.activeType)) setActiveType(offeredDraft.activeType);
     setEntries(offeredDraft.entries);
     setTitle(offeredDraft.title);
     if (representatives?.some((item) => item.id === offeredDraft.representativeId)) setRepresentativeId(offeredDraft.representativeId);
@@ -367,16 +441,19 @@ export function BetSlip({
     return () => controller.abort();
   }, [ownerKey, slipDataUrl]);
 
-  const drawRestrictions = useMemo(() => {
-    const map = new Map<string, SlipRestriction>();
-    for (const item of restrictions[drawId] ?? []) map.set(`${item.prizeTypeId}:${item.number}`, item);
-    return map;
-  }, [restrictions, drawId]);
+  // เลขอั้น/เลขเต็มแยกตามงวด แต่ละรายการดูของงวดตัวเอง
+  const restrictionsByDraw = useMemo(() => {
+    const byDraw = new Map<string, Map<string, SlipRestriction>>();
+    for (const [id, rows] of Object.entries(restrictions)) {
+      byDraw.set(id, new Map(rows.map((item) => [`${item.prizeTypeId}:${item.number}`, item])));
+    }
+    return byDraw;
+  }, [restrictions]);
 
-  const restrictionOf = useCallback((entry: BetEntry) => {
+  const restrictionOf = useCallback((entry: BetEntry, entryDrawId: string) => {
     const rule = rules.get(entry.prizeTypeId);
-    return rule ? drawRestrictions.get(entryKey(entry.prizeTypeId, entry.number, rule.matchRule)) : undefined;
-  }, [rules, drawRestrictions]);
+    return rule ? restrictionsByDraw.get(entryDrawId)?.get(entryKey(entry.prizeTypeId, entry.number, rule.matchRule)) : undefined;
+  }, [rules, restrictionsByDraw]);
 
   const total = entries.reduce((sum, entry) => sum + entry.stake, 0);
   const groupDigits = group?.digits ?? 3;
@@ -392,15 +469,35 @@ export function BetSlip({
       setNotice({ tone: "error", text: `จำนวนเงินเดิมพันขั้นต่ำ ${MIN_STAKE_PER_ITEM} บาท` });
       return;
     }
+    if (isLaoSet && !LAO_SET_PACKAGE_PRICES.some((price) => price === amount)) {
+      setNotice({ tone: "error", text: `หวยลาวชุดเลือกราคาได้เฉพาะ ${LAO_SET_PACKAGE_PRICES.join(" / ")} บาท` });
+      return;
+    }
+    if (!draw) return;
+    const targetDraw = draw.id;
     const built = buildEntries({ numberValue, stake: amount, selected, reverse });
-    const blocked = built.filter((entry) => restrictionOf(entry)?.kind === "CLOSED");
-    const accepted = built.filter((entry) => restrictionOf(entry)?.kind !== "CLOSED");
-    setEntries((current) => addEntries(current, accepted, rules));
+    const blocked = built.filter((entry) => restrictionOf(entry, targetDraw)?.kind === "CLOSED");
+    const accepted = built.filter((entry) => restrictionOf(entry, targetDraw)?.kind !== "CLOSED");
+    // รวมยอดเลขซ้ำเฉพาะในงวดเดียวกัน รายการของประเภทหวยอื่นในบิลไม่ถูกแตะ
+    setEntries((current) => {
+      const sameDraw = current.filter((entry) => entry.drawId === targetDraw);
+      // ราคาหวยลาวชุดเป็นแพ็กเกจ: กดเลขเดิมซ้ำให้เปลี่ยนแพ็กเกจ ไม่บวกจนเกิดราคาที่ไม่อนุญาต
+      const merged = isLaoSet
+        ? [
+            ...sameDraw.filter((existing) => !accepted.some((next) => {
+              const rule = rules.get(next.prizeTypeId);
+              return rule && entryKey(existing.prizeTypeId, existing.number, rules.get(existing.prizeTypeId)?.matchRule ?? "EXACT") === entryKey(next.prizeTypeId, next.number, rule.matchRule);
+            })),
+            ...accepted,
+          ].map((entry) => ({ ...entry, drawId: targetDraw }))
+        : addEntries(sameDraw, accepted, rules).map((entry) => ({ ...entry, drawId: targetDraw }));
+      return [...current.filter((entry) => entry.drawId !== targetDraw), ...merged];
+    });
     if (blocked.length > 0) {
       const names = blocked.map((entry) => `${rules.get(entry.prizeTypeId)?.name ?? ""} ${entry.number}`).join(", ");
       setNotice({ tone: "error", text: `เลขเต็ม ปิดรับแล้ว: ${names}` });
     } else {
-      const reduced = accepted.filter((entry) => restrictionOf(entry)?.kind === "REDUCED_RATE");
+      const reduced = accepted.filter((entry) => restrictionOf(entry, targetDraw)?.kind === "REDUCED_RATE");
       setNotice({
         tone: "info",
         text: reduced.length > 0
@@ -408,7 +505,7 @@ export function BetSlip({
           : `เพิ่มเลข ${numberValue} แล้ว ${accepted.length} รายการ`,
       });
     }
-  }, [group, selectedIds, amount, reverse, restrictionOf, rules]);
+  }, [group, selectedIds, amount, reverse, restrictionOf, rules, draw, isLaoSet]);
 
   // เก็บค่าล่าสุดใน ref ด้วย เพราะการกดเลขครบหลักต้องเพิ่มรายการทันทีครั้งเดียว
   // ห้ามทำ side effect ใน state updater ซึ่ง React อาจเรียกซ้ำใน Strict Mode
@@ -447,15 +544,23 @@ export function BetSlip({
   }, [pressDigit, writeDigits]);
 
   function switchGroup(key: string) {
-    setGroupKey(key);
+    if (lottery) setGroupKeyByType((current) => ({ ...current, [lottery.type]: key }));
     writeDigits("");
+  }
+
+  function switchLottery(type: string) {
+    if (type === activeType) return;
+    setActiveType(type);
+    if (type === "LAO_SET" && !LAO_SET_PACKAGE_PRICES.some((price) => price === amount)) setAmount(LAO_SET_PACKAGE_PRICES[0]);
+    writeDigits("");
+    setNotice(null);
   }
 
   function toggleOption(prizeTypeId: string) {
     if (!group) return;
     setSelectedByGroup((current) => {
-      const list = current[group.key] ?? [];
-      return { ...current, [group.key]: list.includes(prizeTypeId) ? list.filter((id) => id !== prizeTypeId) : [...list, prizeTypeId] };
+      const list = current[optionKey] ?? selectedIds;
+      return { ...current, [optionKey]: list.includes(prizeTypeId) ? list.filter((id) => id !== prizeTypeId) : [...list, prizeTypeId] };
     });
   }
 
@@ -480,9 +585,43 @@ export function BetSlip({
   }
 
   /** เปลี่ยนงวดหรือล้างบิลทำให้รายการหาย ถามก่อนเสมอเมื่อมีรายการค้าง */
-  function confirmDiscard(action: string): boolean {
-    return entries.length === 0 || window.confirm(`${action}จะลบรายการที่แทงไว้ ${entries.length} รายการ ต้องการทำต่อหรือไม่?`);
+  function confirmDiscard(action: string, count = entries.length): boolean {
+    return count === 0 || window.confirm(`${action}จะลบรายการที่แทงไว้ ${count} รายการ ต้องการทำต่อหรือไม่?`);
   }
+
+  function changeDraw(nextDrawId: string) {
+    if (!lottery || !draw) return;
+    const affected = entries.filter((entry) => entry.drawId === draw.id).length;
+    if (!confirmDiscard(`เปลี่ยนงวด${lottery.label}`, affected)) return;
+    setDrawByType((current) => ({ ...current, [lottery.type]: nextDrawId }));
+    setEntries((current) => current.filter((entry) => entry.drawId !== draw.id));
+  }
+
+  // ---------------------------------------------------------------- จัดกลุ่มรายการตามประเภทหวย/งวด
+  const entryGroups = useMemo(() => {
+    const order = lotteries.flatMap((item) => item.draws.map((row) => row.id));
+    const groupsByDraw = new Map<string, { index: number; entry: SlipEntry }[]>();
+    entries.forEach((entry, index) => {
+      groupsByDraw.set(entry.drawId, [...(groupsByDraw.get(entry.drawId) ?? []), { index, entry }]);
+    });
+    return [...groupsByDraw.entries()]
+      .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
+      .map(([id, rows]) => {
+        const rowDraw = drawById.get(id);
+        const owner = lotteries.find((item) => item.draws.some((row) => row.id === id));
+        return { drawId: id, draw: rowDraw, lottery: owner, rows, total: rows.reduce((sum, row) => sum + row.entry.stake, 0) };
+      });
+  }, [entries, lotteries, drawById]);
+  const countByType = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const entry of entries) {
+      const owner = lotteryByPrize.get(entry.prizeTypeId);
+      if (owner) counts[owner.type] = (counts[owner.type] ?? 0) + 1;
+    }
+    return counts;
+  }, [entries, lotteryByPrize]);
+  // งวดที่มีรายการแต่ปิดรับไปแล้ว ส่งบิลไม่ได้จนกว่าจะลบรายการของงวดนั้น
+  const closedEntryGroups = entryGroups.filter((row) => !row.draw?.open);
 
   // ---------------------------------------------------------------- เตือนก่อนออกจากหน้า
   // ปิดแท็บ/รีเฟรช ใช้ beforeunload ส่วนลิงก์ในแอป (เมนู เปลี่ยนประเภทหวย breadcrumb) ดักคลิกก่อน Next.js
@@ -531,12 +670,23 @@ export function BetSlip({
     { ok: !needsRepresentative, label: "เลือกผู้รับบิล", hidden: representatives === null },
     { ok: title.trim().length > 0, label: "ระบุลูกค้า" },
     { ok: entries.length > 0, label: "เพิ่มตัวเลขลงบิล" },
-    { ok: entries.length > 0 && entries.every((entry) => entry.stake >= MIN_STAKE_PER_ITEM), label: `จำนวนเงินขั้นต่ำ ${MIN_STAKE_PER_ITEM} บาททุกรายการ` },
+    {
+      ok: entries.length > 0 && entries.every((entry) => {
+        const owner = lotteryByPrize.get(entry.prizeTypeId);
+        return owner?.type === "LAO_SET"
+          ? LAO_SET_PACKAGE_PRICES.some((price) => price === entry.stake)
+          : entry.stake >= MIN_STAKE_PER_ITEM;
+      }),
+      label: "ตรวจจำนวนเงินของแต่ละรายการ",
+    },
+    { ok: closedEntryGroups.length === 0, label: `ลบรายการของงวดที่ปิดรับแล้ว (${closedEntryGroups.map((row) => row.lottery?.label ?? "").join(", ")})`, hidden: closedEntryGroups.length === 0 },
   ].filter((check) => !check.hidden);
-  const ready = isOpen && checks.every((check) => check.ok) && !pending;
+  // ส่งบิลได้เมื่อทุกงวดที่มีรายการยังเปิดรับ แท็บที่เปิดอยู่ปิดรับแล้วก็ยังส่งรายการของหวยอื่นได้
+  const ready = checks.every((check) => check.ok) && !pending;
   // แถบยืนยันบนมือถือบอกสิ่งที่ยังขาด ผู้ใช้จะได้ไม่แทงครบแล้วเพิ่งรู้ว่ายังไม่เลือก Agent
   const missing = checks.find((check) => !check.ok);
-  const peekHint = !isOpen ? "ปิดรับแล้ว" : missing ? `ยังขาด: ${missing.label}` : "แตะเพื่อดูและแก้รายการ";
+  const typesInSlip = entryGroups.length;
+  const peekHint = missing ? `ยังขาด: ${missing.label}` : typesInSlip > 1 ? `${typesInSlip} ประเภทหวยในบิลเดียว · แตะเพื่อดูรายการ` : "แตะเพื่อดูและแก้รายการ";
 
   if (!draw || !group) {
     return <p className="error">ยังไม่มีงวดหรือประเภทรางวัลที่เปิดให้แทง</p>;
@@ -545,8 +695,14 @@ export function BetSlip({
   return (
     <form ref={formRef} action={placeAction} onSubmit={onSubmit} className="bet-slip bill-create-form" aria-busy={placing}>
       <input ref={keyInputRef} type="hidden" name="submissionKey" defaultValue="" />
-      <input type="hidden" name="drawId" value={draw.id} />
-      <input type="hidden" name="items" value={JSON.stringify(entries)} />
+      <input
+        type="hidden"
+        name="parts"
+        value={JSON.stringify(entryGroups.map((row) => ({
+          drawId: row.drawId,
+          items: row.rows.map(({ entry }) => ({ prizeTypeId: entry.prizeTypeId, number: entry.number, stake: entry.stake })),
+        })))}
+      />
       {representatives !== null && <input type="hidden" name="representativeUserId" value={representativeId} />}
 
       <header className="bs-header">
@@ -559,6 +715,31 @@ export function BetSlip({
             <p>เพิ่มรายการเลข ตรวจสอบยอด และยืนยันบิล</p>
           </div>
         </div>
+        {lotteries.length > 1 && (
+          <div className="bs-lottery-picker">
+            <p><strong>เพิ่มประเภทหวยในบิลเดียว</strong><span>เลือกแท็บแล้วใส่เลข รายการเดิมจะไม่หาย</span></p>
+            <nav className="bs-lottery-tabs" role="tablist" aria-label="ประเภทหวยในบิลนี้">
+              {lotteries.map((item) => {
+                const open = item.draws.some((row) => row.open);
+                return (
+                  <button
+                    key={item.type}
+                    type="button"
+                    role="tab"
+                    aria-selected={item.type === activeType}
+                    className={`bs-lottery-tab is-${item.type.toLowerCase()}${open ? "" : " is-closed"}`}
+                    onClick={() => switchLottery(item.type)}
+                    disabled={!open}
+                  >
+                    <span className="bs-lottery-tab-flag" aria-hidden="true">{item.flag === "LA" ? <LaoFlag /> : <ThaiFlag />}</span>
+                    <span>{item.type === "THAI_GOVERNMENT" ? "หวยไทย" : item.label}<small><i aria-hidden="true" />{open ? "เปิดรับ" : "ปิดรับแล้ว"}</small></span>
+                    {countByType[item.type] ? <b aria-label={`${countByType[item.type]} รายการ`}>{countByType[item.type]}</b> : null}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        )}
         <div className="bs-draw-bar">
           <RulesDialog
             lotteryType={draw.lotteryType}
@@ -569,18 +750,14 @@ export function BetSlip({
             restrictions={restrictions[draw.id] ?? []}
           />
           <div className="bs-draw-panel">
-            {/* มือถือ: ประเภทหวยกับปุ่มเปลี่ยนอยู่ในแถบเดียวกับงวด แทนกล่องเต็มแถวด้านบน */}
-            <Link className="bs-lottery-switch" href="/bills/new" aria-label={`${draw.lotteryLabel} เปลี่ยนประเภทหวย`}>
-              <strong>{draw.lotteryLabel}</strong><span>เปลี่ยน</span>
-            </Link>
             <label className="bs-draw-select">
-              <span className="sr-only">เลือกงวด</span>
+              <span className="sr-only">เลือกงวด{draw.lotteryLabel}</span>
               <span className="bs-draw-flag">{draw?.flag === "LA" ? <LaoFlag /> : <ThaiFlag />}</span>
               {draws.length > 1 ? (
-                <select value={draw.id} onChange={(event) => { if (confirmDiscard("เปลี่ยนงวด")) { setDrawId(event.target.value); setEntries([]); } }}>
-                  {draws.map((item) => <option key={item.id} value={item.id}>งวด {item.dateLabel}</option>)}
+                <select value={draw.id} onChange={(event) => changeDraw(event.target.value)}>
+                  {draws.map((item) => <option key={item.id} value={item.id}>{lotteries.length > 1 ? `${item.lotteryLabel} ` : ""}งวด {item.dateLabel}</option>)}
                 </select>
-              ) : <strong>งวด {draw.dateLabel}</strong>}
+              ) : <strong>{lotteries.length > 1 ? `${draw.lotteryLabel} ` : ""}งวด {draw.dateLabel}</strong>}
             </label>
             <span className={`bs-open-state ${isOpen ? "is-open" : "is-closed"}`}><i aria-hidden="true" />{isOpen ? "เปิดรับ" : "ปิดรับแล้ว"}</span>
             <span className="bs-countdown">
@@ -590,7 +767,7 @@ export function BetSlip({
         </div>
       </header>
 
-      {!isOpen && <p className="bs-banner" role="alert"><span aria-hidden="true">i</span>หมดเวลาการเดิมพันสำหรับงวดนี้</p>}
+      {!isOpen && <p className="bs-banner" role="alert"><span aria-hidden="true">i</span>หมดเวลาการเดิมพันสำหรับ{draw.lotteryLabel}งวดนี้{lotteries.length > 1 ? " เลือกประเภทหวยอื่นจากแท็บด้านบนได้" : ""}</p>}
       {isOpen && cutoffAlert !== null && (
         <p className={`bs-cutoff-alert ${cutoffAlert === 1 ? "is-urgent" : ""}`} role="alert">
           <span aria-hidden="true">⏰</span>
@@ -673,22 +850,29 @@ export function BetSlip({
             {entries.length === 0 && (
               <li className="bs-empty">
                 <strong>ยังไม่มีรายการ</strong>
-                <small>เลือกประเภท ใส่จำนวนเงิน แล้วกดตัวเลข</small>
+                <small>{isLaoSet ? "เลือกราคา เลือกประเภท แล้วกดตัวเลข" : "เลือกประเภท ใส่จำนวนเงิน แล้วกดตัวเลข"}</small>
               </li>
             )}
-            {entries.map((entry, index) => {
+            {entryGroups.flatMap((section) => [
+              <li key={`group:${section.drawId}`} className={`bs-entry-group is-${section.lottery?.type.toLowerCase() ?? "x"}`}>
+                <span className="bs-entry-group-flag" aria-hidden="true">{section.lottery?.flag === "LA" ? <LaoFlag /> : <ThaiFlag />}</span>
+                <strong>{section.lottery?.label ?? "งวดอื่น"}</strong>
+                <small>งวด {section.draw?.dateLabel ?? "-"}{section.draw && !section.draw.open ? " · ปิดรับแล้ว" : ""}</small>
+                <span>{section.rows.length} รายการ · {money(section.total)}</span>
+              </li>,
+              ...section.rows.map(({ entry, index }) => {
               const rule = rules.get(entry.prizeTypeId);
-              const restriction = restrictionOf(entry);
+              const restriction = restrictionOf(entry, entry.drawId);
               const rejectedReason = rejectedReasons.get(`${entry.prizeTypeId}:${entry.number}`);
               return (
-                <li key={`${entry.prizeTypeId}:${entry.number}`} className={`bs-entry ${restriction?.kind === "REDUCED_RATE" ? "is-restricted" : ""} ${rejectedReason ? "is-rejected" : ""}`}>
+                <li key={`${entry.drawId}:${entry.prizeTypeId}:${entry.number}`} className={`bs-entry is-${section.lottery?.type.toLowerCase() ?? "x"} ${restriction?.kind === "REDUCED_RATE" ? "is-restricted" : ""} ${rejectedReason ? "is-rejected" : ""}`}>
                   <span className="bs-entry-main">
                     <span className={`bs-badge bs-badge-${badgeKey(rule)}`}>{rule?.name ?? "-"}</span>
                     <span className="bs-entry-number">{entry.number}</span>
                     {restriction?.kind === "REDUCED_RATE" && <em className="bs-entry-reduced">อั้น {compactRate(restriction.payoutRate ?? "0")}</em>}
                     {rejectedReason && <small className="bs-entry-rejected">รับไม่ได้: {rejectedReason}</small>}
                   </span>
-                  {editing === index ? (
+                  {editing === index && section.lottery?.type !== "LAO_SET" ? (
                     <input
                       className="bs-entry-input"
                       inputMode="numeric"
@@ -705,16 +889,19 @@ export function BetSlip({
                     <span className="bs-entry-stake">{money(entry.stake)}</span>
                   )}
                   <span className="bs-entry-actions">
-                    <button type="button" className="bs-icon-button" aria-label={`แก้จำนวนเงิน ${entry.number}`} onClick={() => setEditing(editing === index ? null : index)} disabled={!isOpen}>
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                    </button>
-                    <button type="button" className="bs-icon-button is-danger" aria-label={`ลบ ${rule?.name ?? ""} ${entry.number}`} onClick={() => { setEditing(null); setEntries((current) => current.filter((_, i) => i !== index)); }} disabled={!isOpen}>
+                    {section.lottery?.type !== "LAO_SET" && (
+                      <button type="button" className="bs-icon-button" aria-label={`แก้จำนวนเงิน ${entry.number}`} onClick={() => setEditing(editing === index ? null : index)} disabled={placing}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                      </button>
+                    )}
+                    <button type="button" className="bs-icon-button is-danger" aria-label={`ลบ ${section.lottery?.label ?? ""} ${rule?.name ?? ""} ${entry.number}`} onClick={() => { setEditing(null); setEntries((current) => current.filter((_, i) => i !== index)); }} disabled={placing}>
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></svg>
                     </button>
                   </span>
                 </li>
               );
-            })}
+              }),
+            ])}
           </ol>
 
           <footer className="bs-list-foot">
@@ -734,67 +921,78 @@ export function BetSlip({
 
         <section className="bs-card bs-pad" aria-label="แป้นแทงเลข">
           <div className="bs-step">
-            <h3 className="bs-step-title"><span>1</span>เลือกประเภท</h3>
-            <div className="bs-tabs" role="tablist" aria-label="หมวดเลข">
-              {groups.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={item.key === group.key}
-                  className={`bs-tab bs-tab-${item.key}`}
-                  onClick={() => switchGroup(item.key)}
-                >
-                  <span className="bs-tab-label">{item.label}</span>
-                  {item.prizeTypes[0] && <small>จ่าย {compactRate(item.prizeTypes[0].payoutRate)}</small>}
-                </button>
-              ))}
-            </div>
-            <div className="bs-options" aria-label="ตัวเลือก">
-              {group.prizeTypes.map((prizeType) => (
-                <button key={prizeType.id} type="button" aria-pressed={selectedIds.includes(prizeType.id)} className="bs-option" onClick={() => toggleOption(prizeType.id)} disabled={!isOpen}>
-                  {prizeType.name}
-                </button>
-              ))}
-              {group.digits > 1 && (
-                <button
-                  type="button"
-                  aria-pressed={reverse}
-                  className="bs-option"
-                  onClick={() => setReverseByGroup((current) => ({ ...current, [group.key]: !reverse }))}
-                  disabled={!isOpen}
-                >
-                  ⇄ สลับเลข
-                </button>
-              )}
-            </div>
+            <h3 className="bs-step-title"><span>1</span>{isLaoSet ? "เลือกราคา" : "เลือกประเภท"}</h3>
+            {isLaoSet ? (
+              <>
+                <p className="bs-step-help">ราคาต่อชุดกำหนดไว้แล้ว เลือกได้ 1 ราคา</p>
+                <div className="bs-lao-packages" role="group" aria-label="เลือกราคาหวยลาวชุด">
+                  {LAO_SET_PACKAGE_PAYOUTS.map((item) => (
+                    <button key={item.price} type="button" className={amount === item.price ? "is-active" : ""} aria-pressed={amount === item.price} onClick={() => setAmount(item.price)} disabled={!isOpen}>
+                      <strong>{item.price} บาท</strong>
+                      <span className="bs-lao-package-rates">
+                        <span>4 ตัวตรง <b>{item.exact.toLocaleString("th-TH")}</b></span>
+                        <span>4 ตัวโต๊ด <b>{item.permutation.toLocaleString("th-TH")}</b></span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bs-tabs" role="tablist" aria-label="หมวดเลข">
+                  {groups.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={item.key === group.key}
+                      className={`bs-tab bs-tab-${item.key}`}
+                      onClick={() => switchGroup(item.key)}
+                    >
+                      <span className="bs-tab-label">{item.label}</span>
+                      {item.prizeTypes[0] && <small>จ่าย {compactRate(item.prizeTypes[0].payoutRate)}</small>}
+                    </button>
+                  ))}
+                </div>
+                <PrizeTypeOptions
+                  group={group}
+                  selectedIds={selectedIds}
+                  reverse={reverse}
+                  isOpen={isOpen}
+                  toggleOption={toggleOption}
+                  toggleReverse={() => setReverseByGroup((current) => ({ ...current, [optionKey]: !reverse }))}
+                />
+              </>
+            )}
           </div>
 
           <div className="bs-step">
-            <h3 className="bs-step-title"><span>2</span>กำหนดจำนวนเงิน</h3>
-            <div className="bs-amount">
-              <div className="bs-stepper">
-                <button type="button" className="bs-minus" onClick={() => setAmount((value) => Math.max(MIN_STAKE_PER_ITEM, value - 1))} disabled={!isOpen} aria-label="ลดจำนวนเงิน">−</button>
-                <input
-                  aria-label="จำนวนเงินต่อรายการ"
-                  inputMode="numeric"
-                  min={MIN_STAKE_PER_ITEM}
-                  max={MAX_STAKE}
-                  value={amount}
-                  disabled={!isOpen}
-                  onChange={(event) => setAmount(Math.min(Number(event.target.value.replace(/\D/g, "")) || 0, MAX_STAKE))}
-                  onBlur={() => setAmount((value) => Math.max(MIN_STAKE_PER_ITEM, value))}
+            <h3 className="bs-step-title"><span>2</span>{isLaoSet ? "เลือกประเภท" : "กำหนดจำนวนเงิน"}</h3>
+            {isLaoSet ? (
+              <>
+                <p className="bs-step-help">เลือกได้ทั้งตัวตรงและตัวโต๊ด ส่วนตัวสลับจะช่วยแตกเลขให้อัตโนมัติ</p>
+                <PrizeTypeOptions
+                  group={group}
+                  selectedIds={selectedIds}
+                  reverse={reverse}
+                  isOpen={isOpen}
+                  isLaoSet
+                  toggleOption={toggleOption}
+                  toggleReverse={() => setReverseByGroup((current) => ({ ...current, [optionKey]: !reverse }))}
                 />
-                <button type="button" className="bs-plus" onClick={() => setAmount((value) => Math.min(Math.max(MIN_STAKE_PER_ITEM, value + 1), MAX_STAKE))} disabled={!isOpen} aria-label="เพิ่มจำนวนเงิน">+</button>
+              </>
+            ) : (
+              <div className="bs-amount">
+                <div className="bs-stepper">
+                  <button type="button" className="bs-minus" onClick={() => setAmount((value) => Math.max(MIN_STAKE_PER_ITEM, value - 1))} disabled={!isOpen} aria-label="ลดจำนวนเงิน">−</button>
+                  <input aria-label="จำนวนเงินต่อรายการ" inputMode="numeric" min={MIN_STAKE_PER_ITEM} max={MAX_STAKE} value={amount} disabled={!isOpen} onChange={(event) => setAmount(Math.min(Number(event.target.value.replace(/\D/g, "")) || 0, MAX_STAKE))} onBlur={() => setAmount((value) => Math.max(MIN_STAKE_PER_ITEM, value))} />
+                  <button type="button" className="bs-plus" onClick={() => setAmount((value) => Math.min(Math.max(MIN_STAKE_PER_ITEM, value + 1), MAX_STAKE))} disabled={!isOpen} aria-label="เพิ่มจำนวนเงิน">+</button>
+                </div>
+                <div className="bs-chips" aria-label="เลือกจำนวนเงิน">
+                  {CHIPS.map((chip) => <button key={chip} type="button" className={`bs-chip bs-chip-${chip}`} onClick={() => setAmount(chip)} disabled={!isOpen} aria-label={`ตั้งจำนวนเงินเป็น ${chip} บาท`}>{chip >= 1000 ? "1K" : chip}</button>)}
+                </div>
               </div>
-              <div className="bs-chips" aria-label="เลือกจำนวนเงิน">
-                {CHIPS.map((chip) => (
-                  <button key={chip} type="button" className={`bs-chip bs-chip-${chip}`} onClick={() => setAmount(chip)} disabled={!isOpen} aria-label={`ตั้งจำนวนเงินเป็น ${chip} บาท`}>
-                    {chip >= 1000 ? "1K" : chip}
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="bs-step">
@@ -833,7 +1031,13 @@ export function BetSlip({
             <span className="bs-peek-arrow" aria-hidden="true">▴</span>
           </button>
           <dl className="bs-summary">
-            <div><dt>งวด</dt><dd>{draw.dateLabel}</dd></div>
+            {entryGroups.length > 1 ? (
+              entryGroups.map((section) => (
+                <div key={`sum:${section.drawId}`}><dt>{section.lottery?.label ?? "งวด"} {section.draw?.dateLabel ?? ""}</dt><dd>{section.rows.length} รายการ · {money(section.total)}</dd></div>
+              ))
+            ) : (
+              <div><dt>งวด</dt><dd>{entryGroups[0]?.lottery?.label ?? draw.lotteryLabel} {entryGroups[0]?.draw?.dateLabel ?? draw.dateLabel}</dd></div>
+            )}
             {representatives !== null && <div><dt>ผู้รับบิล</dt><dd>{representative?.displayName ?? "ยังไม่เลือก"}</dd></div>}
             <div><dt>ลูกค้า</dt><dd>{title.trim() || "ยังไม่ระบุ"}</dd></div>
             <div><dt>จำนวนรายการ</dt><dd>{entries.length} รายการ</dd></div>

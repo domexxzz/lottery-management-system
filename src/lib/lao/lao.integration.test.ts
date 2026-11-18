@@ -3,9 +3,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
 import { placeBill } from "@/lib/bills/service";
-import { lockDrawManually } from "@/lib/draws/service";
+import { lockDrawManually, lockDueDraws } from "@/lib/draws/service";
 import { toBangkokDateTimeLocal } from "@/lib/draws/schedule";
-import { calculateSettlement } from "@/lib/settlement/service";
+import { approveSettlement, calculateSettlement } from "@/lib/settlement/service";
 import { LAO_PRIZE_TYPES } from "./rules";
 import { createLaoDraws, enterLaoResult, removeCapOverride, setCapOverride } from "./service";
 
@@ -33,6 +33,7 @@ beforeEach(async () => {
         matchRule: prize.matchRule,
         lotteryType: prize.lotteryType,
         payoutRate: new Prisma.Decimal(prize.payoutRate),
+        isActive: prize.isActive,
       },
     });
   }
@@ -53,12 +54,15 @@ describe("สร้างงวดหวยลาว", () => {
   test("สร้างหวยลาวและหวยลาวชุดของวันเดียวกัน สร้างซ้ำไม่ได้ วันอื่นและเวลาออกผลแก้ได้", async () => {
     const draws = await prisma.draw.findMany({ where: { id: { in: [lao.id, laoSet.id] } }, orderBy: { lotteryType: "asc" } });
     expect(draws.map((draw) => draw.lotteryType)).toEqual(["LAO", "LAO_SET"]);
+    expect(draws[0]!.laoFamilyId).toBeTruthy();
+    expect(draws[1]!.laoFamilyId).toBe(draws[0]!.laoFamilyId);
     expect(draws[0]!.name).toMatch(/^หวยลาว /);
     expect(draws[1]!.name).toMatch(/^หวยลาวชุด /);
     const sameDay = draws[0]!.drawDate!.toISOString().slice(0, 10);
     // สร้างซ้ำวันเดียวกันได้ ระบบแจ้งว่าเป็นงวดซ้ำ
     const again = await createLaoDraws(f.actors.ADMIN, { drawDate: sameDay, opensAt: `${sameDay}T10:00`, cutoffAt: `${sameDay}T20:00`, lotteryTypes: ["LAO"] });
     expect(again.duplicates).toEqual(["หวยลาว"]);
+    expect((await prisma.draw.findUniqueOrThrow({ where: { id: again.drawIds[0]! } })).laoFamilyId).toBeNull();
     expect(await prisma.draw.count({ where: { drawDate: draws[0]!.drawDate, lotteryType: "LAO" } })).toBe(2);
     // ค่าเริ่มต้นออกผล 20:30 น. ของวันงวด
     expect(draws[0]!.resultAt?.toISOString().slice(11, 16)).toBe("13:30");
@@ -71,6 +75,17 @@ describe("สร้างงวดหวยลาว", () => {
     await expect(createLaoDraws(f.actors.AGENT1, { drawDate: nextWeekday(7), opensAt: "2030-01-01T10:00", cutoffAt: "2030-01-01T20:00", lotteryTypes: ["LAO"] }))
       .rejects.toThrow();
   });
+
+  test("งานปิดรับอัตโนมัติปิดคู่งวดพร้อมกันเพียงครั้งเดียว", async () => {
+    const outcome = await lockDueDraws(new Date(Date.now() + 2 * 3_600_000));
+    const statuses = await prisma.draw.findMany({
+      where: { id: { in: [lao.id, laoSet.id] } },
+      select: { status: true },
+    });
+    expect(statuses.map((draw) => draw.status).sort()).toEqual(["LOCKED", "LOCKED"]);
+    expect(outcome.locked.filter((row) => row.drawName.includes("หวยลาว")).length).toBe(1);
+    expect(outcome.failed).toEqual([]);
+  });
 });
 
 describe("รับบิลหวยลาว", () => {
@@ -81,21 +96,29 @@ describe("รับบิลหวยลาว", () => {
       .rejects.toThrow(/ไม่พบประเภทรางวัล|ประเภทรางวัล/);
   });
 
-  test("หวยลาวชุดแทงได้ทุกเลขทุกประเภททันที ไม่ต้องเปิดเลขก่อน และใช้รางวัลหวยลาวผิดงวดไม่ได้", async () => {
+  test("หวยลาวชุดแทงได้เฉพาะ 4 ตัวตรงและ 4 ตัวโต๊ด", async () => {
     const placed = await placeBill(f.actors.AGENT1, {
       drawId: laoSet.id,
       title: "ก",
-      items: [bet(201, "1234", "5"), bet(203, "2143", "5"), bet(206, "12", "5"), bet(207, "34", "5")],
+      items: [bet(201, "1234", "30"), bet(203, "2143", "60"), bet(201, "5678", "120")],
     });
     expect(placed.billNumber).toMatch(/^A00103\d{6}0001$/);
+    await expect(placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "ประเภทเดิม", items: [bet(202, "123", "5")] }))
+      .rejects.toThrow(/ประเภทรางวัล/);
+    await expect(placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "ราคาอื่น", items: [bet(201, "9999", "50")] }))
+      .rejects.toThrow(/30 \/ 60 \/ 120/);
     // รางวัลของหวยลาว (101) ใช้ในงวดหวยลาวชุดไม่ได้ และกลับกัน
     await expect(placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "ข", items: [bet(101, "123", "5")] })).rejects.toThrow(/ประเภทรางวัล/);
     await expect(placeBill(f.actors.AGENT1, { drawId: lao.id, title: "ค", items: [bet(201, "1234", "5")] })).rejects.toThrow(/ประเภทรางวัล/);
   });
 
-  test("หวยลาวชุดใช้ชื่อ 2 ตัวบน / 2 ตัวล่าง", async () => {
-    const names = (await prisma.prizeType.findMany({ where: { organizationId: f.org.id, code: { in: [206, 207] } }, orderBy: { code: "asc" } })).map((row) => row.name);
-    expect(names).toEqual(["2 ตัวล่าง", "2 ตัวบน"]);
+  test("หวยลาวชุดเปิดใช้แค่รหัส 201 และ 203", async () => {
+    const activeCodes = (await prisma.prizeType.findMany({
+      where: { organizationId: f.org.id, lotteryType: "LAO_SET", isActive: true },
+      orderBy: { code: "asc" },
+      select: { code: true },
+    })).map((row) => row.code);
+    expect(activeCodes).toEqual([201, 203]);
   });
 
   test("เพดาน 2,000 แยกตามประเภท และ Owner ตั้งเพดานเฉพาะเลขได้ (Admin ตั้งไม่ได้)", async () => {
@@ -130,13 +153,16 @@ describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนว
       drawId: laoSet.id,
       title: "หวยลาวชุด",
       items: [
-        bet(201, "9441", "5"), bet(202, "441", "5"), bet(203, "4194", "5"), bet(204, "414", "5"),
-        bet(205, "944", "5"), bet(206, "94", "5"), bet(207, "41", "5"), bet(201, "1234", "5"),
+        bet(201, "9441", "30"), bet(203, "4194", "30"), bet(201, "1234", "30"),
       ],
     });
 
     await lockDrawManually(f.actors.ADMIN, lao.id);
-    await lockDrawManually(f.actors.ADMIN, laoSet.id);
+    expect((await prisma.draw.findMany({
+      where: { id: { in: [lao.id, laoSet.id] } },
+      orderBy: { id: "asc" },
+      select: { status: true },
+    })).map((draw) => draw.status)).toEqual(["LOCKED", "LOCKED"]);
     await expect(enterLaoResult(f.actors.ADMIN, lao.id, "48a441")).rejects.toThrow(/ตัวเลข/);
     const entered = await enterLaoResult(f.actors.ADMIN, lao.id, "489441");
     expect(entered.saved.map((row) => row.drawId).sort()).toEqual([lao.id, laoSet.id].sort());
@@ -144,7 +170,7 @@ describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนว
 
     const results = await prisma.result.findMany({ where: { drawId: { in: [lao.id, laoSet.id] } }, include: { prizeType: { select: { code: true } } } });
     const valueOf = Object.fromEntries(results.map((row) => [row.prizeType.code, row.value]));
-    expect(valueOf).toEqual({ 101: "441", 102: "441", 103: "41", 104: "94", 201: "9441", 202: "441", 203: "9441", 204: "441", 205: "944", 206: "94", 207: "41" });
+    expect(valueOf).toEqual({ 101: "441", 102: "441", 103: "41", 104: "94", 201: "9441", 203: "9441" });
     expect((await prisma.draw.findUniqueOrThrow({ where: { id: laoSet.id } })).officialNumber).toBe("489441");
 
     const [laoPreview] = await calculateSettlement(f.actors.ADMIN, lao.id);
@@ -153,17 +179,72 @@ describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนว
     expect(laoPreview!.winningItems).toBe(4);
 
     const [setPreview] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
-    // ทุกประเภทที่แทงไว้ถูกหมด ได้รวม ส่วน 4 ตัวตรง 1234 ไม่ถูก
-    expect(setPreview!.payout.toFixed(2)).toBe((5 * (50000 + 17000 + 2000 + 1250 + 600 + 500 + 500)).toFixed(2));
-    expect(setPreview!.winningItems).toBe(7);
-    expect(setPreview!.gross.toFixed(2)).toBe("40.00");
+    // 4 ตัวตรงและ 4 ตัวโต๊ดถูก ส่วน 4 ตัวตรง 1234 ไม่ถูก
+    expect(setPreview!.payout.toFixed(2)).toBe((25_500 + 1_125).toFixed(2));
+    expect(setPreview!.winningItems).toBe(2);
+    expect(setPreview!.gross.toFixed(2)).toBe("90.00");
   });
 
   test("ได้เฉพาะที่แทง: แทง 4 ตัวตรงอย่างเดียว ผลตรงก็ไม่ได้ 4 ตัวโต๊ดเพิ่ม", async () => {
-    await placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "ก", items: [bet(201, "9441", "20")] });
+    await placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "ก", items: [bet(201, "9441", "30")] });
     await lockDrawManually(f.actors.ADMIN, laoSet.id);
     await enterLaoResult(f.actors.ADMIN, laoSet.id, "489441");
     const [preview] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
-    expect(preview!.payout.toFixed(2)).toBe("1000000.00"); // 20 × 50,000
+    expect(preview!.payout.toFixed(2)).toBe("25500.00"); // ชุด 30 บาท × 850
+  });
+
+  test("งวดเดี่ยววันเดียวกันไม่ถูกปิดหรือบันทึกผลตามคู่งวด", async () => {
+    const paired = await prisma.draw.findUniqueOrThrow({ where: { id: lao.id }, select: { drawDate: true } });
+    const sameDay = paired.drawDate!.toISOString().slice(0, 10);
+    const standalone = await createLaoDraws(f.actors.ADMIN, {
+      drawDate: sameDay,
+      opensAt: `${sameDay}T10:00`,
+      cutoffAt: `${sameDay}T20:00`,
+      lotteryTypes: ["LAO"],
+    });
+    const standaloneId = standalone.drawIds[0]!;
+
+    await lockDrawManually(f.actors.ADMIN, laoSet.id);
+    expect((await prisma.draw.findUniqueOrThrow({ where: { id: standaloneId } })).status).toBe("OPEN");
+
+    await enterLaoResult(f.actors.ADMIN, lao.id, "489441");
+    expect(await prisma.result.count({ where: { drawId: standaloneId } })).toBe(0);
+  });
+
+  test("บิลเก่าที่ใช้รางวัลลาวชุดซึ่งปิดใช้งานแล้ว ไม่ขวางการบันทึกผลให้คู่งวด", async () => {
+    const placed = await placeBill(f.actors.AGENT1, {
+      drawId: laoSet.id,
+      title: "บิลเก่า",
+      items: [bet(201, "9441", "30")],
+    });
+    await prisma.billItem.create({
+      data: {
+        organizationId: f.org.id,
+        billId: placed.billId,
+        prizeTypeId: pt[206]!,
+        number: "94",
+        stake: new Prisma.Decimal(5),
+        payoutRateSnapshot: new Prisma.Decimal(500),
+      },
+    });
+    await lockDrawManually(f.actors.ADMIN, lao.id);
+
+    const entered = await enterLaoResult(f.actors.ADMIN, lao.id, "489441");
+    expect(entered.saved.map((row) => row.drawId).sort()).toEqual([lao.id, laoSet.id].sort());
+    expect(await prisma.result.count({ where: { drawId: laoSet.id, prizeTypeId: pt[206] } })).toBe(1);
+  });
+
+  test("คำนวณและปิดบัญชีจากฝั่งเดียว เปลี่ยนสถานะคู่งวดพร้อมกัน", async () => {
+    await placeBill(f.actors.AGENT1, { drawId: lao.id, title: "ลาว", items: [bet(101, "441", "10")] });
+    await lockDrawManually(f.actors.ADMIN, laoSet.id);
+    await enterLaoResult(f.actors.ADMIN, lao.id, "489441");
+
+    await calculateSettlement(f.actors.ADMIN, lao.id);
+    expect((await prisma.draw.findMany({ where: { id: { in: [lao.id, laoSet.id] } }, select: { status: true } }))
+      .map((draw) => draw.status).sort()).toEqual(["SETTLED", "SETTLED"]);
+
+    await approveSettlement(f.actors.OWNER, laoSet.id);
+    expect((await prisma.draw.findMany({ where: { id: { in: [lao.id, laoSet.id] } }, select: { status: true } }))
+      .map((draw) => draw.status).sort()).toEqual(["CLOSED", "CLOSED"]);
   });
 });

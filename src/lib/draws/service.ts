@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
@@ -33,6 +34,7 @@ export async function listDraws(
       createdAt: true,
       status: true,
       lotteryType: true,
+      laoFamilyId: true,
       lockedAt: true,
       settlements: { select: { status: true } },
       _count: { select: { bills: true } },
@@ -103,6 +105,8 @@ export type LockOutcome = {
   draftsCancelled: number;
 };
 
+type LockOptions = { actorId: string | null; reason: string; requestId?: string | undefined };
+
 /**
  * ปิดงวดและล็อกบิลทั้งงวด
  *
@@ -114,63 +118,113 @@ export type LockOutcome = {
  *
  * actorId เป็น null ได้เมื่อ job อัตโนมัติเป็นผู้เรียก
  */
-export async function lockDraw(
+async function lockDrawInTransaction(
+  tx: Prisma.TransactionClient,
   drawId: string,
-  options: { actorId: string | null; reason: string; requestId?: string | undefined },
+  options: LockOptions,
 ): Promise<LockOutcome> {
-  return prisma.$transaction(async (tx) => {
-    const draw = await tx.draw.findUnique({
-      where: { id: drawId },
-      select: { id: true, name: true, status: true, organizationId: true },
-    });
+  const draw = await tx.draw.findUnique({
+    where: { id: drawId },
+    select: { id: true, name: true, status: true, organizationId: true },
+  });
 
-    if (!draw) throw new NotFoundError("ไม่พบงวด");
-    if (draw.status !== "OPEN") {
-      throw new ConflictError(`งวด "${draw.name}" ไม่ได้อยู่ในสถานะเปิดรับ`);
-    }
+  if (!draw) throw new NotFoundError("ไม่พบงวด");
+  if (draw.status !== "OPEN") {
+    throw new ConflictError(`งวด "${draw.name}" ไม่ได้อยู่ในสถานะเปิดรับ`);
+  }
 
-    const now = new Date();
+  const now = new Date();
 
-    const locked = await tx.bill.updateMany({
-      where: { drawId: draw.id, status: "CONFIRMED" },
-      data: { status: "LOCKED" },
-    });
+  const locked = await tx.bill.updateMany({
+    where: { drawId: draw.id, status: "CONFIRMED" },
+    data: { status: "LOCKED" },
+  });
 
-    const cancelled = await tx.bill.updateMany({
-      where: { drawId: draw.id, status: "DRAFT" },
-      data: {
-        status: "CANCELLED",
-        cancelledAt: now,
-        cancelReason: "บิลร่างค้างอยู่เมื่อถึงเวลาปิดรับ",
-      },
-    });
+  const cancelled = await tx.bill.updateMany({
+    where: { drawId: draw.id, status: "DRAFT" },
+    data: {
+      status: "CANCELLED",
+      cancelledAt: now,
+      cancelReason: "บิลร่างค้างอยู่เมื่อถึงเวลาปิดรับ",
+    },
+  });
 
-    await tx.draw.update({
-      where: { id: draw.id },
-      data: { status: "LOCKED", lockedAt: now },
-    });
+  await tx.draw.update({
+    where: { id: draw.id },
+    data: { status: "LOCKED", lockedAt: now },
+  });
 
-    await writeAudit(tx, {
-      organizationId: draw.organizationId,
-      actorId: options.actorId,
-      requestId: options.requestId,
-      action: "LOCK",
-      entityType: "Draw",
-      entityId: draw.id,
-      before: { status: "OPEN" },
-      after: {
-        status: "LOCKED",
-        billsLocked: locked.count,
-        draftsCancelled: cancelled.count,
-      },
-      reason: options.reason,
-    });
-
-    return {
-      drawId: draw.id,
-      drawName: draw.name,
+  await writeAudit(tx, {
+    organizationId: draw.organizationId,
+    actorId: options.actorId,
+    requestId: options.requestId,
+    action: "LOCK",
+    entityType: "Draw",
+    entityId: draw.id,
+    before: { status: "OPEN" },
+    after: {
+      status: "LOCKED",
       billsLocked: locked.count,
       draftsCancelled: cancelled.count,
+    },
+    reason: options.reason,
+  });
+
+  return {
+    drawId: draw.id,
+    drawName: draw.name,
+    billsLocked: locked.count,
+    draftsCancelled: cancelled.count,
+  };
+}
+
+export async function lockDraw(drawId: string, options: LockOptions): Promise<LockOutcome> {
+  return prisma.$transaction((tx) => lockDrawInTransaction(tx, drawId, options));
+}
+
+/** ปิดงวดที่เลือกและงวดลาวคู่กันใน transaction เดียว */
+async function lockDrawFamily(drawId: string, options: LockOptions): Promise<LockOutcome> {
+  return prisma.$transaction(async (tx) => {
+    const selected = await tx.draw.findUnique({
+      where: { id: drawId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        organizationId: true,
+        lotteryType: true,
+        laoFamilyId: true,
+      },
+    });
+    if (!selected) throw new NotFoundError("ไม่พบงวด");
+    if (selected.status !== "OPEN") {
+      throw new ConflictError(`งวด "${selected.name}" ไม่ได้อยู่ในสถานะเปิดรับ`);
+    }
+
+    const paired = (selected.lotteryType === "LAO" || selected.lotteryType === "LAO_SET")
+      && selected.laoFamilyId;
+    const members = paired
+      ? await tx.draw.findMany({
+        where: {
+          organizationId: selected.organizationId,
+          laoFamilyId: selected.laoFamilyId,
+          lotteryType: { in: ["LAO", "LAO_SET"] },
+          status: "OPEN",
+        },
+        orderBy: [{ lotteryType: "asc" }, { createdAt: "asc" }],
+        select: { id: true },
+      })
+      : [{ id: selected.id }];
+
+    const outcomes: LockOutcome[] = [];
+    for (const member of members) {
+      outcomes.push(await lockDrawInTransaction(tx, member.id, options));
+    }
+    return {
+      drawId: selected.id,
+      drawName: outcomes.map((outcome) => outcome.drawName).join(" + "),
+      billsLocked: outcomes.reduce((sum, outcome) => sum + outcome.billsLocked, 0),
+      draftsCancelled: outcomes.reduce((sum, outcome) => sum + outcome.draftsCancelled, 0),
     };
   });
 }
@@ -185,7 +239,7 @@ export async function lockDrawManually(actor: Actor, drawId: string): Promise<Lo
   });
   if (!draw) throw new NotFoundError("ไม่พบงวด");
 
-  return lockDraw(draw.id, {
+  return lockDrawFamily(draw.id, {
     actorId: actor.userId,
     reason: "ปิดงวดด้วยมือโดยผู้ดูแล",
     requestId: actor.requestId,
@@ -196,7 +250,9 @@ export type DeleteDrawOutcome = {
   drawId: string;
   drawName: string;
   billsDeleted: number;
+  billItemsDeleted: number;
   attachmentsDeleted: number;
+  paymentsDeleted: number;
   resultsDeleted: number;
   settlementsDeleted: number;
 };
@@ -222,30 +278,44 @@ export async function deleteDrawPermanently(
         id: true,
         name: true,
         status: true,
+        laoFamilyId: true,
         opensAt: true,
         cutoffAt: true,
         bills: {
           select: {
             id: true,
             attachments: { select: { id: true, storageKey: true } },
+            payment: { select: { id: true } },
+            _count: { select: { items: true } },
           },
         },
-        _count: { select: { results: true, settlements: true, restrictedNumbers: true } },
+        _count: { select: { results: true, settlements: true, restrictedNumbers: true, capOverrides: true } },
       },
     });
     if (!draw) throw new NotFoundError("ไม่พบงวด");
-    if (draw.bills.length > 0) {
-      throw new ConflictError("ลบงวดที่มีบิลไม่ได้ เพราะต้องเก็บประวัติบิล รายการเลข และหลักฐานไว้");
-    }
 
     const storageKeys = draw.bills.flatMap((bill) => bill.attachments.map((item) => item.storageKey));
     const billIds = draw.bills.map((bill) => bill.id);
     const attachmentsDeleted = storageKeys.length;
+    const billItemsDeleted = draw.bills.reduce((sum, bill) => sum + bill._count.items, 0);
+    const paymentsDeleted = draw.bills.reduce((sum, bill) => sum + (bill.payment ? 1 : 0), 0);
 
     const settlements = await tx.settlement.deleteMany({ where: { drawId: draw.id } });
     const results = await tx.result.deleteMany({ where: { drawId: draw.id } });
     await tx.restrictedNumber.deleteMany({ where: { drawId: draw.id } });
+    await tx.numberCapOverride.deleteMany({ where: { drawId: draw.id } });
+    await tx.billAttachment.deleteMany({ where: { billId: { in: billIds } } });
+    await tx.billPayment.deleteMany({ where: { billId: { in: billIds } } });
+    await tx.billItem.deleteMany({ where: { billId: { in: billIds } } });
+    await tx.bill.deleteMany({ where: { id: { in: billIds } } });
     await tx.draw.delete({ where: { id: draw.id } });
+    if (draw.laoFamilyId) {
+      // ถ้าลบเพียงฝั่งเดียว อีกฝั่งต้องกลับเป็นงวดเดี่ยว ไม่แสดงหรือทำงานเหมือนยังมีคู่
+      await tx.draw.updateMany({
+        where: { organizationId: actor.organizationId, laoFamilyId: draw.laoFamilyId },
+        data: { laoFamilyId: null },
+      });
+    }
 
     await writeAudit(tx, {
       organizationId: actor.organizationId,
@@ -258,15 +328,19 @@ export async function deleteDrawPermanently(
       before: {
         name: draw.name,
         status: draw.status,
+        laoFamilyId: draw.laoFamilyId,
         opensAt: draw.opensAt.toISOString(),
         cutoffAt: draw.cutoffAt.toISOString(),
         bills: billIds.length,
+        billItems: billItemsDeleted,
         attachments: attachmentsDeleted,
+        payments: paymentsDeleted,
         results: draw._count.results,
         settlements: draw._count.settlements,
         restrictedNumbers: draw._count.restrictedNumbers,
+        capOverrides: draw._count.capOverrides,
       },
-      reason: "Owner ลบงวดว่างที่ยังไม่มีบิล",
+      reason: "Owner ลบงวดและข้อมูลที่ผูกกับงวดถาวร",
     });
 
     return {
@@ -275,7 +349,9 @@ export async function deleteDrawPermanently(
         drawId: draw.id,
         drawName: draw.name,
         billsDeleted: billIds.length,
+        billItemsDeleted,
         attachmentsDeleted,
+        paymentsDeleted,
         resultsDeleted: results.count,
         settlementsDeleted: settlements.count,
       },
@@ -304,16 +380,22 @@ export async function lockDueDraws(now: Date = new Date()): Promise<{
 }> {
   const due = await prisma.draw.findMany({
     where: { status: "OPEN", cutoffAt: { lte: now } },
-    select: { id: true },
+    select: { id: true, lotteryType: true, laoFamilyId: true },
   });
 
   const locked: LockOutcome[] = [];
   const failed: { drawId: string; error: string }[] = [];
 
+  const handled = new Set<string>();
   for (const draw of due) {
+    const familyKey = (draw.lotteryType === "LAO" || draw.lotteryType === "LAO_SET") && draw.laoFamilyId
+      ? `lao:${draw.laoFamilyId}`
+      : `draw:${draw.id}`;
+    if (handled.has(familyKey)) continue;
+    handled.add(familyKey);
     try {
       locked.push(
-        await lockDraw(draw.id, { actorId: null, reason: "ถึงเวลาปิดรับอัตโนมัติ" }),
+        await lockDrawFamily(draw.id, { actorId: null, reason: "ถึงเวลาปิดรับอัตโนมัติ" }),
       );
     } catch (error) {
       failed.push({

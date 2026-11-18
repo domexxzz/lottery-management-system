@@ -2,6 +2,9 @@ import { prisma } from "@/lib/db";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { NotFoundError } from "@/lib/errors";
 import { visibleBillNumber } from "@/lib/bills/numbering";
+import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
+import { csvFile } from "@/lib/csv";
+import type { TableWorkbookCell } from "@/lib/excel/table-workbook";
 
 /**
  * ไฟล์สำหรับกระทบยอดด้วยมือ (LOT-22)
@@ -12,6 +15,8 @@ import { visibleBillNumber } from "@/lib/bills/numbering";
  */
 
 const COLUMNS = [
+  "ประเภทหวย",
+  "งวด",
   "เลขบิล",
   "ชื่อบิล",
   "รหัส Agent",
@@ -20,11 +25,11 @@ const COLUMNS = [
   "ชื่อรางวัล",
   "วิธีตัดสิน",
   "เลขที่แทง",
-  "ยอดเดิมพัน",
+  "ยอดเดิมพัน (บาท)",
   "อัตราจ่ายที่ล็อกไว้",
   "ผลที่ออก",
   "ถูกรางวัล",
-  "ยอดจ่าย",
+  "ยอดจ่าย (บาท)",
 ] as const;
 
 const MATCH_RULE_LABEL: Record<string, string> = {
@@ -33,19 +38,12 @@ const MATCH_RULE_LABEL: Record<string, string> = {
   CONTAINS_DIGIT: "วิ่ง",
 };
 
-/** ครอบค่าให้ปลอดภัยสำหรับ CSV และกัน formula injection ใน Excel */
-function csvCell(value: string): string {
-  // ค่าที่ขึ้นต้นด้วยอักขระเหล่านี้ Excel จะตีความเป็นสูตร
-  const guarded = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-  return `"${guarded.replace(/"/g, '""')}"`;
-}
-
-export async function reconciliationCsv(actor: Actor, drawId: string): Promise<string> {
+export async function reconciliationExport(actor: Actor, drawId: string): Promise<{ rows: TableWorkbookCell[][]; filenameBase: string; title: string }> {
   requirePermission(actor, "settlement.reconcile");
 
   const draw = await prisma.draw.findFirst({
     where: { id: drawId, ...orgScope(actor) },
-    select: { id: true, name: true },
+    select: { id: true, name: true, drawDate: true, lotteryType: true },
   });
   if (!draw) throw new NotFoundError("ไม่พบรอบ");
 
@@ -83,12 +81,14 @@ export async function reconciliationCsv(actor: Actor, drawId: string): Promise<s
     if (!resultByPrizeType.has(r.prizeTypeId)) resultByPrizeType.set(r.prizeTypeId, r.value);
   }
 
-  const rows: string[] = [COLUMNS.map(csvCell).join(",")];
+  const rows: TableWorkbookCell[][] = [];
 
   for (const bill of bills) {
     for (const item of bill.items) {
-      rows.push(
-        [
+      const resultValue = resultByPrizeType.get(item.prizeTypeId);
+      rows.push([
+          lotteryLabel(draw.lotteryType),
+          drawDateLabel(draw),
           visibleBillNumber(bill.drawSequence),
           bill.title,
           bill.agent.code,
@@ -97,16 +97,25 @@ export async function reconciliationCsv(actor: Actor, drawId: string): Promise<s
           item.prizeType.name,
           MATCH_RULE_LABEL[item.prizeType.matchRule] ?? item.prizeType.matchRule,
           item.number,
-          item.stake.toFixed(2),
-          item.payoutRateSnapshot.toFixed(4),
-          resultByPrizeType.get(item.prizeTypeId) ?? "ยังไม่มีผล",
-          item.isWinner ? "ถูก" : "ไม่ถูก",
-          item.payout.toFixed(2),
-        ].map(csvCell).join(","),
-      );
+          Number(item.stake),
+          Number(item.payoutRateSnapshot),
+          resultValue ?? "ยังไม่มีผล",
+          resultValue === undefined ? "รอผล" : item.isWinner ? "ถูก" : "ไม่ถูก",
+          Number(item.payout),
+        ]);
     }
   }
 
-  // BOM ให้ Excel อ่านภาษาไทยไม่เพี้ยน
-  return `﻿${rows.join("\r\n")}\r\n`;
+  const title = `${lotteryLabel(draw.lotteryType)} งวด ${drawDateLabel(draw)}`;
+  return { rows, title, filenameBase: `กระทบยอด_${lotteryLabel(draw.lotteryType)}_${drawDateLabel(draw)}` };
 }
+
+export async function reconciliationCsv(actor: Actor, drawId: string): Promise<{ csv: string; filename: string }> {
+  const report = await reconciliationExport(actor, drawId);
+  return {
+    csv: csvFile(COLUMNS, report.rows.map((row) => row.map((value) => value === null ? "" : String(value)))),
+    filename: `${report.filenameBase}.csv`,
+  };
+}
+
+export { COLUMNS as RECONCILIATION_COLUMNS };

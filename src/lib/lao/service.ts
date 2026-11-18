@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Prisma, type LotteryType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
@@ -6,13 +7,13 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { normalizedNumber } from "@/lib/bills/betting";
 import { parseBangkokDateTimeLocal } from "@/lib/draws/schedule";
 import { enterResultsBatch } from "@/lib/results/service";
-import { isLaoLottery, LAO_DEFAULT_TIMES, laoResultForCode, laoResultProblem } from "./rules";
+import { isLaoLottery, LAO_DEFAULT_TIMES, LAO_SET_ACTIVE_CODES, laoResultForCode, laoResultProblem } from "./rules";
 
 /**
  * งานของหวยลาว/หวยลาวชุด ที่ต่างจากหวยไทย
  *
- * - หวยลาวกับหวยลาวชุดของวันเดียวกันเป็นคนละงวด (คนละเพดาน คนละบิล คนละรายงาน)
- *   แต่ใช้ผลชุดเดียวกัน ลงผลครั้งเดียวระบบบันทึกให้ทั้งสองงวด
+ * - หวยลาวกับหวยลาวชุดที่เลือกสร้างพร้อมกันเป็นคนละงวด (คนละเพดาน คนละบิล คนละรายงาน)
+ *   แต่มีรหัสคู่ร่วมกัน ใช้ผลชุดเดียวกัน และลงผลครั้งเดียวระบบบันทึกให้ทั้งสองงวด
  */
 
 const THAI_DATE = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
@@ -54,6 +55,7 @@ export async function createLaoDraws(actor: Actor, input: LaoDrawInput): Promise
   if (resultAt.getTime() < cutoffAt.getTime()) throw new ValidationError("เวลาออกผลต้องไม่ก่อนเวลาปิดรับ");
   const [year, month, day] = input.drawDate.split("-").map(Number);
   const drawDate = new Date(Date.UTC(year!, month! - 1, day!));
+  const laoFamilyId = types.length === 2 ? randomUUID() : null;
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.draw.findMany({
@@ -70,6 +72,7 @@ export async function createLaoDraws(actor: Actor, input: LaoDrawInput): Promise
           name: laoDrawName(lotteryType, input.drawDate),
           lotteryType,
           drawDate,
+          laoFamilyId,
           opensAt,
           cutoffAt,
           resultAt,
@@ -89,6 +92,7 @@ export async function createLaoDraws(actor: Actor, input: LaoDrawInput): Promise
         after: {
           name: created.name,
           lotteryType,
+          laoFamilyId,
           opensAt: opensAt.toISOString(),
           cutoffAt: cutoffAt.toISOString(),
           resultAt: resultAt.toISOString(),
@@ -102,17 +106,21 @@ export async function createLaoDraws(actor: Actor, input: LaoDrawInput): Promise
 
 // ---------------------------------------------------------------- ลงผล
 
-/** งวดหวยลาว/หวยลาวชุดของวันเดียวกันที่ใช้ผลร่วมกัน (รวมงวดที่ระบุ) */
+/** งวดหวยลาว/หวยลาวชุดที่สร้างเป็นคู่และใช้ผลร่วมกัน (รวมงวดที่ระบุ) */
 export async function laoSiblingDraws(actor: Actor, drawId: string) {
   const draw = await prisma.draw.findFirst({
     where: { ...orgScope(actor), id: drawId },
-    select: { id: true, lotteryType: true, drawDate: true },
+    select: { id: true, lotteryType: true, laoFamilyId: true },
   });
   if (!draw) throw new NotFoundError("ไม่พบงวด");
   if (!isLaoLottery(draw.lotteryType)) throw new ValidationError("งวดนี้ไม่ใช่หวยลาว");
-  if (!draw.drawDate) return [draw.id];
+  if (!draw.laoFamilyId) return [draw.id];
   const rows = await prisma.draw.findMany({
-    where: { ...orgScope(actor), drawDate: draw.drawDate, lotteryType: { in: ["LAO", "LAO_SET"] } },
+    where: {
+      ...orgScope(actor),
+      laoFamilyId: draw.laoFamilyId,
+      lotteryType: { in: ["LAO", "LAO_SET"] },
+    },
     orderBy: { lotteryType: "asc" },
     select: { id: true },
   });
@@ -122,7 +130,7 @@ export async function laoSiblingDraws(actor: Actor, drawId: string) {
 /**
  * ลงผลหวยลาวจากเลขที่ออกเต็ม (4–6 หลัก) ระบบแยกเป็นผลของทุกประเภทรางวัลเอง
  *
- * บันทึกให้ทุกงวดหวยลาว/หวยลาวชุดของวันเดียวกันที่ปิดรับแล้วและยังไม่มีผล
+ * บันทึกให้ทุกงวดหวยลาว/หวยลาวชุดในคู่เดียวกันที่ปิดรับแล้วและยังไม่มีผล
  * ใช้เส้นทางบันทึกผลเดิม (enterResultsBatch) จึงได้ Audit และกติกาอนุมัติเหมือนหวยไทย
  */
 export async function enterLaoResult(
@@ -143,14 +151,24 @@ export async function enterLaoResult(
       name: true,
       status: true,
       lotteryType: true,
+      officialNumber: true,
       results: { where: { status: "APPROVED" }, select: { id: true }, take: 1 },
     },
   });
+  const existingOfficialNumber = draws.find((draw) => draw.officialNumber)?.officialNumber;
+  if (existingOfficialNumber && existingOfficialNumber !== officialNumber) {
+    throw new ConflictError(`คู่งวดนี้ประกาศผล ${existingOfficialNumber} แล้ว ถ้าผลผิดให้ใช้เมนูแก้ผลที่ประกาศแล้ว`);
+  }
+  const hasReadySibling = draws.some((draw) =>
+    (draw.status === "LOCKED" || draw.status === "RESULT_PENDING") && draw.results.length === 0
+  );
   const saved: { drawId: string; autoApproved: boolean }[] = [];
   const skipped: string[] = [];
   for (const draw of draws) {
     const ready = (draw.status === "LOCKED" || draw.status === "RESULT_PENDING") && draw.results.length === 0;
     if (!ready) {
+      // รองรับซ่อมกรณีรุ่นก่อนบันทึกสำเร็จเพียงฝั่งเดียว: ฝั่งที่มีผลแล้วไม่ขวางการเติมผลให้งวดคู่
+      if (draw.results.length > 0 && hasReadySibling) continue;
       // งวดที่ระบุตรง ๆ ต้องลงผลได้ ถ้าไม่ได้ให้บอกเหตุผล ส่วนงวดคู่ข้ามไปเงียบ ๆ
       if (draw.id === drawId) {
         if (draw.results.length > 0) throw new ConflictError("งวดนี้มีผลแล้ว ถ้าผลผิดให้ใช้เมนูแก้ผลที่ประกาศแล้ว");
@@ -160,7 +178,18 @@ export async function enterLaoResult(
       continue;
     }
     const prizeTypes = await prisma.prizeType.findMany({
-      where: { ...orgScope(actor), lotteryType: draw.lotteryType as LotteryType, isActive: true },
+      where: {
+        ...orgScope(actor),
+        lotteryType: draw.lotteryType as LotteryType,
+        OR: [
+          {
+            isActive: true,
+            ...(draw.lotteryType === "LAO_SET" ? { code: { in: [...LAO_SET_ACTIVE_CODES] } } : {}),
+          },
+          // บิลเก่าก่อนปิดประเภทยังต้องมีผลเพื่อคำนวณรางวัลถูกต้อง
+          { billItems: { some: { bill: { drawId: draw.id, status: { notIn: ["DRAFT", "CANCELLED"] } } } } },
+        ],
+      },
       select: { id: true, code: true },
     });
     const results = prizeTypes.flatMap((prizeType) => {
@@ -202,7 +231,12 @@ export async function setCapOverride(
   if (!draw) throw new NotFoundError("ไม่พบงวด");
   if (draw.status !== "OPEN") throw new ConflictError("ตั้งเพดานเฉพาะเลขได้เฉพาะงวดที่ยังเปิดรับ");
   const prizeType = await prisma.prizeType.findFirst({
-    where: { ...orgScope(actor), id: input.prizeTypeId, lotteryType: draw.lotteryType },
+    where: {
+      ...orgScope(actor),
+      id: input.prizeTypeId,
+      lotteryType: draw.lotteryType,
+      ...(draw.lotteryType === "LAO_SET" ? { code: { in: [...LAO_SET_ACTIVE_CODES] } } : {}),
+    },
     select: { id: true, name: true, digits: true, matchRule: true },
   });
   if (!prizeType) throw new NotFoundError("ไม่พบประเภทรางวัลของงวดนี้");

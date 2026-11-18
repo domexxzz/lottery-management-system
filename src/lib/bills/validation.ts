@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { MAX_STAKE_PER_ITEM, MIN_STAKE_PER_ITEM } from "./betting";
 import type { MatchRule } from "@prisma/client";
+import { LAO_SET_ACTIVE_CODES, LAO_SET_PACKAGE_PRICES } from "@/lib/lao/rules";
 
 /**
  * กฎตรวจรายการบิล ตามเอกสารบทที่ 3 (Workflow สร้างบิล ข้อ 3)
@@ -42,6 +43,7 @@ export type ValidationIssue = {
     | "NUMBER_WRONG_LENGTH"
     | "STAKE_NOT_POSITIVE"
     | "STAKE_BELOW_MINIMUM"
+    | "STAKE_NOT_ALLOWED"
     | "STAKE_OVER_ITEM_LIMIT"
     | "DUPLICATE_ITEM"
     | "NUMBER_CLOSED"
@@ -191,6 +193,18 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
         itemIndex: index,
         code: "STAKE_OVER_ITEM_LIMIT",
         message: `รายการที่ ${index + 1}: ยอดเดิมพันต่อรายการต้องไม่เกิน ${MAX_STAKE_PER_ITEM.toLocaleString("th-TH")} บาท`,
+      });
+      continue;
+    }
+
+    if (
+      LAO_SET_ACTIVE_CODES.some((code) => code === rule.code)
+      && !LAO_SET_PACKAGE_PRICES.some((price) => item.stake.equals(price))
+    ) {
+      issues.push({
+        itemIndex: index,
+        code: "STAKE_NOT_ALLOWED",
+        message: `รายการที่ ${index + 1}: หวยลาวชุดเลือกราคาได้เฉพาะ ${LAO_SET_PACKAGE_PRICES.join(" / ")} บาท`,
       });
       continue;
     }
