@@ -918,7 +918,15 @@ export type BetBillFilter = {
   drawWhere?: Prisma.DrawWhereInput;
   /** ใช้ได้เฉพาะผู้ที่เห็นทุก Agent — Agent ถูก billScope บังคับอยู่แล้ว */
   agentId?: string;
+  sort?: "newest" | "oldest" | "stake_desc" | "payout_desc";
 };
+
+function betOrderBy(sort: BetBillFilter["sort"]): Prisma.BillOrderByWithRelationInput[] {
+  if (sort === "oldest") return [{ createdAt: "asc" }, { id: "asc" }];
+  if (sort === "stake_desc") return [{ totalStake: "desc" }, { createdAt: "desc" }, { id: "desc" }];
+  if (sort === "payout_desc") return [{ totalPayout: "desc" }, { createdAt: "desc" }, { id: "desc" }];
+  return [{ createdAt: "desc" }, { id: "desc" }];
+}
 
 export const BET_PAGE_SIZE = 10;
 
@@ -995,7 +1003,7 @@ export async function listBetBills(actor: Actor, filter: BetBillFilter & { page?
   const bills = total === 0 ? [] : await prisma.bill.findMany({
     where: { ...base, ...betTabWhere(filter.tab) },
     // createdAt มี index ร่วมกับ organizationId/agentId จึงแบ่งหน้าได้เร็ว
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    orderBy: betOrderBy(filter.sort),
     skip: (page - 1) * pageSize,
     take: pageSize,
     select: {
@@ -1037,7 +1045,7 @@ export async function exportBetBills(actor: Actor, filter: BetBillFilter, limit 
   requirePermission(actor, "bill.viewOwn");
   return prisma.bill.findMany({
     where: { ...betBaseWhere(actor, filter), ...betTabWhere(filter.tab) },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    orderBy: betOrderBy(filter.sort),
     take: limit,
     select: {
       billNumber: true,

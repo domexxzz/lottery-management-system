@@ -20,7 +20,7 @@ import { clearDraft, newSubmissionKey, readDraft, useServerClockOffset, writeDra
 import { CustomerNameCombobox } from "./BillForm";
 import { LaoFlag, ThaiFlag } from "../ThaiFlag";
 import { RulesDialog } from "./RulesDialog";
-import { laoSetPackageLabel, LAO_SET_PACKAGE_PAYOUTS, LAO_SET_PACKAGE_PRICES } from "@/lib/lao/rules";
+import { laoSetPackageLabel, LAO_SET_PACKAGE_PAYOUTS, LAO_SET_PACKAGE_PRICES } from "@/lib/lao/set-package-rates";
 
 const INITIAL: ActionState = { error: null };
 const CHIPS = [5, 10, 20, 50, 100, 500, 1000] as const;
@@ -187,7 +187,7 @@ function PrizeTypeOptions({
           {prizeType.name}
         </button>
       ))}
-      {group.digits > 1 && (
+      {group.digits > 1 && !isLaoSet && (
         <button type="button" aria-pressed={reverse} className="bs-option bs-option-reverse" onClick={toggleReverse} disabled={!isOpen}>
           ⇄ {isLaoSet ? "ตัวสลับ" : "สลับเลข"}
         </button>
@@ -852,7 +852,7 @@ export function BetSlip({
             {entries.length === 0 && (
               <li className="bs-empty">
                 <strong>ยังไม่มีรายการ</strong>
-                <small>{isLaoSet ? "เลือกราคา เลือกประเภท แล้วกดตัวเลข" : "เลือกประเภท ใส่จำนวนเงิน แล้วกดตัวเลข"}</small>
+                <small>{isLaoSet ? "เลือกราคาชุด แล้วกรอกเลข 4 หลัก" : "เลือกประเภท ใส่จำนวนเงิน แล้วกดตัวเลข"}</small>
               </li>
             )}
             {entryGroups.flatMap((section) => [
@@ -927,14 +927,14 @@ export function BetSlip({
             <h3 className="bs-step-title"><span>1</span>{isLaoSet ? "เลือกราคา" : "เลือกประเภท"}</h3>
             {isLaoSet ? (
               <>
-                <p className="bs-step-help">ราคาต่อชุดกำหนดไว้แล้ว เลือกได้ 1 ราคา</p>
+                <p className="bs-step-help">ราคาต่อชุดกำหนดไว้แล้ว เลือกครั้งละ 1 ราคา และเพิ่มชุด 30/60/120 บาทไว้ในบิลเดียวกันได้</p>
                 <div className="bs-lao-packages" role="group" aria-label="เลือกราคาหวยลาวชุด">
                   {LAO_SET_PACKAGE_PAYOUTS.map((item) => (
                     <button key={item.price} type="button" className={amount === item.price ? "is-active" : ""} aria-pressed={amount === item.price} onClick={() => setAmount(item.price)} disabled={!isOpen}>
                       <strong>{item.price} บาท</strong>
                       <span className="bs-lao-package-rates">
-                        <span>4 ตัวตรง <b>{item.exact.toLocaleString("th-TH")}</b></span>
-                        <span>4 ตัวโต๊ด <b>{item.permutation.toLocaleString("th-TH")}</b></span>
+                        <span>ลุ้น 8 รางวัล <b>สูงสุด {item.exact.toLocaleString("th-TH")}</b></span>
+                        <span>จ่ายรางวัลที่สูงที่สุดเพียง 1 รางวัล</span>
                       </span>
                     </button>
                   ))}
@@ -973,7 +973,7 @@ export function BetSlip({
             <h3 className="bs-step-title"><span>2</span>{isLaoSet ? "เลือกประเภท" : "กำหนดจำนวนเงิน"}</h3>
             {isLaoSet ? (
               <>
-                <p className="bs-step-help">เลือกได้ทั้งตัวตรงและตัวโต๊ด ส่วนตัวสลับจะช่วยแตกเลขให้อัตโนมัติ</p>
+                <p className="bs-step-help">เลือก 4 ตัวตรงเพียงรายการเดียว เลขชุด 4 หลักนี้จะลุ้น 8 รางวัล และจ่ายเฉพาะรางวัลที่สูงที่สุด</p>
                 <PrizeTypeOptions
                   group={group}
                   selectedIds={selectedIds}

@@ -4,30 +4,21 @@ import { getActor, orgScope } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
-import { loadAccountingReport, type AccountingDrawRow } from "@/lib/reports/accounting";
-import { accountingHref, bangkokToday, parseAccountingQuery } from "@/lib/reports/accounting-period";
+import { loadAccountingReport, type AccountingDrawRow, type AccountingTotals } from "@/lib/reports/accounting";
+import { accountingHref, accountingLotterySelectionLabel, parseAccountingQuery, type AccountingQuickPeriod } from "@/lib/reports/accounting-period";
 import { LotteryFlag } from "../../bills/ThaiFlag";
 import { AccountingFilters } from "./AccountingFilters";
+import { ReportExportButtons } from "@/components/ReportExportButtons";
 import "./accounting.css";
 
 export const dynamic = "force-dynamic";
 
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const COUNT = new Intl.NumberFormat("th-TH");
-const MONTH = new Intl.DateTimeFormat("th-TH", { month: "long", year: "numeric", timeZone: "UTC" });
 
 const baht = (value: number) => MONEY.format(value);
 const signed = (value: number) => `${value < 0 ? "−" : "+"}${MONEY.format(Math.abs(value))}`;
 const tone = (value: number) => (value < 0 ? "is-loss" : "is-profit");
-
-/** เดือนย้อนหลัง 24 เดือนสำหรับตัวเลือกรายเดือน */
-function recentMonthOptions(today: string) {
-  const [year, month] = today.split("-").map(Number);
-  return Array.from({ length: 24 }, (_, index) => {
-    const date = new Date(Date.UTC(year!, month! - 1 - index, 1));
-    return { value: date.toISOString().slice(0, 7), label: MONTH.format(date) };
-  });
-}
 
 /**
  * สรุปบัญชี: แต่ละงวดได้หรือเสียเท่าไร แยกค่าคอมราย Agent
@@ -41,28 +32,27 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
 
   const now = new Date();
   const query = parseAccountingQuery(await searchParams, now);
-  const today = bangkokToday(now);
-  const [report, drawOptions, agentOptions, firstDraw] = await Promise.all([
-    loadAccountingReport(actor, query, now),
-    prisma.draw.findMany({
-      where: { ...orgScope(actor), ...(query.lottery ? { lotteryType: query.lottery } : {}) },
-      orderBy: { cutoffAt: "desc" },
-      take: 120,
-      select: { id: true, name: true, drawDate: true, lotteryType: true },
-    }),
+  const reports = new Map<string, ReturnType<typeof loadAccountingReport>>();
+  const reportFor = (period: typeof query.period | AccountingQuickPeriod) => {
+    const key = period === "custom" ? `${period}:${query.from}:${query.to}` : period;
+    const cached = reports.get(key);
+    if (cached) return cached;
+    const promise = loadAccountingReport(actor, { ...query, period }, now);
+    reports.set(key, promise);
+    return promise;
+  };
+  const [report, compareAReport, compareBReport, agentOptions] = await Promise.all([
+    reportFor(query.period),
+    reportFor(query.compareA),
+    reportFor(query.compareB),
     prisma.agent.findMany({ where: orgScope(actor), orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
-    prisma.draw.findFirst({ where: orgScope(actor), orderBy: { cutoffAt: "asc" }, select: { cutoffAt: true } }),
   ]);
-  const firstYear = Number(firstDraw ? bangkokToday(firstDraw.cutoffAt).slice(0, 4) : today.slice(0, 4));
-  const years = Array.from({ length: Number(today.slice(0, 4)) - firstYear + 1 }, (_, index) => String(Number(today.slice(0, 4)) - index));
   const { totals } = report;
   const pending = totals.draws - totals.settledDraws;
-  const selectedDraw = query.period === "draw" ? drawOptions.find((draw) => draw.id === query.drawId) : undefined;
-  const title = query.period === "draw"
-    ? (selectedDraw ? `${lotteryLabel(selectedDraw.lotteryType)} งวด ${drawDateLabel(selectedDraw)}` : "เลือกงวดที่ต้องการ")
-    : report.range.label;
+  const title = report.range.label;
   const csvHref = accountingHref("/api/reports/accounting", query, {});
   const excelHref = `${csvHref}${csvHref.includes("?") ? "&" : "?"}format=xlsx`;
+  const lotterySelection = accountingLotterySelectionLabel(query.lotteries);
 
   return (
     <main className="workspace-page accounting-page">
@@ -70,20 +60,14 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <div>
           <p className="page-eyebrow"><Link href="/reports">รายงาน</Link> / สรุปบัญชี</p>
           <h1>สรุปบัญชี · {title}</h1>
-          <p>ยอดสุทธิ = ยอดขาย − ค่าคอม · กำไร/ขาดทุน = ยอดสุทธิ − จ่ายรางวัล</p>
+          <p>{lotterySelection} · ยอดสุทธิ = ยอดขาย − ค่าคอม · กำไร/ขาดทุน = ยอดสุทธิ − จ่ายรางวัล</p>
         </div>
-        <div className="acc-export">
-          <a className="acc-csv is-primary" href={excelHref}>⇩ ดาวน์โหลด Excel</a>
-          <a className="acc-csv" href={csvHref}>CSV</a>
-        </div>
+        <ReportExportButtons className="acc-export" csvHref={csvHref} excelHref={excelHref} />
       </header>
 
       <AccountingFilters
         query={query}
-        draws={drawOptions.map((draw) => ({ id: draw.id, label: `${lotteryLabel(draw.lotteryType)} งวด ${drawDateLabel(draw)}`, lotteryType: draw.lotteryType }))}
         agents={agentOptions.map((agent) => ({ id: agent.id, label: `${agent.code} · ${agent.name}` }))}
-        months={recentMonthOptions(today)}
-        years={years}
       />
 
       <section className="acc-cards" aria-label="ยอดรวมของช่วงที่เลือก">
@@ -94,6 +78,11 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <article><span>ยอดสุทธิ</span><strong>{baht(totals.net)}</strong><small>ยอดขาย − ค่าคอม</small></article>
         <article className={tone(totals.profit)}><span>{totals.profit < 0 ? "ขาดทุน" : "กำไร"}</span><strong>{totals.profit < 0 ? "−" : ""}{baht(Math.abs(totals.profit))}</strong><small>ยอดสุทธิ − จ่ายรางวัล{pending > 0 ? ` · ยังไม่รวม ${pending} งวดที่รอผล` : ""}</small></article>
       </section>
+
+      <ComparisonSummary
+        a={{ label: compareAReport.range.label, totals: compareAReport.totals }}
+        b={{ label: compareBReport.range.label, totals: compareBReport.totals }}
+      />
 
       <section className="acc-card" aria-labelledby="acc-draws-heading">
         <header><h2 id="acc-draws-heading">แยกรายงวด</h2><span>กดที่งวดเพื่อดูค่าคอมและยอดของแต่ละ Agent</span></header>
@@ -138,6 +127,45 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         )}
       </section>
     </main>
+  );
+}
+
+function ComparisonSummary({ a, b }: {
+  a: { label: string; totals: AccountingTotals };
+  b: { label: string; totals: AccountingTotals };
+}) {
+  const metrics = [
+    { label: "ยอดขาย", a: a.totals.gross, b: b.totals.gross, format: baht, unit: "บาท" },
+    { label: "จำนวนบิล", a: a.totals.bills, b: b.totals.bills, format: (value: number) => COUNT.format(value), unit: "บิล" },
+    { label: "จ่ายรางวัล", a: a.totals.payout, b: b.totals.payout, format: baht, unit: "บาท" },
+    { label: "ค่าคอม Agent", a: a.totals.commission, b: b.totals.commission, format: baht, unit: "บาท" },
+    { label: "ยอดสุทธิ", a: a.totals.net, b: b.totals.net, format: baht, unit: "บาท" },
+    { label: "กำไร / ขาดทุน", a: a.totals.profit, b: b.totals.profit, format: baht, unit: "บาท" },
+  ];
+  return (
+    <section className="acc-compare" aria-labelledby="acc-compare-heading">
+      <header>
+        <div><p>เปรียบเทียบแบบสรุป</p><h2 id="acc-compare-heading">{a.label} <span>เทียบกับ</span> {b.label}</h2></div>
+        <small>ส่วนต่างคำนวณจากช่วง A − ช่วง B และใช้ตัวกรองประเภทหวย/Agent เดียวกับด้านบน</small>
+      </header>
+      <div className="acc-compare-grid">
+        {metrics.map((metric) => {
+          const difference = Math.round((metric.a - metric.b) * 100) / 100;
+          const percent = metric.b === 0 ? null : difference / Math.abs(metric.b) * 100;
+          return (
+            <article key={metric.label}>
+              <h3>{metric.label}</h3>
+              <div><span>ช่วง A</span><strong>{metric.format(metric.a)} <small>{metric.unit}</small></strong></div>
+              <div><span>ช่วง B</span><strong>{metric.format(metric.b)} <small>{metric.unit}</small></strong></div>
+              <footer className={difference > 0 ? "is-up" : difference < 0 ? "is-down" : ""}>
+                ส่วนต่าง {difference > 0 ? "+" : ""}{metric.format(difference)} {metric.unit}
+                {percent !== null && <small> ({percent > 0 ? "+" : ""}{percent.toFixed(1)}%)</small>}
+              </footer>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

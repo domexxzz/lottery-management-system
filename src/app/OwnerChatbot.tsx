@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import type { QuickAction } from "@/lib/chat/quick-actions";
 import { DashboardIcon } from "./DashboardIcon";
 
@@ -31,7 +32,7 @@ type ConversationSummary = {
 function AssistantAvatar({ className }: { className: string }) {
   return (
     <span className={className} aria-hidden="true">
-      <img src="/lottery-assistant.webp" alt="" />
+      <Image src="/lottery-assistant.webp" alt="" width={48} height={48} />
     </span>
   );
 }

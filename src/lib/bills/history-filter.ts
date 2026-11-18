@@ -11,6 +11,8 @@ export type HistoryParams = {
   agent?: string;
   scope?: string;
   page?: string;
+  pageSize?: string;
+  sort?: string;
 };
 
 /**
@@ -38,6 +40,8 @@ export type ParsedHistoryFilter = {
   agentId: string;
   scope: DrawScope;
   page: number;
+  pageSize: 10 | 25 | 50 | 100;
+  sort: "newest" | "oldest" | "stake_desc" | "payout_desc";
 };
 
 /** วันที่แบบ YYYY-MM-DD ตามเวลาไทย เป็นขอบเขตต้นวันหรือท้ายวัน */
@@ -49,6 +53,9 @@ export function bangkokBoundary(value: string | undefined, endOfDay = false): Da
 
 export function parseHistoryFilter(params: HistoryParams): ParsedHistoryFilter {
   const page = Number(params.page);
+  const requestedPageSize = Number(params.pageSize);
+  const pageSize = ([10, 25, 50, 100] as const).find((value) => value === requestedPageSize) ?? 10;
+  const sort = params.sort === "oldest" || params.sort === "stake_desc" || params.sort === "payout_desc" ? params.sort : "newest";
   const from = bangkokBoundary(params.from) ? params.from ?? "" : "";
   const to = bangkokBoundary(params.to) ? params.to ?? "" : "";
   return {
@@ -63,6 +70,8 @@ export function parseHistoryFilter(params: HistoryParams): ParsedHistoryFilter {
     agentId: (params.agent ?? "").trim(),
     scope: readDrawScope(params.scope),
     page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
+    pageSize,
+    sort,
   };
 }
 
@@ -78,6 +87,8 @@ export function historyHref(base: string, filter: ParsedHistoryFilter, override:
     agent: filter.agentId,
     scope: filter.scope === "current" ? "" : filter.scope,
     page: filter.page > 1 ? String(filter.page) : "",
+    pageSize: filter.pageSize === 10 ? "" : String(filter.pageSize),
+    sort: filter.sort === "newest" ? "" : filter.sort,
   };
   for (const [key, value] of Object.entries(override)) values[key] = String(value);
   if (values.page === "1") values.page = "";

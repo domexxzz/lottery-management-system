@@ -201,3 +201,4 @@ button, input, select, textarea { font-family: inherit; }
 
 /* ธงประเภทหวยในตัวเลือกงวด */
 .app-dropdown-flag{display:inline-block;flex:none;width:20px;height:14px;margin-right:.45rem;vertical-align:-2px;border-radius:2px;box-shadow:0 0 0 1px rgb(0 0 0 / 10%)}
+.report-export-buttons{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}.report-export-buttons button{min-height:40px;padding:.55rem .9rem;border:1px solid #bfd3e8;border-radius:10px;background:#fff;color:#123c68;font:inherit;font-weight:800;cursor:pointer}.report-export-buttons button.is-primary{border-color:#1769e0;background:#1769e0;color:#fff}.report-export-buttons button:disabled{cursor:wait;opacity:.62}.report-export-buttons small{flex-basis:100%;color:#c6283d;font-weight:700}

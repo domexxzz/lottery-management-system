@@ -7,7 +7,7 @@ import { AppDropdown } from "../AppDropdown";
 
 type Option = { value: string; label: string; lotteryType?: string };
 
-type Values = { q: string; from: string; to: string; draw: string; agent: string };
+type Values = { q: string; from: string; to: string; draw: string; agent: string; pageSize: string; sort: string };
 
 /** วันที่ในรูป YYYY-MM-DD → "18 พ.ย. 69" สำหรับชิปตัวกรอง */
 function shortDate(value: string): string {
@@ -36,6 +36,8 @@ export function AgentBillFilters({
   lottery,
   agentId,
   tab,
+  pageSize,
+  sort,
   draws,
   agents,
 }: {
@@ -52,6 +54,8 @@ export function AgentBillFilters({
   lottery: string;
   agentId: string;
   tab: string;
+  pageSize: 10 | 25 | 50 | 100;
+  sort: "newest" | "oldest" | "stake_desc" | "payout_desc";
   draws: Option[];
   /** null เมื่อผู้ใช้เป็น Agent ซึ่งเห็นเฉพาะบิลของตนเอง */
   agents: Option[] | null;
@@ -61,7 +65,9 @@ export function AgentBillFilters({
   const [range, setRange] = useState({ startDate: from, endDate: to });
   const [draw, setDraw] = useState(drawId);
   const [agent, setAgent] = useState(agentId);
-  const hasFilter = Boolean(q || range.startDate || range.endDate || draw || agent);
+  const [size, setSize] = useState(String(pageSize));
+  const [order, setOrder] = useState(sort);
+  const hasFilter = Boolean(q || range.startDate || range.endDate || draw || agent || size !== "10" || order !== "newest");
   const typingTimer = useRef<number | undefined>(undefined);
 
   // คำค้นที่ส่งไปล่าสุด กันยิงซ้ำเมื่อค่าไม่เปลี่ยน
@@ -69,7 +75,7 @@ export function AgentBillFilters({
 
   function apply(overrides: Partial<Values> = {}) {
     window.clearTimeout(typingTimer.current);
-    const values: Values = { q, from: range.startDate, to: range.endDate, draw, agent, ...overrides };
+    const values: Values = { q, from: range.startDate, to: range.endDate, draw, agent, pageSize: size, sort: order, ...overrides };
     values.q = values.q.trim();
     appliedQuery.current = values.q;
 
@@ -77,7 +83,10 @@ export function AgentBillFilters({
     if (tab !== "ALL") params.set("tab", tab);
     if (scope !== "current") params.set("scope", scope);
     if (lottery) params.set("lottery", lottery);
-    for (const [key, value] of Object.entries(values)) if (value) params.set(key, value);
+    for (const [key, value] of Object.entries(values)) {
+      if (!value || (key === "pageSize" && value === "10") || (key === "sort" && value === "newest")) continue;
+      params.set(key, value);
+    }
     // replace แทน push: พิมพ์ค้นหาไม่ควรสร้างประวัติย้อนกลับทีละตัวอักษร
     router.replace(`/bills${params.size ? `?${params}` : ""}`, { scroll: false });
   }
@@ -105,7 +114,9 @@ export function AgentBillFilters({
     setRange({ startDate: "", endDate: "" });
     setDraw("");
     setAgent("");
-    apply({ q: "", from: "", to: "", draw: "", agent: "" });
+    setSize("10");
+    setOrder("newest");
+    apply({ q: "", from: "", to: "", draw: "", agent: "", pageSize: "10", sort: "newest" });
   }
 
   // มือถือ: ด้านบนเหลือช่องค้นหากับปุ่ม "ตัวกรอง" ตัวกรองที่เหลือเปิดเป็น Bottom Sheet
@@ -223,6 +234,14 @@ export function AgentBillFilters({
           </select>
         </label>
       )}
+      <label className="slip-filter-select">
+        <span>เรียงข้อมูล</span>
+        <AppDropdown ariaLabel="เรียงข้อมูล" value={order} onValueChange={(value) => { setOrder(value as typeof order); apply({ sort: value }); }} options={[{ value: "newest", label: "วันที่ ใหม่→เก่า" }, { value: "oldest", label: "วันที่ เก่า→ใหม่" }, { value: "stake_desc", label: "ยอดเดิมพัน มาก→น้อย" }, { value: "payout_desc", label: "เงินรางวัล มาก→น้อย" }]} />
+      </label>
+      <label className="slip-filter-select">
+        <span>รายการต่อหน้า</span>
+        <AppDropdown ariaLabel="จำนวนรายการต่อหน้า" value={size} onValueChange={(value) => { setSize(value); apply({ pageSize: value }); }} options={[10, 25, 50, 100].map((value) => ({ value: String(value), label: `${value} รายการ` }))} />
+      </label>
       <div className="slip-filter-actions">
         <button type="button" className="slip-clear-filter" disabled={!hasFilter} onClick={clearAll}>
           ล้างตัวกรอง

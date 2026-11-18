@@ -1,7 +1,7 @@
 import { strToU8, zipSync } from "fflate";
 import { csvFilenamePart } from "@/lib/csv";
 
-export type TableWorkbookCell = string | number | Date | null;
+export type TableWorkbookCell = string | number | boolean | Date | null;
 export type TableWorkbookColumnType = "text" | "integer" | "money" | "decimal" | "percentage" | "date" | "datetime";
 
 export type TableWorkbookColumn = {
@@ -10,12 +10,24 @@ export type TableWorkbookColumn = {
   width?: number;
 };
 
+export type TableWorkbookSummaryItem = {
+  label: string;
+  value: TableWorkbookCell;
+  type?: TableWorkbookColumnType;
+  unit?: string;
+};
+
 export type TableWorkbookInput = {
   title: string;
   subtitle?: string;
   sheetName?: string;
   columns: readonly TableWorkbookColumn[];
   rows: readonly (readonly TableWorkbookCell[])[];
+  /** ขอบเขตรายงาน เช่น ช่วงวันที่ ประเภทหวย และ Agent */
+  metadata?: readonly TableWorkbookSummaryItem[];
+  /** ยอดสรุปของข้อมูลที่ผ่านตัวกรอง */
+  summary?: readonly TableWorkbookSummaryItem[];
+  generatedAt?: Date;
 };
 
 function xml(value: string): string {
@@ -66,6 +78,7 @@ function cell(ref: string, value: TableWorkbookCell, style: number): string {
   if (value === null || value === "") return `<c r="${ref}" s="${style}"/>`;
   if (value instanceof Date) return `<c r="${ref}" s="${style}"><v>${excelDate(value)}</v></c>`;
   if (typeof value === "number") return `<c r="${ref}" s="${style}"><v>${Number.isFinite(value) ? value : 0}</v></c>`;
+  if (typeof value === "boolean") return `<c r="${ref}" s="${style}" t="b"><v>${value ? 1 : 0}</v></c>`;
   return `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xml(value)}</t></is></c>`;
 }
 
@@ -116,24 +129,61 @@ function worksheetXml(input: TableWorkbookInput): string {
 </worksheet>`;
 }
 
+function summaryWorksheetXml(input: TableWorkbookInput, generatedAt: Date): string {
+  const metadata: TableWorkbookSummaryItem[] = [
+    ...(input.metadata ?? []),
+    { label: "สร้างไฟล์เมื่อ", value: generatedAt, type: "datetime" },
+    { label: "จำนวนรายการ", value: input.rows.length, type: "integer", unit: "รายการ" },
+  ];
+  const summary: readonly TableWorkbookSummaryItem[] = input.summary?.length
+    ? input.summary
+    : [{ label: "จำนวนรายการ", value: input.rows.length, type: "integer", unit: "รายการ" }];
+  const rows = [
+    `<row r="1" ht="30" customHeight="1">${cell("A1", input.title, 1)}</row>`,
+    `<row r="2" ht="22" customHeight="1">${cell("A2", input.subtitle ?? "", 9)}</row>`,
+    `<row r="4" ht="24" customHeight="1">${cell("A4", "ขอบเขตรายงาน", 10)}</row>`,
+  ];
+  metadata.forEach((item, index) => {
+    const row = 5 + index;
+    rows.push(`<row r="${row}" ht="21" customHeight="1">${cell(`A${row}`, item.label, 11)}${cell(`B${row}`, item.value, STYLE_BY_TYPE[item.type ?? "text"])}${cell(`C${row}`, item.unit ?? "", 9)}</row>`);
+  });
+  const summaryHeaderRow = 6 + metadata.length;
+  rows.push(`<row r="${summaryHeaderRow}" ht="24" customHeight="1">${cell(`A${summaryHeaderRow}`, "ยอดสรุป", 10)}${cell(`B${summaryHeaderRow}`, "ค่า", 10)}${cell(`C${summaryHeaderRow}`, "หน่วย", 10)}</row>`);
+  summary.forEach((item, index) => {
+    const row = summaryHeaderRow + 1 + index;
+    rows.push(`<row r="${row}" ht="23" customHeight="1">${cell(`A${row}`, item.label, 11)}${cell(`B${row}`, item.value, STYLE_BY_TYPE[item.type ?? "text"])}${cell(`C${row}`, item.unit ?? "", 9)}</row>`);
+  });
+  const lastRow = summaryHeaderRow + summary.length;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:D${lastRow}"/>
+  <sheetViews><sheetView showGridLines="0" workbookViewId="0"/></sheetViews>
+  <sheetFormatPr defaultRowHeight="20"/>
+  <cols><col min="1" max="1" width="28" customWidth="1"/><col min="2" max="2" width="24" customWidth="1"/><col min="3" max="3" width="16" customWidth="1"/><col min="4" max="4" width="3" customWidth="1"/></cols>
+  <sheetData>${rows.join("")}</sheetData>
+  <mergeCells count="3"><mergeCell ref="A1:D1"/><mergeCell ref="A2:D2"/><mergeCell ref="A4:C4"/></mergeCells>
+</worksheet>`;
+}
+
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <numFmts count="5">
     <numFmt numFmtId="164" formatCode="#,##0.00;[Red](#,##0.00);-"/>
     <numFmt numFmtId="165" formatCode="0.00%"/>
-    <numFmt numFmtId="166" formatCode="dd/mm/yyyy"/>
-    <numFmt numFmtId="167" formatCode="dd/mm/yyyy hh:mm"/>
+    <numFmt numFmtId="166" formatCode="yyyy-mm-dd"/>
+    <numFmt numFmtId="167" formatCode="yyyy-mm-dd hh:mm"/>
     <numFmt numFmtId="168" formatCode="#,##0.0000"/>
   </numFmts>
-  <fonts count="3">
+  <fonts count="4">
     <font><sz val="11"/><name val="Aptos"/></font>
     <font><b/><sz val="16"/><color rgb="FF123C68"/><name val="Aptos Display"/></font>
     <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Aptos"/></font>
+    <font><b/><sz val="11"/><color rgb="FF123C68"/><name val="Aptos"/></font>
   </fonts>
-  <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1769E0"/><bgColor indexed="64"/></patternFill></fill></fills>
+  <fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF123C68"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF1F8"/><bgColor indexed="64"/></patternFill></fill></fills>
   <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FFD8E6F5"/></bottom><diagonal/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="10">
+  <cellXfs count="12">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
     <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
     <xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
@@ -144,24 +194,37 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <xf numFmtId="167" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
     <xf numFmtId="168" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
-/** สร้าง XLSX แบบตาราง อ่านง่ายใน Excel และเก็บตัวเลข/วันที่เป็น typed cells */
-export function generateTableWorkbook(input: TableWorkbookInput): Uint8Array {
+function validateInput(input: TableWorkbookInput): void {
   if (input.columns.length === 0) throw new Error("ต้องมีอย่างน้อย 1 คอลัมน์");
-  const now = new Date().toISOString();
+  const headers = input.columns.map((column) => column.header.trim());
+  if (headers.some((header) => !header)) throw new Error("ชื่อคอลัมน์ห้ามว่าง");
+  if (new Set(headers).size !== headers.length) throw new Error("ชื่อคอลัมน์ห้ามซ้ำกัน");
+  if (input.rows.some((row) => row.length > input.columns.length)) throw new Error("จำนวนข้อมูลในแถวมากกว่าจำนวนคอลัมน์");
+}
+
+/** สร้าง XLSX มาตรฐานบัญชี: ชีต Summary และชีตรายละเอียด พร้อม typed cells */
+export function generateTableWorkbook(input: TableWorkbookInput): Uint8Array {
+  validateInput(input);
+  const generatedAt = input.generatedAt ?? new Date();
+  const now = generatedAt.toISOString();
   const sheetName = safeSheetName(input.sheetName ?? input.title);
+  const summarySheetName = sheetName === "Summary" ? "Report Summary" : "Summary";
   const files: Record<string, Uint8Array> = {
-    "[Content_Types].xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`),
+    "[Content_Types].xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`),
     "_rels/.rels": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`),
     "docProps/core.xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xml(input.title)}</dc:title><dc:creator>Lottery Management System</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`),
     "docProps/app.xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Lottery Management System</Application></Properties>`),
-    "xl/workbook.xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xml(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>`),
-    "xl/_rels/workbook.xml.rels": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`),
+    "xl/workbook.xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xml(summarySheetName)}" sheetId="1" r:id="rId1"/><sheet name="${xml(sheetName)}" sheetId="2" r:id="rId2"/></sheets></workbook>`),
+    "xl/_rels/workbook.xml.rels": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`),
     "xl/styles.xml": strToU8(STYLES),
-    "xl/worksheets/sheet1.xml": strToU8(worksheetXml(input)),
+    "xl/worksheets/sheet1.xml": strToU8(summaryWorksheetXml(input, generatedAt)),
+    "xl/worksheets/sheet2.xml": strToU8(worksheetXml(input)),
   };
   return zipSync(files, { level: 6 });
 }

@@ -4,14 +4,11 @@ import { exportBetBills } from "@/lib/bills/service";
 import { parseHistoryFilter } from "@/lib/bills/history-filter";
 import { resolveHistoryScope } from "@/lib/bills/history-scope";
 import { BET_STATUS_LABEL, betStatusOf, drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
-import { csvFile, csvHeaders } from "@/lib/csv";
 import { AppError } from "@/lib/errors";
 import { visibleBillNumber } from "@/lib/bills/numbering";
-import { generateTableWorkbook, xlsxBody, xlsxHeaders } from "@/lib/excel/table-workbook";
+import { createReportDownload, type ReportExportInput } from "@/lib/export/report";
 
 export const dynamic = "force-dynamic";
-
-const DATE_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
 
 /** ส่งออกประวัติรายการตามตัวกรองเดียวกับหน้าเว็บ */
 export async function GET(request: Request) {
@@ -32,52 +29,38 @@ export async function GET(request: Request) {
       drawId: scope.drawId || undefined,
       drawWhere: scope.drawWhere,
       agentId: filter.agentId || undefined,
+      sort: filter.sort,
     });
-    const headers = ["เลขบิล", "ชื่อลูกค้า", "รหัส Agent", "ชื่อ Agent", "ประเภทหวย", "งวด", "วันที่ทำรายการ", "จำนวนรายการเลข (รายการ)", "ยอดเดิมพัน (บาท)", "เงินรางวัล (บาท)", "สถานะ"];
-    const csv = csvFile(
-      headers,
-      bills.map((bill) => [
-        visibleBillNumber(bill.drawSequence),
-        bill.title,
-        bill.agent.code,
-        bill.agent.name,
-        lotteryLabel(bill.draw.lotteryType),
-        drawDateLabel(bill.draw),
-        DATE_TIME.format(bill.createdAt),
-        String(bill._count.items),
-        bill.totalStake.toFixed(2),
-        bill.totalPayout.toFixed(2),
-        BET_STATUS_LABEL[betStatusOf(bill)],
-      ]),
-    );
     const period = filter.from || filter.to ? `${filter.from || "เริ่มต้น"}_ถึง_${filter.to || "ปัจจุบัน"}` : "ตามตัวกรอง";
-    if (params.get("format") === "xlsx") {
-      const bytes = generateTableWorkbook({
-        title: "ประวัติบิล",
-        subtitle: `ช่วงข้อมูล: ${period} · แสดงตามตัวกรองเดียวกับหน้าประวัติรายการ`,
-        sheetName: "ประวัติบิล",
-        columns: [
-          { header: headers[0]!, type: "text", width: 14 },
-          { header: headers[1]!, type: "text", width: 25 },
-          { header: headers[2]!, type: "text", width: 14 },
-          { header: headers[3]!, type: "text", width: 25 },
-          { header: headers[4]!, type: "text", width: 16 },
-          { header: headers[5]!, type: "text", width: 22 },
-          { header: headers[6]!, type: "datetime", width: 20 },
-          { header: headers[7]!, type: "integer", width: 20 },
-          { header: headers[8]!, type: "money", width: 18 },
-          { header: headers[9]!, type: "money", width: 18 },
-          { header: headers[10]!, type: "text", width: 16 },
-        ],
-        rows: bills.map((bill) => [
-          visibleBillNumber(bill.drawSequence), bill.title, bill.agent.code, bill.agent.name,
-          lotteryLabel(bill.draw.lotteryType), drawDateLabel(bill.draw), bill.createdAt,
-          bill._count.items, Number(bill.totalStake), Number(bill.totalPayout), BET_STATUS_LABEL[betStatusOf(bill)],
-        ]),
-      });
-      return new NextResponse(xlsxBody(bytes), { headers: xlsxHeaders(`ประวัติบิล_${period}.xlsx`) });
-    }
-    return new NextResponse(csv, { headers: csvHeaders(`ประวัติบิล_${period}.csv`) });
+    const totalStake = bills.reduce((sum, bill) => sum + Number(bill.totalStake), 0);
+    const totalPayout = bills.reduce((sum, bill) => sum + Number(bill.totalPayout), 0);
+    const exportInput: ReportExportInput = {
+      filename: `bill-history_${filter.from || "all"}_${filter.to || filter.from || "all"}`,
+      title: "ประวัติบิล",
+      subtitle: "ข้อมูลทั้งหมดที่ผ่านตัวกรอง ไม่จำกัดเฉพาะหน้าปัจจุบัน",
+      sheetName: "Details",
+      metadata: [
+        { label: "ช่วงข้อมูล", value: period }, { label: "ประเภทหวย", value: filter.lotteryType ? lotteryLabel(filter.lotteryType) : "ทุกประเภท" },
+        { label: "สถานะ", value: filter.tab === "ALL" ? "ทุกสถานะ" : BET_STATUS_LABEL[filter.tab] },
+        { label: "คำค้นหา", value: filter.query || "ทั้งหมด" },
+      ],
+      summary: [
+        { label: "จำนวนบิล", value: bills.length, type: "integer", unit: "บิล" },
+        { label: "ยอดเดิมพันรวม", value: totalStake, type: "money", unit: "บาท" },
+        { label: "เงินรางวัลรวม", value: totalPayout, type: "money", unit: "บาท" },
+      ],
+      columns: [
+        { header: "เลขบิล", type: "text", width: 14 }, { header: "ชื่อลูกค้า", type: "text", width: 25 },
+        { header: "รหัส Agent", type: "text", width: 14 }, { header: "ชื่อ Agent", type: "text", width: 25 },
+        { header: "ประเภทหวย", type: "text", width: 16 }, { header: "งวด", type: "text", width: 22 },
+        { header: "วันที่ทำรายการ", type: "datetime", width: 20 }, { header: "จำนวนรายการเลข", type: "integer", width: 18 },
+        { header: "ยอดเดิมพัน", type: "money", width: 18 }, { header: "เงินรางวัล", type: "money", width: 18 },
+        { header: "สถานะ", type: "text", width: 16 },
+      ],
+      rows: bills.map((bill) => [visibleBillNumber(bill.drawSequence), bill.title, bill.agent.code, bill.agent.name, lotteryLabel(bill.draw.lotteryType), drawDateLabel(bill.draw), bill.createdAt, bill._count.items, Number(bill.totalStake), Number(bill.totalPayout), BET_STATUS_LABEL[betStatusOf(bill)]]),
+    };
+    const output = createReportDownload(exportInput, params.get("format") === "xlsx" ? "xlsx" : "csv");
+    return new NextResponse(output.body, { headers: output.headers });
   } catch (error) {
     if (error instanceof AppError) return NextResponse.json({ error: error.message }, { status: error.status });
     throw error;

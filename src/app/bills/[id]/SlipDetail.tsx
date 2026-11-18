@@ -80,6 +80,9 @@ export function SlipDetail({ bill, settledAt, showDrawLink, beforeItems }: { bil
       packageLabel: bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.stake) : null,
       stake: Number(item.stake),
       rate: bill.status === "DRAFT" ? null : compactRate(item.payoutRateSnapshot),
+      rateText: bill.draw.lotteryType === "LAO_SET"
+        ? "ตามตาราง 8 รางวัล"
+        : bill.status === "DRAFT" ? "—" : `${compactRate(item.payoutRateSnapshot)} เท่า`,
       status,
       statusLabel: BET_STATUS_LABEL[status],
       prize: status === "WON" ? Number(item.payout) : status === "LOST" || status === "CANCELLED" ? 0 : null,

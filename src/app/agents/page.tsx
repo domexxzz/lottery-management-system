@@ -121,7 +121,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
       months={monthShortcuts(drawOptions.map(drawDay))}
       rangeDraws={rangeDraws.map((draw) => draw.name)}
       shortcuts={{ today, monthFrom: thisMonth.from, monthTo: thisMonth.to, drawId: thisDraw?.id ?? "" }}
-      csvHref={`/api/agents/customers${csvQuery}`}
+      csvHref={`/api/agents/export${csvQuery}`}
       agents={nodes}
     />
   </main>;

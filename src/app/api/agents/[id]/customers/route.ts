@@ -2,17 +2,10 @@ import { NextResponse } from "next/server";
 import { getActor, orgScope } from "@/lib/auth/context";
 import { prisma } from "@/lib/db";
 import { listAgentCustomers } from "@/lib/agents/customers";
-import { csvFile, csvHeaders } from "@/lib/csv";
 import { AppError } from "@/lib/errors";
-import { generateTableWorkbook, xlsxBody, xlsxHeaders } from "@/lib/excel/table-workbook";
+import { createReportDownload, type ReportExportInput } from "@/lib/export/report";
 
 export const dynamic = "force-dynamic";
-
-const DATE_TIME = new Intl.DateTimeFormat("th-TH", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "Asia/Bangkok",
-});
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const actor = await getActor();
@@ -29,39 +22,31 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       : null;
     const scopeLabel = selectedDraw?.name ?? "ทุกงวด";
     const safeCode = agent.code.replace(/[^A-Za-z0-9_-]/g, "_");
-    if (params.get("format") === "xlsx") {
-      const bytes = generateTableWorkbook({
-        title: `รายชื่อลูกค้า ${agent.code} · ${agent.name}`,
-        subtitle: `ขอบเขตข้อมูล: ${scopeLabel}`,
-        sheetName: `ลูกค้า ${agent.code}`,
-        columns: [
-          { header: "ขอบเขตข้อมูล", type: "text", width: 26 },
-          { header: "รหัส Agent", type: "text", width: 14 },
-          { header: "ชื่อ Agent", type: "text", width: 25 },
-          { header: "ชื่อลูกค้า", type: "text", width: 25 },
-          { header: "จำนวนบิล (บิล)", type: "integer", width: 17 },
-          { header: "ยอดซื้อรวม (บาท)", type: "money", width: 18 },
-          { header: "จ่ายรางวัล (บาท)", type: "money", width: 18 },
-          { header: "ทำรายการล่าสุด", type: "datetime", width: 20 },
-        ],
-        rows: customers.map((customer) => [scopeLabel, agent.code, agent.name, customer.name, customer.billCount, customer.gross, customer.payout, customer.lastBillAt]),
-      });
-      return new NextResponse(xlsxBody(bytes), { headers: xlsxHeaders(`ลูกค้า_${safeCode}_${scopeLabel}.xlsx`) });
-    }
-    const csv = csvFile(
-      ["ขอบเขตข้อมูล", "รหัส Agent", "ชื่อ Agent", "ชื่อลูกค้า", "จำนวนบิล (บิล)", "ยอดซื้อรวม (บาท)", "จ่ายรางวัล (บาท)", "ทำรายการล่าสุด"],
-      customers.map((customer) => [
-        scopeLabel,
-        agent.code,
-        agent.name,
-        customer.name,
-        String(customer.billCount),
-        customer.gross.toFixed(2),
-        customer.payout.toFixed(2),
-        DATE_TIME.format(customer.lastBillAt),
-      ]),
-    );
-    return new NextResponse(csv, { headers: csvHeaders(`ลูกค้า_${safeCode}_${scopeLabel}.csv`) });
+    const report: ReportExportInput = {
+      filename: `agent-customers_${safeCode}_${drawId || "all"}`,
+      title: `รายชื่อลูกค้า ${agent.code} · ${agent.name}`,
+      subtitle: `ขอบเขตข้อมูล: ${scopeLabel}`,
+      sheetName: "Details",
+      metadata: [
+        { label: "รหัส Agent", value: agent.code }, { label: "ชื่อ Agent", value: agent.name },
+        { label: "ขอบเขตข้อมูล", value: scopeLabel },
+      ],
+      summary: [
+        { label: "จำนวนลูกค้า", value: customers.length, type: "integer", unit: "ราย" },
+        { label: "จำนวนบิล", value: customers.reduce((sum, customer) => sum + customer.billCount, 0), type: "integer", unit: "บิล" },
+        { label: "ยอดซื้อรวม", value: customers.reduce((sum, customer) => sum + customer.gross, 0), type: "money", unit: "บาท" },
+        { label: "จ่ายรางวัลรวม", value: customers.reduce((sum, customer) => sum + customer.payout, 0), type: "money", unit: "บาท" },
+      ],
+      columns: [
+        { header: "ขอบเขตข้อมูล", type: "text", width: 26 }, { header: "รหัส Agent", type: "text", width: 14 },
+        { header: "ชื่อ Agent", type: "text", width: 25 }, { header: "ชื่อลูกค้า", type: "text", width: 25 },
+        { header: "จำนวนบิล", type: "integer", width: 15 }, { header: "ยอดซื้อรวม", type: "money", width: 18 },
+        { header: "จ่ายรางวัล", type: "money", width: 18 }, { header: "ทำรายการล่าสุด", type: "datetime", width: 20 },
+      ],
+      rows: customers.map((customer) => [scopeLabel, agent.code, agent.name, customer.name, customer.billCount, customer.gross, customer.payout, customer.lastBillAt]),
+    };
+    const output = createReportDownload(report, params.get("format") === "xlsx" ? "xlsx" : "csv");
+    return new NextResponse(output.body, { headers: output.headers });
   } catch (error) {
     if (error instanceof AppError) return NextResponse.json({ error: error.message }, { status: error.status });
     throw error;

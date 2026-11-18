@@ -6,6 +6,7 @@ import { ConflictError, NotFoundError } from "@/lib/errors";
 import { commissionOf, itemPayout, netOf, sumMoney, toMoney, ZERO } from "@/lib/money";
 import { isWinningAny } from "@/lib/results/matching";
 import { storedResultValues } from "@/lib/results/values";
+import { laoSetWinningPrize } from "@/lib/lao/rules";
 
 /**
  * คำนวณผู้ถูกรางวัลและสรุปการเงินต่อ Agent (LOT-15, LOT-18, LOT-20)
@@ -139,6 +140,21 @@ function evaluateSettlement(
     for (const item of bill.items) {
       bucket.stakes.push(item.stake);
       bucket.totalItems += 1;
+
+      // หวยลาวชุดรหัส 201 คือการซื้อ "เลขชุด" หนึ่งรายการ ไม่ใช่เดิมพัน 4 ตัวตรงอย่างเดียว
+      // ตรวจทั้ง 8 รางวัลแล้วบันทึกยอดที่มากที่สุดเพียงยอดเดียวตามราคาชุด 30/60/120
+      if (item.prizeType.code === 201) {
+        const resultValue = results.byPrizeCode.get(201)?.[0];
+        const prize = resultValue ? laoSetWinningPrize(item.number, resultValue, item.stake) : null;
+        if (prize) {
+          const payout = toMoney(new Prisma.Decimal(prize.payout));
+          bucket.payouts.push(payout);
+          bucket.winningItems += 1;
+          payoutsOfBill.push(payout);
+          winningItems.push({ itemId: item.id, payout });
+        }
+        continue;
+      }
 
       // รหัส 10/11 เป็นข้อมูลเก่าจากยุคที่บันทึก "สลับ" เป็นรางวัลแยก
       // ปัจจุบันสลับเป็นเพียงตัวช่วยสร้างเลข จึงใช้ผล 3 ตัวบน/2 ตัวบนตามลำดับ

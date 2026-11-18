@@ -101,11 +101,32 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 
 export async function loadAccountingReport(actor: Actor, query: AccountingQuery, now = new Date()): Promise<AccountingReport> {
   requirePermission(actor, "report.viewAllAgents");
-  const range = resolveRange(query, now);
+  let range = resolveRange(query, now);
 
-  const drawFilter = query.period === "draw"
-    ? (query.drawId ? Prisma.sql`AND b."drawId" = ${query.drawId}` : Prisma.sql`AND FALSE`)
-    : Prisma.sql`AND COALESCE(d."drawDate", (d."cutoffAt" + INTERVAL '7 hours')::date) BETWEEN ${range.from}::date AND ${range.to}::date`;
+  let drawFilter: Prisma.Sql;
+  if (query.period === "all") {
+    drawFilter = Prisma.empty;
+  } else if (query.period === "current_draw" || query.period === "previous_draw") {
+    const drawIndex = query.period === "current_draw" ? 0 : 1;
+    // หาแยกตามประเภทเพื่อไม่ให้หวยที่ออกรายวันเบียดหวยรัฐบาลออกจากรายการล่าสุด
+    const candidatesByLottery = await Promise.all(query.lotteries.map((lotteryType) => prisma.draw.findMany({
+      where: { ...orgScope(actor), lotteryType, opensAt: { lte: now } },
+      orderBy: { cutoffAt: "desc" },
+      take: drawIndex + 1,
+      select: { id: true },
+    })));
+    const drawIds = candidatesByLottery.map((draws) => draws[drawIndex]?.id).filter((id): id is string => Boolean(id));
+    drawFilter = drawIds.length > 0
+      ? Prisma.sql`AND b."drawId" IN (${Prisma.join(drawIds)})`
+      : Prisma.sql`AND FALSE`;
+    range = { ...range, label: query.period === "current_draw" ? "งวดนี้ (ล่าสุดของแต่ละประเภทหวย)" : "งวดที่แล้ว (ก่อนหน้าของแต่ละประเภทหวย)" };
+  } else {
+    drawFilter = Prisma.sql`AND COALESCE(d."drawDate", (d."cutoffAt" + INTERVAL '7 hours')::date) BETWEEN ${range.from}::date AND ${range.to}::date`;
+  }
+  const lotteryFilter = query.lotteries.length === 0
+    ? Prisma.sql`AND FALSE`
+    // เทียบเป็น text เพื่อให้ raw query ทำงานได้ทั้ง public schema และ schema แยกของ integration test
+    : Prisma.sql`AND d."lotteryType"::text IN (${Prisma.join(query.lotteries)})`;
 
   const rows = await prisma.$queryRaw<{
     drawId: string; agentId: string; bills: number; winners: number; gross: Prisma.Decimal; payout: Prisma.Decimal;
@@ -120,7 +141,7 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
     WHERE b."organizationId" = ${actor.organizationId}
       AND b."status" IN ('CONFIRMED', 'LOCKED', 'SETTLED')
       ${drawFilter}
-      ${query.lottery ? Prisma.sql`AND d."lotteryType" = ${query.lottery}::"LotteryType"` : Prisma.empty}
+      ${lotteryFilter}
       ${query.agentId ? Prisma.sql`AND b."agentId" = ${query.agentId}` : Prisma.empty}
     GROUP BY b."drawId", b."agentId"
   `);
@@ -143,11 +164,17 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
   ]);
   const agentById = new Map(agents.map((agent) => [agent.id, agent]));
   const commissionByKey = new Map(settlements.map((row) => [`${row.drawId}:${row.agentId}`, money(row.commission)]));
+  // จัดกลุ่มครั้งเดียว ป้องกัน O(จำนวนงวด × จำนวนแถว) เมื่อเลือก "ทั้งหมด"
+  const rowsByDraw = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const grouped = rowsByDraw.get(row.drawId) ?? [];
+    grouped.push(row);
+    rowsByDraw.set(row.drawId, grouped);
+  }
 
   const drawRows: AccountingDrawRow[] = draws.map((draw) => {
     const settled = SETTLED.includes(draw.status);
-    const lines: AccountingAgentLine[] = rows
-      .filter((row) => row.drawId === draw.id)
+    const lines: AccountingAgentLine[] = (rowsByDraw.get(draw.id) ?? [])
       .map((row) => {
         const agent = agentById.get(row.agentId)!;
         const rate = money(agent.commissionRate);

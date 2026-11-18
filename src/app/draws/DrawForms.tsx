@@ -249,7 +249,7 @@ export function CreateDrawWizard({ thai, laoCreated }: {
     const options: { value: WizardType; title: string; detail: string }[] = [
       { value: "THAI_GOVERNMENT", title: "หวยรัฐบาล", detail: "งวดวันที่ 1 และ 16 ระบบเลือกงวดถัดไปและเวลาให้" },
       { value: "LAO", title: "หวยลาว", detail: "ออกผลจันทร์–ศุกร์ 20:30 น. แทงได้ทุกเลข" },
-      { value: "LAO_SET", title: "หวยลาวชุด", detail: "ออกผลเหมือนหวยลาว 7 ประเภท รวม 4 ตัวตรง/โต๊ด" },
+      { value: "LAO_SET", title: "หวยลาวชุด", detail: "เลขชุด 4 หลัก ลุ้น 8 รางวัล จ่ายรางวัลสูงสุดหนึ่งรางวัล" },
     ];
     return (
       <div className="draw-wizard">

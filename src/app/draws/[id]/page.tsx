@@ -21,6 +21,7 @@ import {
 import { GloResultImporter } from "./GloResultImporter";
 import { RestrictionManager } from "./RestrictionManager";
 import { CapOverrideManager, LaoResultForm } from "./LaoForms";
+import { ReportExportButtons } from "@/components/ReportExportButtons";
 import { isLaoLottery, LAO_SET_ACTIVE_CODES } from "@/lib/lao/rules";
 import { listCapOverrides } from "@/lib/lao/service";
 import { listRestrictions } from "@/lib/draws/restrictions";
@@ -368,12 +369,10 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
             </table></div>
 
             {canCalculate && (
-              <p>
-                <a href={`/api/draws/${draw.id}/reconciliation?format=xlsx`}>
-                  ดาวน์โหลดสรุป Settlement (Excel)
-                </a>
-                <a href={`/api/draws/${draw.id}/reconciliation`}>CSV</a>
-              </p>
+              <ReportExportButtons
+                csvHref={`/api/draws/${draw.id}/reconciliation`}
+                excelHref={`/api/draws/${draw.id}/reconciliation?format=xlsx`}
+              />
             )}
 
             {canApproveSettlement && draw.status === "SETTLED" && (

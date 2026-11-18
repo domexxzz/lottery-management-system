@@ -14,6 +14,7 @@ import { drawStage, timeLeftLabel } from "@/lib/bills/draw-scope";
 import type { Actor } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { AgentBillFilters } from "./AgentBillFilters";
+import { ReportExportButtons } from "@/components/ReportExportButtons";
 import { LotteryFlag, ThaiFlag } from "./ThaiFlag";
 
 const TAB_LABEL: Record<BetTab, string> = {
@@ -123,7 +124,8 @@ export async function AgentBillBoard({
     drawWhere: scope.drawWhere,
     agentId: filter.agentId || undefined,
     page: filter.page,
-    pageSize: 10,
+    pageSize: filter.pageSize,
+    sort: filter.sort,
   });
   const { bills, counts, page, pageCount, pageSize, total, totals, sequence } = result;
 
@@ -158,8 +160,7 @@ export async function AgentBillBoard({
           <p>{scope.scope === "current" ? "บิลของงวดปัจจุบัน (เปิดรับอยู่ หรือออกรางวัลมาไม่เกิน 2 วัน) เปิดหน้ามาจะเห็นงานของงวดนี้ก่อน" : "ค้นหา ตรวจสอบ และติดตามผลรายการย้อนหลัง"}</p>
         </div>
         <div className="slip-head-actions">
-          <a href={excelHref} className="slip-outline-button">⇩ ดาวน์โหลด Excel</a>
-          <a href={exportHref} className="slip-export-csv">CSV</a>
+          <ReportExportButtons csvHref={exportHref} excelHref={excelHref} />
           <Link href="/bills/new" className="slip-primary-button">＋ สร้างบิลใหม่</Link>
         </div>
       </header>
@@ -316,6 +317,8 @@ export async function AgentBillBoard({
         lottery={filter.lotteryType ?? ""}
         agentId={filter.agentId}
         tab={filter.tab}
+        pageSize={filter.pageSize}
+        sort={filter.sort}
         draws={scope.drawOptions}
         agents={agents}
       />

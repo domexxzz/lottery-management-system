@@ -3,8 +3,8 @@ import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { NotFoundError } from "@/lib/errors";
 import { visibleBillNumber } from "@/lib/bills/numbering";
 import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
-import { csvFile } from "@/lib/csv";
 import type { TableWorkbookCell } from "@/lib/excel/table-workbook";
+import { laoSetPackageLabel } from "@/lib/lao/rules";
 
 /**
  * ไฟล์สำหรับกระทบยอดด้วยมือ (LOT-22)
@@ -86,6 +86,7 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
   for (const bill of bills) {
     for (const item of bill.items) {
       const resultValue = resultByPrizeType.get(item.prizeTypeId);
+      const isLaoSetEntry = draw.lotteryType === "LAO_SET" && item.prizeType.code === 201;
       rows.push([
           lotteryLabel(draw.lotteryType),
           drawDateLabel(draw),
@@ -95,10 +96,10 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
           bill.agent.name,
           String(item.prizeType.code),
           item.prizeType.name,
-          MATCH_RULE_LABEL[item.prizeType.matchRule] ?? item.prizeType.matchRule,
+          isLaoSetEntry ? "ลุ้น 8 รางวัล จ่ายรางวัลสูงสุดหนึ่งรางวัล" : MATCH_RULE_LABEL[item.prizeType.matchRule] ?? item.prizeType.matchRule,
           item.number,
           Number(item.stake),
-          Number(item.payoutRateSnapshot),
+          isLaoSetEntry ? `ตามตาราง ${laoSetPackageLabel(item.stake) ?? ""}`.trim() : Number(item.payoutRateSnapshot),
           resultValue ?? "ยังไม่มีผล",
           resultValue === undefined ? "รอผล" : item.isWinner ? "ถูก" : "ไม่ถูก",
           Number(item.payout),
@@ -108,14 +109,6 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
 
   const title = `${lotteryLabel(draw.lotteryType)} งวด ${drawDateLabel(draw)}`;
   return { rows, title, filenameBase: `กระทบยอด_${lotteryLabel(draw.lotteryType)}_${drawDateLabel(draw)}` };
-}
-
-export async function reconciliationCsv(actor: Actor, drawId: string): Promise<{ csv: string; filename: string }> {
-  const report = await reconciliationExport(actor, drawId);
-  return {
-    csv: csvFile(COLUMNS, report.rows.map((row) => row.map((value) => value === null ? "" : String(value)))),
-    filename: `${report.filenameBase}.csv`,
-  };
 }
 
 export { COLUMNS as RECONCILIATION_COLUMNS };

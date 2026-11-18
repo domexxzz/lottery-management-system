@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { getActor } from "@/lib/auth/context";
-import { csvDateTime, csvFile, csvHeaders } from "@/lib/csv";
 import { AppError } from "@/lib/errors";
 import { getAgentReport } from "@/lib/reports/agent-report";
 import { visibleBillNumber } from "@/lib/bills/numbering";
-import { generateTableWorkbook, xlsxBody, xlsxHeaders, type TableWorkbookInput } from "@/lib/excel/table-workbook";
+import { type TableWorkbookInput } from "@/lib/excel/table-workbook";
+import { createReportDownload, type ReportExportInput } from "@/lib/export/report";
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +31,10 @@ export async function GET(request: Request) {
       view: params.get("view") ?? undefined,
     });
 
-    let csv: string;
     let name: string;
     let workbook: TableWorkbookInput;
     if (report.selectedView === "prizes") {
-      csv = csvFile(["รหัสรางวัล", "ประเภทรางวัล", "จำนวนรายการเลข (รายการ)", "ถูกรางวัล (รายการ)", "ยอดขาย (บาท)", "จ่ายรางวัล (บาท)"], report.prizes.map((row) => [String(row.code), row.name, String(row.count), String(row.winners), row.gross.toFixed(2), row.payout.toFixed(2)]));
-      name = `รายงานประเภทรางวัล_${report.agent.code}.csv`;
+      name = `agent-prizes_${report.agent.code}`;
       workbook = {
         title: `รายงานประเภทรางวัล ${report.agent.code} · ${report.agent.name}`,
         sheetName: "ประเภทรางวัล",
@@ -44,8 +42,7 @@ export async function GET(request: Request) {
         rows: report.prizes.map((row) => [String(row.code), row.name, row.count, row.winners, Number(row.gross), Number(row.payout)]),
       };
     } else if (report.selectedView === "bills" || report.selectedView === "winners") {
-      csv = csvFile(["เลขบิล", "ชื่อลูกค้า", "งวด", "จำนวนรายการเลข (รายการ)", "ยอดขาย (บาท)", "จ่ายรางวัล (บาท)", "วันที่สร้างบิล", "สถานะ"], report.bills.map((bill) => [visibleBillNumber(bill.drawSequence), bill.title, bill.draw.name, String(bill._count.items), bill.totalStake.toFixed(2), bill.totalPayout.toFixed(2), csvDateTime(bill.createdAt), BILL_STATUS[bill.status] ?? bill.status]));
-      name = report.selectedView === "winners" ? `บิลถูกรางวัล_${report.agent.code}.csv` : `รายการบิล_${report.agent.code}.csv`;
+      name = `${report.selectedView === "winners" ? "agent-winning-bills" : "agent-bills"}_${report.agent.code}`;
       workbook = {
         title: `${report.selectedView === "winners" ? "บิลถูกรางวัล" : "รายการบิล"} ${report.agent.code} · ${report.agent.name}`,
         sheetName: report.selectedView === "winners" ? "บิลถูกรางวัล" : "รายการบิล",
@@ -53,8 +50,7 @@ export async function GET(request: Request) {
         rows: report.bills.map((bill) => [visibleBillNumber(bill.drawSequence), bill.title, bill.draw.name, bill._count.items, Number(bill.totalStake), Number(bill.totalPayout), bill.createdAt, BILL_STATUS[bill.status] ?? bill.status]),
       };
     } else if (report.selectedView === "settlements") {
-      csv = csvFile(["งวด", "วันที่ปิดรับ", "ยอดขาย (บาท)", "จ่ายรางวัล (บาท)", "ค่าคอม (บาท)", "สุทธิ (บาท)", "สถานะ"], report.settlements.map((row) => [row.drawName, csvDateTime(row.cutoffAt), row.gross.toFixed(2), row.payout.toFixed(2), row.commission?.toFixed(2) ?? "", row.net?.toFixed(2) ?? "", STATUS[row.settlementStatus] ?? row.settlementStatus]));
-      name = `สรุปยอด_${report.agent.code}.csv`;
+      name = `agent-settlements_${report.agent.code}`;
       workbook = {
         title: `สรุปยอด ${report.agent.code} · ${report.agent.name}`,
         sheetName: "สรุปยอด",
@@ -62,8 +58,7 @@ export async function GET(request: Request) {
         rows: report.settlements.map((row) => [row.drawName, row.cutoffAt, Number(row.gross), Number(row.payout), row.commission === null ? null : Number(row.commission), row.net === null ? null : Number(row.net), STATUS[row.settlementStatus] ?? row.settlementStatus]),
       };
     } else {
-      csv = csvFile(["งวด", "วันที่ปิดรับ", "จำนวนบิล (บิล)", "จำนวนรายการเลข (รายการ)", "ยอดขาย (บาท)", "จ่ายรางวัล (บาท)", "ค่าคอม (บาท)", "สุทธิ (บาท)", "สถานะ"], report.rows.map((row) => [row.drawName, csvDateTime(row.cutoffAt), String(row.billCount), String(row.itemCount), row.gross.toFixed(2), row.payout.toFixed(2), row.commission?.toFixed(2) ?? "", row.net?.toFixed(2) ?? "", STATUS[row.settlementStatus] ?? row.settlementStatus]));
-      name = `รายงานรายงวด_${report.agent.code}.csv`;
+      name = `agent-rounds_${report.agent.code}`;
       workbook = {
         title: `รายงานรายงวด ${report.agent.code} · ${report.agent.name}`,
         sheetName: "รายงานรายงวด",
@@ -72,11 +67,27 @@ export async function GET(request: Request) {
       };
     }
 
-    if (params.get("format") === "xlsx") {
-      const bytes = generateTableWorkbook({ ...workbook, subtitle: "ไฟล์ Excel จัดคอลัมน์ พร้อมตัวกรอง และเก็บยอดเงินเป็นตัวเลข" });
-      return new NextResponse(xlsxBody(bytes), { headers: xlsxHeaders(name.replace(/\.csv$/i, ".xlsx")) });
-    }
-    return new NextResponse(csv, { headers: csvHeaders(name) });
+    const exportInput: ReportExportInput = {
+      ...workbook,
+      filename: name,
+      subtitle: "ข้อมูลทั้งหมดที่ผ่านตัวกรองของรายงาน Agent",
+      metadata: [
+        { label: "รหัส Agent", value: report.agent.code }, { label: "ชื่อ Agent", value: report.agent.name },
+        { label: "งวด", value: report.selectedDrawId || "ทุกงวด" },
+        { label: "วันที่เริ่มต้น", value: report.dateFrom || "ทั้งหมด" }, { label: "วันที่สิ้นสุด", value: report.dateTo || "ทั้งหมด" },
+        { label: "สถานะ Settlement", value: report.selectedSettlement },
+      ],
+      summary: [
+        { label: "จำนวนบิล", value: report.totals.billCount, type: "integer", unit: "บิล" },
+        { label: "จำนวนรายการเลข", value: report.totals.itemCount, type: "integer", unit: "รายการ" },
+        { label: "ยอดขายรวม", value: Number(report.totals.gross), type: "money", unit: "บาท" },
+        { label: "ค่าคอมมิชชัน", value: Number(report.totals.commission), type: "money", unit: "บาท" },
+        { label: "ยอดสุทธิ", value: Number(report.totals.net), type: "money", unit: "บาท" },
+        { label: "จ่ายรางวัล", value: Number(report.totals.payout), type: "money", unit: "บาท" },
+      ],
+    };
+    const output = createReportDownload(exportInput, params.get("format") === "xlsx" ? "xlsx" : "csv");
+    return new NextResponse(output.body, { headers: output.headers });
   } catch (error) {
     if (error instanceof AppError) return NextResponse.json({ error: error.message }, { status: error.status });
     throw error;

@@ -148,7 +148,7 @@ export async function updatePrizeType(
   });
   if (!existing) throw new NotFoundError("ไม่พบประเภทรางวัล");
   if (existing.lotteryType === "LAO_SET" && input.isActive && !isSupportedLaoSetPrizeCode(existing.code)) {
-    throw new ValidationError("หวยลาวชุดเปิดรับได้เฉพาะ 4 ตัวตรงและ 4 ตัวโต๊ด");
+    throw new ValidationError("หวยลาวชุดเปิดรับเป็นเลขชุด 4 หลักเพียงประเภทเดียว ระบบลุ้น 8 รางวัลให้อัตโนมัติ");
   }
 
   await prisma.$transaction(async (tx) => {

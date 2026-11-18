@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { getActor } from "@/lib/auth/context";
 import { byAgent, drawSummary } from "@/lib/reports/service";
-import { csvFile, csvHeaders } from "@/lib/csv";
 import { AppError } from "@/lib/errors";
-import { generateTableWorkbook, xlsxBody, xlsxHeaders } from "@/lib/excel/table-workbook";
+import { createReportDownload, type ReportExportInput } from "@/lib/export/report";
 
 export const dynamic = "force-dynamic";
 
@@ -18,37 +17,30 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   try {
     const [summary, rows] = await Promise.all([drawSummary(actor, drawId), byAgent(actor, drawId)]);
 
-    if (new URL(request.url).searchParams.get("format") === "xlsx") {
-      const bytes = generateTableWorkbook({
-        title: "รายงานตาม Agent",
-        subtitle: `งวด: ${summary.drawName}`,
-        sheetName: "รายงานตาม Agent",
-        columns: [
-          { header: "งวด", type: "text", width: 28 }, { header: "รหัส Agent", type: "text", width: 14 },
-          { header: "ชื่อ Agent", type: "text", width: 26 }, { header: "จำนวนบิล (บิล)", type: "integer", width: 17 },
-          { header: "ยอดขาย (บาท)", type: "money", width: 18 }, { header: "จ่ายรางวัล (บาท)", type: "money", width: 18 },
-          { header: "ค่าคอม (บาท)", type: "money", width: 18 }, { header: "สุทธิ (บาท)", type: "money", width: 18 },
-        ],
-        rows: rows.map((row) => [summary.drawName, row.agentCode, row.agentName, row.billCount, Number(row.gross), Number(row.payout), Number(row.commission), Number(row.net)]),
-      });
-      return new NextResponse(xlsxBody(bytes), { headers: xlsxHeaders(`รายงานตาม-Agent_${summary.drawName}.xlsx`) });
-    }
-
-    const csv = csvFile(
-      ["งวด", "รหัส Agent", "ชื่อ Agent", "จำนวนบิล (บิล)", "ยอดขาย (บาท)", "จ่ายรางวัล (บาท)", "ค่าคอม (บาท)", "สุทธิ (บาท)"],
-      rows.map((r) => [
-        summary.drawName,
-        r.agentCode,
-        r.agentName,
-        String(r.billCount),
-        r.gross.toFixed(2),
-        r.payout.toFixed(2),
-        r.commission.toFixed(2),
-        r.net.toFixed(2),
-      ]),
-    );
-
-    return new NextResponse(csv, { headers: csvHeaders(`รายงานตาม-Agent_${summary.drawName}.csv`) });
+    const report: ReportExportInput = {
+      filename: `agents-by-draw_${id}`,
+      title: "รายงานตาม Agent",
+      subtitle: `งวด: ${summary.drawName}`,
+      sheetName: "Details",
+      metadata: [{ label: "งวด", value: summary.drawName }],
+      summary: [
+        { label: "จำนวน Agent", value: rows.length, type: "integer", unit: "Agent" },
+        { label: "จำนวนบิล", value: rows.reduce((sum, row) => sum + row.billCount, 0), type: "integer", unit: "บิล" },
+        { label: "ยอดขายรวม", value: rows.reduce((sum, row) => sum + Number(row.gross), 0), type: "money", unit: "บาท" },
+        { label: "จ่ายรางวัลรวม", value: rows.reduce((sum, row) => sum + Number(row.payout), 0), type: "money", unit: "บาท" },
+        { label: "ค่าคอมมิชชันรวม", value: rows.reduce((sum, row) => sum + Number(row.commission), 0), type: "money", unit: "บาท" },
+        { label: "ยอดสุทธิรวม", value: rows.reduce((sum, row) => sum + Number(row.net), 0), type: "money", unit: "บาท" },
+      ],
+      columns: [
+        { header: "งวด", type: "text", width: 28 }, { header: "รหัส Agent", type: "text", width: 14 },
+        { header: "ชื่อ Agent", type: "text", width: 26 }, { header: "จำนวนบิล", type: "integer", width: 15 },
+        { header: "ยอดขาย", type: "money", width: 18 }, { header: "จ่ายรางวัล", type: "money", width: 18 },
+        { header: "ค่าคอมมิชชัน", type: "money", width: 18 }, { header: "ยอดสุทธิ", type: "money", width: 18 },
+      ],
+      rows: rows.map((row) => [summary.drawName, row.agentCode, row.agentName, row.billCount, Number(row.gross), Number(row.payout), Number(row.commission), Number(row.net)]),
+    };
+    const output = createReportDownload(report, new URL(request.url).searchParams.get("format") === "xlsx" ? "xlsx" : "csv");
+    return new NextResponse(output.body, { headers: output.headers });
   } catch (error) {
     if (error instanceof AppError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

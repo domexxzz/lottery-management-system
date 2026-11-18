@@ -101,7 +101,7 @@ export default async function PrintBillPage({
               </td>
               <td className="number-cell">{item.number}</td>
               <td className="num">{item.stake.toFixed(2)}</td>
-              {!isSlip && <td className="num">{item.payoutRateSnapshot.toFixed(4)}</td>}
+              {!isSlip && <td className="num">{bill.draw.lotteryType === "LAO_SET" ? "ตามตาราง 8 รางวัล" : item.payoutRateSnapshot.toFixed(4)}</td>}
             </tr>;
           })}
         </tbody>

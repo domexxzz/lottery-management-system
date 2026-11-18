@@ -1,35 +1,54 @@
 import { describe, expect, test } from "vitest";
 import { accountingHref, parseAccountingQuery, resolveRange } from "./accounting-period";
 
-const NOW = new Date("2026-11-18T05:00:00Z"); // 18 พ.ย. 2569 เวลาไทย
+const NOW = new Date("2026-11-18T05:00:00Z"); // พุธ 18 พ.ย. 2569 เวลาไทย
 
 describe("ช่วงเวลาของสรุปบัญชี", () => {
-  test("ค่าเริ่มต้นคือรายเดือนของเดือนนี้", () => {
+  test("ค่าเริ่มต้นคืองวดนี้ เทียบงวดที่แล้ว และทุกประเภทหวย", () => {
     const query = parseAccountingQuery({}, NOW);
-    expect(query).toMatchObject({ period: "month", month: "2026-11", year: "2026", lottery: "", agentId: "" });
-    expect(resolveRange(query, NOW)).toMatchObject({ from: "2026-11-01", to: "2026-11-30" });
+    expect(query).toMatchObject({
+      period: "current_draw",
+      compareA: "current_draw",
+      compareB: "previous_draw",
+      lotteries: ["THAI_GOVERNMENT", "LAO", "LAO_SET"],
+      agentId: "",
+    });
   });
 
-  test("3 เดือน 6 เดือน นับรวมเดือนนี้", () => {
-    expect(resolveRange(parseAccountingQuery({ period: "3m" }, NOW), NOW)).toMatchObject({ from: "2026-09-01", to: "2026-11-30" });
-    expect(resolveRange(parseAccountingQuery({ period: "6m" }, NOW), NOW)).toMatchObject({ from: "2026-06-01", to: "2026-11-30" });
+  test("วันนี้ เมื่อวาน สัปดาห์นี้ และสัปดาห์ที่แล้วใช้วันไทยถูกต้อง", () => {
+    expect(resolveRange(parseAccountingQuery({ period: "today" }, NOW), NOW)).toMatchObject({ from: "2026-11-18", to: "2026-11-18" });
+    expect(resolveRange(parseAccountingQuery({ period: "yesterday" }, NOW), NOW)).toMatchObject({ from: "2026-11-17", to: "2026-11-17" });
+    expect(resolveRange(parseAccountingQuery({ period: "this_week" }, NOW), NOW)).toMatchObject({ from: "2026-11-16", to: "2026-11-18" });
+    expect(resolveRange(parseAccountingQuery({ period: "last_week" }, NOW), NOW)).toMatchObject({ from: "2026-11-09", to: "2026-11-15" });
   });
 
-  test("รายปีและกำหนดเอง", () => {
-    expect(resolveRange(parseAccountingQuery({ period: "year", year: "2025" }, NOW), NOW)).toMatchObject({ from: "2025-01-01", to: "2025-12-31", label: "ปี 2568" });
-    expect(resolveRange(parseAccountingQuery({ period: "custom", from: "2026-10-05", to: "2026-10-20" }, NOW), NOW)).toMatchObject({ from: "2026-10-05", to: "2026-10-20" });
-    // ถึงวันที่ก่อนตั้งแต่ ใช้วันนี้แทน
-    expect(resolveRange(parseAccountingQuery({ period: "custom", from: "2026-10-05", to: "2026-09-01" }, NOW), NOW).to).toBe("2026-11-18");
+  test("เดือน 3 เดือน 6 เดือน ปีนี้ และปีที่แล้ว", () => {
+    expect(resolveRange(parseAccountingQuery({ period: "current_month" }, NOW), NOW)).toMatchObject({ from: "2026-11-01", to: "2026-11-18" });
+    expect(resolveRange(parseAccountingQuery({ period: "3m" }, NOW), NOW)).toMatchObject({ from: "2026-09-01", to: "2026-11-18" });
+    expect(resolveRange(parseAccountingQuery({ period: "6m" }, NOW), NOW)).toMatchObject({ from: "2026-06-01", to: "2026-11-18" });
+    expect(resolveRange(parseAccountingQuery({ period: "current_year" }, NOW), NOW)).toMatchObject({ from: "2026-01-01", to: "2026-11-18" });
+    expect(resolveRange(parseAccountingQuery({ period: "previous_year" }, NOW), NOW)).toMatchObject({ from: "2025-01-01", to: "2025-12-31" });
   });
 
-  test("เดือนกุมภาพันธ์และค่าแปลกในลิงก์", () => {
-    expect(resolveRange(parseAccountingQuery({ period: "month", month: "2028-02" }, NOW), NOW).to).toBe("2028-02-29");
-    expect(parseAccountingQuery({ period: "weird", month: "2026-13", lottery: "X" }, NOW)).toMatchObject({ period: "month", month: "2026-11", lottery: "" });
+  test("ลิงก์เก็บช่วงเปรียบเทียบ ตัวกรอง Agent และหลายประเภทหวย", () => {
+    const query = parseAccountingQuery({
+      period: "this_week",
+      agentId: "a1",
+      lotteries: "THAI_GOVERNMENT,LAO",
+      compareA: "today",
+      compareB: "yesterday",
+    }, NOW);
+    expect(accountingHref("/reports/accounting", query, {})).toBe(
+      "/reports/accounting?period=this_week&agentId=a1&lotteries=THAI_GOVERNMENT%2CLAO&compareA=today&compareB=yesterday",
+    );
   });
 
-  test("ลิงก์เก็บเฉพาะค่าที่ใช้กับช่วงที่เลือก", () => {
-    const query = parseAccountingQuery({ period: "month", month: "2026-10", agentId: "a1", lottery: "LAO" }, NOW);
-    expect(accountingHref("/reports/accounting", query, {})).toBe("/reports/accounting?period=month&month=2026-10&agentId=a1&lottery=LAO");
-    expect(accountingHref("/reports/accounting", query, { period: "draw", drawId: "d1" })).toBe("/reports/accounting?period=draw&drawId=d1&agentId=a1&lottery=LAO");
+  test("เลือกหลายประเภทได้ เรียงคงที่ รองรับลิงก์เดิม และเลือกศูนย์ประเภทได้", () => {
+    expect(parseAccountingQuery({ lotteries: "LAO_SET,THAI_GOVERNMENT" }, NOW).lotteries).toEqual(["THAI_GOVERNMENT", "LAO_SET"]);
+    expect(parseAccountingQuery({ lottery: "LAO" }, NOW).lotteries).toEqual(["LAO"]);
+    expect(parseAccountingQuery({ period: "month" }, NOW).period).toBe("current_month");
+    const none = parseAccountingQuery({ lotteries: "none" }, NOW);
+    expect(none.lotteries).toEqual([]);
+    expect(accountingHref("/reports/accounting", none, {})).toContain("lotteries=none");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { isLaoDrawDay, laoBreakdown, laoResultForCode, laoResultProblem, laoSetPackageLabel, laoSetPackagePrice, LAO_DEFAULT_TIMES, LAO_PRIZE_TYPES, LAO_SET_ACTIVE_CODES } from "./rules";
+import { isLaoDrawDay, laoBreakdown, laoResultForCode, laoResultProblem, laoSetMatchedPrizes, laoSetPackageLabel, laoSetPackagePrice, laoSetWinningPrize, LAO_DEFAULT_TIMES, LAO_PRIZE_TYPES, LAO_SET_ACTIVE_CODES, LAO_SET_PACKAGE_PAYOUTS } from "./rules";
 import { permutations } from "@/lib/bills/betting";
 import { isWinning } from "@/lib/results/matching";
 
@@ -20,9 +20,9 @@ describe("แยกผลหวยลาว (ใช้ 4 ตัวท้าย�
     expect(laoResultForCode(1, "651234")).toBeNull();
   });
 
-  test("หวยลาวชุดเปิดรับเฉพาะ 4 ตัวตรงและ 4 ตัวโต๊ด", () => {
-    expect(LAO_SET_ACTIVE_CODES).toEqual([201, 203]);
-    expect(LAO_PRIZE_TYPES.filter((prize) => prize.lotteryType === "LAO_SET" && prize.isActive).map((prize) => prize.code)).toEqual([201, 203]);
+  test("หวยลาวชุดเปิดรับเป็นเลขชุด 4 หลักเพียงประเภทเดียว", () => {
+    expect(LAO_SET_ACTIVE_CODES).toEqual([201]);
+    expect(LAO_PRIZE_TYPES.filter((prize) => prize.lotteryType === "LAO_SET" && prize.isActive).map((prize) => prize.code)).toEqual([201]);
   });
 
   test("ราคา 30/60/120 แยกเป็นประเภทย่อยของหวยลาวชุด", () => {
@@ -30,6 +30,41 @@ describe("แยกผลหวยลาว (ใช้ 4 ตัวท้าย�
     expect([30, 60, 120].map(laoSetPackageLabel)).toEqual(["ชุด 30 บาท", "ชุด 60 บาท", "ชุด 120 บาท"]);
     expect(laoSetPackagePrice(50)).toBeNull();
     expect(laoSetPackageLabel("50.00")).toBeNull();
+  });
+
+  test("เลขชุดหนึ่งรายการลุ้น 8 รางวัล และคืนเฉพาะรางวัลที่สูงที่สุด", () => {
+    expect(laoSetWinningPrize("1234", "651234", 30)).toMatchObject({ key: "EXACT_4", payout: 25_500 });
+    expect(laoSetWinningPrize("1234", "654321", 30)).toMatchObject({ key: "PERMUTATION_4", payout: 1_125 });
+    expect(laoSetWinningPrize("1234", "659234", 30)).toMatchObject({ key: "LAST_3_EXACT", payout: 9_250 });
+    expect(laoSetWinningPrize("1234", "659243", 30)).toMatchObject({ key: "LAST_3_PERMUTATION", payout: 925 });
+    expect(laoSetWinningPrize("1234", "651239", 30)).toMatchObject({ key: "FIRST_3_EXACT", payout: 1_425 });
+    expect(laoSetWinningPrize("1234", "652139", 30)).toMatchObject({ key: "FIRST_3_PERMUTATION", payout: 425 });
+    expect(laoSetWinningPrize("1234", "651299", 30)).toMatchObject({ key: "FIRST_2", payout: 350 });
+    expect(laoSetWinningPrize("1234", "659934", 30)).toMatchObject({ key: "LAST_2", payout: 350 });
+    expect(laoSetWinningPrize("1234", "659999", 30)).toBeNull();
+  });
+
+  test("ตัวอย่าง 1234 / ผล 561234 เข้าเงื่อนไขครบ 8 รางวัล แต่เลือกจ่าย 4 ตัวตรงครั้งเดียว", () => {
+    expect(laoBreakdown("561234")).toEqual({ last4: "1234", last3: "234", first3: "123", last2: "34", first2: "12" });
+    expect(laoSetMatchedPrizes("1234", "561234", 30).map((prize) => prize.key)).toEqual([
+      "EXACT_4",
+      "PERMUTATION_4",
+      "LAST_3_EXACT",
+      "LAST_3_PERMUTATION",
+      "FIRST_3_EXACT",
+      "FIRST_3_PERMUTATION",
+      "FIRST_2",
+      "LAST_2",
+    ]);
+    expect(laoSetWinningPrize("1234", "561234", 30)).toEqual({ key: "EXACT_4", label: "4 ตัวตรง", payout: 25_500 });
+  });
+
+  test("อัตราจ่ายครบทั้งชุด 30/60/120 ตามตาราง", () => {
+    expect(LAO_SET_PACKAGE_PAYOUTS).toEqual([
+      { price: 30, exact: 25_500, permutation: 1_125, last3Exact: 9_250, last3Permutation: 925, first3Exact: 1_425, first3Permutation: 425, first2: 350, last2: 350 },
+      { price: 60, exact: 51_000, permutation: 2_250, last3Exact: 18_500, last3Permutation: 1_850, first3Exact: 2_850, first3Permutation: 850, first2: 700, last2: 700 },
+      { price: 120, exact: 102_000, permutation: 4_500, last3Exact: 37_000, last3Permutation: 3_700, first3Exact: 5_700, first3Permutation: 1_700, first2: 1_400, last2: 1_400 },
+    ]);
   });
 
   test("ตรวจรูปแบบผล", () => {

@@ -12,10 +12,12 @@ describe("Excel รายละเอียดรายงาน", () => {
     });
     const files = unzipSync(bytes);
     expect(files["xl/workbook.xml"]).toBeDefined();
-    const sheet = strFromU8(files["xl/worksheets/sheet1.xml"]!);
+    const summary = strFromU8(files["xl/worksheets/sheet1.xml"]!);
+    const sheet = strFromU8(files["xl/worksheets/sheet2.xml"]!);
+    expect(summary).toContain("ยอดขายรวม");
     expect(sheet).toContain("ภาพรวมยอดขาย");
     expect(sheet).toContain('<c r="D5" s="3"><v>1000</v></c>');
-    expect(sheet).toContain('<c r="A5" s="4"><v>');
+    expect(sheet).toContain('<c r="A5" s="6"><v>');
     expect(sheet).toContain('<autoFilter ref="A4:J5"/>');
     expect(sheet.indexOf("<autoFilter")).toBeLessThan(sheet.indexOf("<mergeCells"));
   });

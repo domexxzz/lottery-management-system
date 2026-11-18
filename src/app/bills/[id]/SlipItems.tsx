@@ -14,6 +14,7 @@ export type SlipItemRow = {
   packageLabel: string | null;
   stake: number;
   rate: string | null;
+  rateText: string;
   status: "DRAFT" | "PENDING" | "WON" | "LOST" | "CANCELLED";
   statusLabel: string;
   /** ผลได้เสีย = ยอดจ่ายรางวัลเต็ม (เดิมพัน × อัตราจ่าย) ไม่หักอะไร; null = รอผล */
@@ -93,7 +94,7 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
                   <td><LotteryBadge type={row.lotteryType} label={row.lotteryLabel} /></td>
                   <td><span className="slip-prize-type">{row.prizeTypeName}{row.packageLabel && <small>{row.packageLabel}</small>}</span></td>
                   <td className="num">{baht(row.stake)}</td>
-                  <td className="num">{row.rate === null ? "—" : `${row.rate} เท่า`}</td>
+                  <td className="num">{row.rateText}</td>
                   <td><span className={`slip-status slip-status-${row.status.toLowerCase()}`}>{row.statusLabel}</span></td>
                   <td className={`num ${row.prize !== null && row.prize > 0 ? "is-plus" : ""}`}>{row.prize === null ? "รอผล" : baht(row.prize)}</td>
                 </tr>
@@ -128,7 +129,7 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
                   <span>{row.prizeTypeName}{row.packageLabel && <small className="slip-package-label">{row.packageLabel}</small>}</span>
                 </div>
                 <dl>
-                  <div><dt>อัตราจ่าย</dt><dd>{row.rate === null ? "—" : `${row.rate} เท่า`}</dd></div>
+                  <div><dt>อัตราจ่าย</dt><dd>{row.rateText}</dd></div>
                   <div><dt>ผลรางวัล</dt><dd>{row.prize === null ? "รอผล" : row.statusLabel}</dd></div>
                 </dl>
               </div>

@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server";
 import { getActor } from "@/lib/auth/context";
 import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
-import { csvFile, csvHeaders } from "@/lib/csv";
 import { apiError } from "@/lib/http";
 import { loadAccountingReport } from "@/lib/reports/accounting";
-import { parseAccountingQuery } from "@/lib/reports/accounting-period";
-import { generateTableWorkbook, xlsxBody, xlsxHeaders, type TableWorkbookCell } from "@/lib/excel/table-workbook";
+import { accountingLotterySelectionLabel, parseAccountingQuery } from "@/lib/reports/accounting-period";
+import { createReportDownload, type ReportExportInput } from "@/lib/export/report";
 
 export const dynamic = "force-dynamic";
 
-const amount = (value: number) => value.toFixed(2);
-
 /**
- * CSV สรุปบัญชี: หนึ่งแถวต่องวดต่อ Agent พร้อมแถวรวมของแต่ละงวดและแถวรวมทั้งหมด
+ * สรุปบัญชี: CSV มีเฉพาะรายละเอียดหนึ่งแถวต่องวดต่อ Agent
+ * ส่วนยอดรวมและขอบเขตรายงานอยู่ในชีต Summary ของ Excel
  * ใช้ตัวกรองเดียวกับหน้าสรุปบัญชี ไฟล์จึงตรงกับที่เห็นบนจอ
  */
 export async function GET(request: Request) {
@@ -22,75 +20,57 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams;
     const query = parseAccountingQuery(Object.fromEntries(params));
     const report = await loadAccountingReport(actor, query);
-    const rows: string[][] = [];
-    const workbookRows: TableWorkbookCell[][] = [];
+    const lotterySelection = accountingLotterySelectionLabel(query.lotteries);
+    const rows: Array<Array<string | number | null>> = [];
     for (const draw of report.draws) {
       const drawLabel = `${lotteryLabel(draw.lotteryType)} งวด ${drawDateLabel(draw)}`;
       const status = draw.settled ? "คำนวณแล้ว" : "รอผล";
       for (const line of draw.agents) {
         rows.push([
-          "รายการ Agent", drawLabel, status, line.code, line.name, String(line.bills), amount(line.gross),
-          `${line.commissionRate.toFixed(2)}%`, amount(line.commission), line.estimated ? "ประมาณตาม %" : "จากผลคำนวณ",
-          amount(line.net), line.profit === null ? "" : String(line.winners), line.profit === null ? "" : amount(line.payout),
-          line.profit === null ? "" : amount(line.profit),
-        ]);
-        workbookRows.push([
-          "รายการ Agent", drawLabel, status, line.code, line.name, line.bills, line.gross,
+          lotteryLabel(draw.lotteryType), drawLabel, status, line.code, line.name, line.bills, line.gross,
           line.commissionRate / 100, line.commission, line.estimated ? "ประมาณตาม %" : "จากผลคำนวณ",
           line.net, line.profit === null ? null : line.winners, line.profit === null ? null : line.payout,
           line.profit === null ? null : line.profit,
         ]);
       }
-      rows.push([
-        "รวมงวด", drawLabel, status, "", "รวมงวดนี้", String(draw.bills), amount(draw.gross), "", amount(draw.commission), "",
-        amount(draw.net), draw.profit === null ? "" : String(draw.winners), draw.profit === null ? "" : amount(draw.payout),
-        draw.profit === null ? "" : amount(draw.profit),
-      ]);
-      workbookRows.push([
-        "รวมงวด", drawLabel, status, "", "รวมงวดนี้", draw.bills, draw.gross, null, draw.commission, "",
-        draw.net, draw.profit === null ? null : draw.winners, draw.profit === null ? null : draw.payout,
-        draw.profit === null ? null : draw.profit,
-      ]);
     }
     const totals = report.totals;
-    rows.push([
-      "รวมทั้งหมด", `รวม ${report.range.label}`, `${totals.settledDraws}/${totals.draws} งวดคำนวณแล้ว`, "", "รวมทั้งหมด", String(totals.bills), amount(totals.gross), "",
-      amount(totals.commission), "", amount(totals.net), String(totals.winners), amount(totals.payout), amount(totals.profit),
-    ]);
-    workbookRows.push([
-      "รวมทั้งหมด", `รวม ${report.range.label}`, `${totals.settledDraws}/${totals.draws} งวดคำนวณแล้ว`, "", "รวมทั้งหมด", totals.bills,
-      totals.gross, null, totals.commission, "", totals.net, totals.winners, totals.payout, totals.profit,
-    ]);
-    if (params.get("format") === "xlsx") {
-      const bytes = generateTableWorkbook({
-        title: "สรุปบัญชี",
-        subtitle: `ช่วงข้อมูล: ${report.range.label} · ตัวเลขในไฟล์ตรงกับตัวกรองบนหน้ารายงาน`,
-        sheetName: "สรุปบัญชี",
-        columns: [
-          { header: "ประเภทแถว", type: "text", width: 16 },
-          { header: "งวด", type: "text", width: 30 },
-          { header: "สถานะ", type: "text", width: 18 },
-          { header: "รหัส Agent", type: "text", width: 14 },
-          { header: "ชื่อ Agent", type: "text", width: 26 },
-          { header: "จำนวนบิล (บิล)", type: "integer", width: 15 },
-          { header: "ยอดขาย (บาท)", type: "money", width: 17 },
-          { header: "อัตราค่าคอม", type: "percentage", width: 15 },
-          { header: "ค่าคอม (บาท)", type: "money", width: 17 },
-          { header: "ที่มาค่าคอม", type: "text", width: 18 },
-          { header: "ยอดสุทธิ (บาท)", type: "money", width: 18 },
-          { header: "ลูกค้าถูกรางวัล (คน)", type: "integer", width: 20 },
-          { header: "จ่ายรางวัล (บาท)", type: "money", width: 18 },
-          { header: "กำไร/ขาดทุน (บาท)", type: "money", width: 20 },
-        ],
-        rows: workbookRows,
-      });
-      return new NextResponse(xlsxBody(bytes), { headers: xlsxHeaders(`สรุปบัญชี_${report.range.label}.xlsx`) });
-    }
-    const csv = csvFile(
-      ["ประเภทแถว", "งวด", "สถานะ", "รหัส Agent", "ชื่อ Agent", "จำนวนบิล (บิล)", "ยอดขาย (บาท)", "อัตราค่าคอม", "ค่าคอม (บาท)", "ที่มาค่าคอม", "ยอดสุทธิ (บาท) = ยอดขาย − ค่าคอม", "ลูกค้าถูกรางวัล (คน)", "จ่ายรางวัล (บาท)", "กำไร/ขาดทุน (บาท) = ยอดสุทธิ − จ่ายรางวัล"],
+    const exportInput: ReportExportInput = {
+      filename: `account-summary_${report.range.from || "current-draw"}_${report.range.to || report.range.from || "current-draw"}`,
+      title: "สรุปบัญชี",
+      subtitle: `ยอดสุทธิ = ยอดขาย - ค่าคอมมิชชัน · กำไร/ขาดทุน = ยอดสุทธิ - จ่ายรางวัล`,
+      sheetName: "Details",
+      metadata: [
+        { label: "ช่วงข้อมูล", value: report.range.label },
+        { label: "วันที่เริ่มต้น", value: report.range.from || "ตามงวดที่เลือก" },
+        { label: "วันที่สิ้นสุด", value: report.range.to || "ตามงวดที่เลือก" },
+        { label: "ประเภทหวย", value: lotterySelection },
+        { label: "Agent", value: query.agentId ? report.agents[0]?.name ?? query.agentId : "ทุก Agent" },
+        { label: "งวดที่คำนวณแล้ว", value: totals.settledDraws, type: "integer", unit: `จาก ${totals.draws} งวด` },
+      ],
+      summary: [
+        { label: "จำนวนงวด", value: totals.draws, type: "integer", unit: "งวด" },
+        { label: "จำนวนบิล", value: totals.bills, type: "integer", unit: "บิล" },
+        { label: "ยอดขายรวม", value: totals.gross, type: "money", unit: "บาท" },
+        { label: "ค่าคอมมิชชันรวม", value: totals.commission, type: "money", unit: "บาท" },
+        { label: "ยอดสุทธิ", value: totals.net, type: "money", unit: "บาท" },
+        { label: "ลูกค้าถูกรางวัล", value: totals.winners, type: "integer", unit: "คน" },
+        { label: "จ่ายรางวัลรวม", value: totals.payout, type: "money", unit: "บาท" },
+        { label: "กำไร/ขาดทุน", value: totals.profit, type: "money", unit: "บาท" },
+      ],
+      columns: [
+        { header: "ประเภทหวย", type: "text", width: 18 }, { header: "งวด", type: "text", width: 30 },
+        { header: "สถานะ", type: "text", width: 16 }, { header: "รหัส Agent", type: "text", width: 14 },
+        { header: "ชื่อ Agent", type: "text", width: 26 }, { header: "จำนวนบิล", type: "integer", width: 14 },
+        { header: "ยอดขาย", type: "money", width: 17 }, { header: "อัตราค่าคอมมิชชัน", type: "percentage", width: 19 },
+        { header: "ค่าคอมมิชชัน", type: "money", width: 18 }, { header: "ที่มาค่าคอมมิชชัน", type: "text", width: 20 },
+        { header: "ยอดสุทธิ", type: "money", width: 18 }, { header: "ลูกค้าถูกรางวัล", type: "integer", width: 19 },
+        { header: "จ่ายรางวัล", type: "money", width: 18 }, { header: "กำไร/ขาดทุน", type: "money", width: 19 },
+      ],
       rows,
-    );
-    return new NextResponse(csv, { headers: csvHeaders(`สรุปบัญชี_${report.range.label}.csv`) });
+    };
+    const output = createReportDownload(exportInput, params.get("format") === "xlsx" ? "xlsx" : "csv");
+    return new NextResponse(output.body, { headers: output.headers });
   } catch (error) {
     return apiError(error);
   }

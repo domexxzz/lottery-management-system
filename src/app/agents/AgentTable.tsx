@@ -6,6 +6,7 @@ import { Fragment, useMemo, useState } from "react";
 import { AppDropdown } from "../AppDropdown";
 import { DateRangePicker } from "@/components/calendar";
 import type { MonthShortcut } from "@/lib/draws/range";
+import { ReportExportButtons } from "@/components/ReportExportButtons";
 
 export type AgentTableCustomer = {
   key: string;
@@ -38,7 +39,7 @@ const STATUS_TONE = { ACTIVE: "success", SUSPENDED: "warning", CLOSED: "muted" }
 
 /** ตาราง Agent แบบอ่านง่าย: หนึ่งแถวต่อ Agent กดขยายดูลูกค้าอันดับแรกได้ */
 const RANGE_VALUE = "__range";
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 export function AgentTable({
   draws,
@@ -70,19 +71,35 @@ export function AgentTable({
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [sort, setSort] = useState("sales_desc");
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
   // รูปแบบการแสดงผล: การ์ด (ค่าเริ่มต้น) หรือตาราง
   const [view, setView] = useState<"table" | "card">("card");
-  const excelHref = `${csvHref}${csvHref.includes("?") ? "&" : "?"}format=xlsx`;
+  const filteredExportHref = useMemo(() => {
+    const [path, raw = ""] = csvHref.split("?");
+    const params = new URLSearchParams(raw);
+    if (search.trim()) params.set("q", search.trim()); else params.delete("q");
+    if (status) params.set("status", status); else params.delete("status");
+    if (sort !== "sales_desc") params.set("sort", sort); else params.delete("sort");
+    return `${path}${params.size ? `?${params}` : ""}`;
+  }, [csvHref, search, sort, status]);
+  const excelHref = `${filteredExportHref}${filteredExportHref.includes("?") ? "&" : "?"}format=xlsx`;
 
   const rows = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("th-TH");
-    return agents.filter((agent) => {
+    const filtered = agents.filter((agent) => {
       if (status && agent.status !== status) return false;
       if (!term) return true;
       return `${agent.code} ${agent.name}`.toLocaleLowerCase("th-TH").includes(term)
         || agent.customers.some((customer) => customer.name.toLocaleLowerCase("th-TH").includes(term));
     });
-  }, [agents, search, status]);
+    return filtered.sort((a, b) => {
+      if (sort === "sales_asc") return a.sales - b.sales || a.code.localeCompare(b.code, "th-TH");
+      if (sort === "payout_desc") return b.payout - a.payout || a.code.localeCompare(b.code, "th-TH");
+      if (sort === "name_asc") return a.code.localeCompare(b.code, "th-TH");
+      return b.sales - a.sales || a.code.localeCompare(b.code, "th-TH");
+    });
+  }, [agents, search, sort, status]);
 
   const totals = rows.reduce(
     (sum, agent) => ({
@@ -97,11 +114,11 @@ export function AgentTable({
 
   // แสดงทีละ 10 Agent ที่เหลือกดหน้าถัดไป · ยอดรวมท้ายตารางยังคิดจากทุก Agent ที่ตรงตัวกรอง
   const [page, setPage] = useState(1);
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const firstShown = rows.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
-  const lastShown = Math.min(currentPage * PAGE_SIZE, rows.length);
+  const pageRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const firstShown = rows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const lastShown = Math.min(currentPage * pageSize, rows.length);
 
   const byRange = Boolean(from || to);
   const [range, setRange] = useState({ startDate: from, endDate: to });
@@ -148,12 +165,13 @@ export function AgentTable({
       </label>
       <AppDropdown ariaLabel="เลือกงวด" value={byRange ? RANGE_VALUE : selectedDrawId} onValueChange={changeDraw} options={[...(byRange ? [{ value: RANGE_VALUE, label: "ตามช่วงวันที่" }] : []), { value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.name, lotteryType: draw.lotteryType }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" />
       <AppDropdown ariaLabel="เลือกสถานะ Agent" value={status} onValueChange={(value) => { setStatus(value); setPage(1); }} options={[{ value: "", label: "ทุกสถานะ" }, { value: "ACTIVE", label: "ใช้งาน" }, { value: "SUSPENDED", label: "ระงับ" }, { value: "CLOSED", label: "ปิด" }]} />
+      <AppDropdown ariaLabel="เรียงข้อมูล" value={sort} onValueChange={(value) => { setSort(value); setPage(1); }} options={[{ value: "sales_desc", label: "ยอดขาย มาก→น้อย" }, { value: "sales_asc", label: "ยอดขาย น้อย→มาก" }, { value: "payout_desc", label: "จ่ายรางวัล มาก→น้อย" }, { value: "name_asc", label: "รหัส Agent A→Z" }]} />
+      <AppDropdown ariaLabel="จำนวนรายการต่อหน้า" value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(1); }} options={PAGE_SIZE_OPTIONS.map((value) => ({ value: String(value), label: `${value} รายการ/หน้า` }))} />
       <div className="agent-view-switch" role="group" aria-label="รูปแบบการแสดงผล">
         <button type="button" aria-pressed={view === "table"} onClick={() => setView("table")}>ตาราง</button>
         <button type="button" aria-pressed={view === "card"} onClick={() => setView("card")}>การ์ด</button>
       </div>
-      <a className="agent-table-csv is-primary" href={excelHref}>ดาวน์โหลด Excel</a>
-      <a className="agent-table-csv" href={csvHref}>CSV</a>
+      <ReportExportButtons csvHref={filteredExportHref} excelHref={excelHref} />
     </div>
 
     <div className="agent-table-period" role="group" aria-label="ดูยอดตามช่วงวันที่">
