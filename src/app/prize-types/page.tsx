@@ -11,6 +11,7 @@ import { listPrizeTypes } from "@/lib/prizeTypes/service";
 import { RestrictionManager } from "../draws/[id]/RestrictionManager";
 import { PrizeTypeRow } from "./PrizeTypeRow";
 import { RulebookDrawPicker } from "./RulebookDrawPicker";
+import { buildLaoSetPayoutRows, LAO_SET_PAYOUT_COLUMNS } from "@/lib/lao/set-package-rates";
 import "./rulebook.css";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,8 @@ export default async function PrizeTypesPage({
     ? (await fullNumbersByDraw(prisma, actor.organizationId, [selectedDraw])).get(selectedDraw.id) ?? []
     : [];
   const prizeNameById = new Map(prizeTypes.map((prizeType) => [prizeType.id, prizeType.name]));
+  const laoSetRateByCode = new Map(visiblePrizeTypes.filter((prizeType) => prizeType.lotteryType === "LAO_SET").map((prizeType) => [prizeType.code, prizeType.payoutRate]));
+  const laoSetPayoutRows = buildLaoSetPayoutRows((code) => laoSetRateByCode.get(code)?.toNumber() ?? 0);
 
   return (
     <main className="workspace-page rulebook-page">
@@ -84,7 +87,24 @@ export default async function PrizeTypesPage({
 
         {lotteryGroups.map((group) => (
         <div key={group.lotteryType} className="rulebook-lottery-group">
-        <h3 className="rulebook-lottery-heading">{group.label} <small>{group.items.length} ประเภท</small></h3>
+        <h3 className="rulebook-lottery-heading">{group.label} <small>{group.lotteryType === "LAO_SET" ? "3 ราคาชุด · 8 รางวัล" : `${group.items.length} ประเภท`}</small></h3>
+        {group.lotteryType === "LAO_SET" ? (
+          <div className="rulebook-lao-set-wrap">
+            <p className="rulebook-lao-set-note">ราคาชุดและยอดจ่ายเป็นค่าคงที่ ใช้ตารางเดียวกับหน้ากติกาและระบบคำนวณรางวัล แก้ไขจาก Rulebook ไม่ได้</p>
+            <div className="rulebook-lao-set-scroll">
+              <table className="rulebook-lao-set-table">
+                <thead><tr><th>ราคาชุด</th>{LAO_SET_PAYOUT_COLUMNS.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead>
+                <tbody>{laoSetPayoutRows.map((item) => (
+                  <tr key={item.price}>
+                    <th scope="row">{item.price.toLocaleString("th-TH")} บาท</th>
+                    {LAO_SET_PAYOUT_COLUMNS.map((column) => <td key={column.key}>{item[column.key].toLocaleString("th-TH")}</td>)}
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <p className="rulebook-lao-set-foot">กรอกเลข 4 หลัก 1 รายการ ลุ้นครบทั้ง 8 รางวัล หากถูกหลายเงื่อนไข ระบบรวมจ่ายทุกรางวัลที่เข้าเงื่อนไข</p>
+          </div>
+        ) : (
         <div className="rulebook-prize-list">
           {group.items.map((p) =>
               canEdit ? (
@@ -113,6 +133,7 @@ export default async function PrizeTypesPage({
               ),
           )}
         </div>
+        )}
         </div>
         ))}
       </section>

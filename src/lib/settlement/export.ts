@@ -4,7 +4,7 @@ import { NotFoundError } from "@/lib/errors";
 import { visibleBillNumber } from "@/lib/bills/numbering";
 import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
 import type { TableWorkbookCell } from "@/lib/excel/table-workbook";
-import { laoSetPackageLabel, laoSetWinningPrize } from "@/lib/lao/rules";
+import { laoSetPackageLabel } from "@/lib/lao/rules";
 
 /**
  * ไฟล์สำหรับกระทบยอดด้วยมือ (LOT-22)
@@ -66,6 +66,10 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
             payout: true,
             prizeTypeId: true,
             prizeType: { select: { code: true, name: true, matchRule: true } },
+            winningPrizes: {
+              orderBy: [{ payout: "desc" }, { prizeKey: "asc" }],
+              select: { prizeLabelSnapshot: true, payoutRateSnapshot: true, payout: true },
+            },
           },
         },
       },
@@ -88,9 +92,12 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
     for (const item of bill.items) {
       const resultValue = resultByPrizeType.get(item.prizeTypeId);
       const isLaoSetEntry = draw.lotteryType === "LAO_SET" && item.prizeType.code === 201;
-      const winningPrize = isLaoSetEntry && resultValue !== undefined && item.isWinner
-        ? laoSetWinningPrize(item.number, resultValue, item.stake)
-        : null;
+      const winningPrizeText = item.winningPrizes
+        .map((prize) => `${prize.prizeLabelSnapshot} (${Number(prize.payout).toLocaleString("th-TH")} บาท)`)
+        .join("; ");
+      const winningRateText = item.winningPrizes
+        .map((prize) => `${prize.prizeLabelSnapshot} × ${Number(prize.payoutRateSnapshot).toLocaleString("th-TH", { maximumFractionDigits: 4 })}`)
+        .join("; ");
       rows.push([
           lotteryLabel(draw.lotteryType),
           drawDateLabel(draw),
@@ -100,13 +107,17 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
           bill.agent.name,
           String(item.prizeType.code),
           item.prizeType.name,
-          isLaoSetEntry ? "ลุ้น 8 รางวัล จ่ายรางวัลสูงสุดหนึ่งรางวัล" : MATCH_RULE_LABEL[item.prizeType.matchRule] ?? item.prizeType.matchRule,
+          isLaoSetEntry ? "ลุ้น 8 รางวัล จ่ายทุกรางวัลที่เข้าเงื่อนไข" : MATCH_RULE_LABEL[item.prizeType.matchRule] ?? item.prizeType.matchRule,
           item.number,
           Number(item.stake),
-          isLaoSetEntry ? `ตามตาราง ${laoSetPackageLabel(item.stake) ?? ""}`.trim() : Number(item.payoutRateSnapshot),
+          isLaoSetEntry
+            ? winningRateText
+              ? winningRateText
+              : `ตามตาราง ${laoSetPackageLabel(item.stake) ?? ""}`.trim()
+            : Number(item.payoutRateSnapshot),
           resultValue ?? "ยังไม่มีผล",
           resultValue === undefined ? "รอผล" : item.isWinner ? "ถูก" : "ไม่ถูก",
-          winningPrize?.label ?? "-",
+          winningPrizeText || "-",
           Number(item.payout),
         ]);
     }

@@ -3,6 +3,36 @@
   gap: 0.65rem;
 }
 
+.rulebook-lao-set-wrap {
+  overflow: hidden;
+  border: 1px solid #d7e4ef;
+  border-left: 4px solid #7b3fc4;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgb(22 74 120 / 6%);
+}
+
+.rulebook-lao-set-note,
+.rulebook-lao-set-foot {
+  margin: 0;
+  padding: .75rem .9rem;
+  color: #526b83;
+  background: #f7f2ff;
+  font-size: .78rem;
+  line-height: 1.55;
+}
+
+.rulebook-lao-set-foot { border-top: 1px solid #e4d9f3; background: #fbf9ff; }
+.rulebook-lao-set-scroll { overflow-x: auto; }
+.rulebook-lao-set-table { width: 100%; min-width: 980px; border-collapse: collapse; }
+.rulebook-lao-set-table th,
+.rulebook-lao-set-table td { padding: .72rem .65rem; border-top: 1px solid #e1eaf2; text-align: right; white-space: nowrap; }
+.rulebook-lao-set-table thead th { color: #4d3972; background: #f1eafd; font-size: .75rem; }
+.rulebook-lao-set-table thead th:first-child,
+.rulebook-lao-set-table tbody th { position: sticky; left: 0; z-index: 1; text-align: left; }
+.rulebook-lao-set-table tbody th { color: #5b2e9c; background: #faf7ff; font-size: .85rem; }
+.rulebook-lao-set-table td { color: #183c5c; font-weight: 800; font-variant-numeric: tabular-nums; }
+
 .rulebook-prize-card,
 .rulebook-prize-readonly {
   overflow: hidden;

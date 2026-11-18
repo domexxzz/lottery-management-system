@@ -8,6 +8,7 @@ import { fullNumbersByDraw } from "@/lib/draws/number-cap";
 import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
 import { billSequencePeriod } from "@/lib/bills/numbering";
 import { LAO_SET_ACTIVE_CODES } from "@/lib/lao/rules";
+import { buildLaoSetPayoutRows, LAO_SET_PAYOUT_COLUMNS } from "@/lib/lao/set-package-rates";
 import { LotteryTypePicker } from "./LotteryTypePicker";
 import "./new-bill.css";
 import "./bet-slip.css";
@@ -92,7 +93,7 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
   }));
   const selectedDraws = drawsByType.get(selectedLottery) ?? [];
   const sequencePeriod = billSequencePeriod(new Date());
-  const [prizeTypes, representatives, ownAgent] = await Promise.all([
+  const [prizeTypes, representatives, ownAgent, laoSetRateRows] = await Promise.all([
     prisma.prizeType.findMany({
       where: {
         ...orgScope(actor),
@@ -138,7 +139,14 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
           },
         })
       : Promise.resolve(null),
+    prisma.prizeType.findMany({
+      where: { ...orgScope(actor), lotteryType: "LAO_SET", code: { in: LAO_SET_PAYOUT_COLUMNS.map((column) => column.code) } },
+      select: { code: true, payoutRate: true },
+    }),
   ]);
+
+  const laoSetRateByCode = new Map(laoSetRateRows.map((row) => [row.code, row.payoutRate.toNumber()]));
+  const laoSetPayouts = buildLaoSetPayoutRows((code) => laoSetRateByCode.get(code) ?? 0);
 
   const draws = [...drawsByType.values()].flat();
 
@@ -202,6 +210,7 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
               .map(({ lotteryType: _lotteryType, ...prizeType }) => ({ ...prizeType, payoutRate: prizeType.payoutRate.toFixed(4) })),
           })).filter((item) => item.draws.length > 0 && item.prizeTypes.length > 0)}
           initialLottery={selectedLottery}
+          laoSetPayouts={laoSetPayouts}
           restrictions={restrictions}
           representatives={slipRepresentatives}
           ownCommissionRate={ownAgent ? ownAgent.commissionRate.toFixed(4) : null}

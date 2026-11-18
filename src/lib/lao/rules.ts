@@ -4,7 +4,7 @@
  * ผลที่ออกจะยาวกี่หลักก็ได้ (4–6) ใช้ "4 ตัวท้าย" เป็นหลักเสมอ เช่น ออก 651234 → 1234
  * - 4 ตัว = 1234 · 3 ตัวท้าย = 234 · 3 ตัวหน้า = 123 · 2 ตัวหลัง/บน = 34 · 2 ตัวหน้า/ล่าง = 12
  * หวยลาวปกติใช้ MatchRule ตามประเภทที่แทง ส่วนหวยลาวชุดซื้อเลข 4 หลักหนึ่งรายการ
- * ระบบตรวจ 8 รางวัลอัตโนมัติ และจ่ายเพียงรางวัลที่มีมูลค่าสูงสุด
+ * ระบบตรวจ 8 รางวัลอัตโนมัติ และจ่ายทุกรางวัลที่เข้าเงื่อนไข
  */
 
 import { laoSetPackagePrice, LAO_SET_PACKAGE_PAYOUTS } from "./set-package-rates";
@@ -30,6 +30,18 @@ export const LAO_SET_ACTIVE_CODES = [201] as const;
 
 export type LaoSetPrizeKey = "EXACT_4" | "PERMUTATION_4" | "LAST_3_EXACT" | "LAST_3_PERMUTATION" | "FIRST_3_EXACT" | "FIRST_3_PERMUTATION" | "FIRST_2" | "LAST_2";
 
+/** PrizeType ในฐานข้อมูลของรางวัลย่อยหวยลาวชุดแต่ละประเภท */
+export const LAO_SET_PRIZE_TYPE_CODES: Record<LaoSetPrizeKey, number> = {
+  EXACT_4: 201,
+  PERMUTATION_4: 203,
+  LAST_3_EXACT: 202,
+  LAST_3_PERMUTATION: 204,
+  FIRST_3_EXACT: 205,
+  FIRST_3_PERMUTATION: 208,
+  FIRST_2: 206,
+  LAST_2: 207,
+};
+
 export type LaoSetWinningPrize = {
   key: LaoSetPrizeKey;
   label: string;
@@ -39,8 +51,8 @@ export type LaoSetWinningPrize = {
 export const LAO_SET_PRIZE_LABELS: Record<LaoSetPrizeKey, string> = {
   EXACT_4: "4 ตัวตรง",
   PERMUTATION_4: "4 ตัวโต๊ด",
-  LAST_3_EXACT: "3 ตัวท้ายตรง",
-  LAST_3_PERMUTATION: "3 ตัวท้ายโต๊ด",
+  LAST_3_EXACT: "3 ตัวหลังตรง",
+  LAST_3_PERMUTATION: "3 ตัวหลังโต๊ด",
   FIRST_3_EXACT: "3 ตัวหน้าตรง",
   FIRST_3_PERMUTATION: "3 ตัวหน้าโต๊ด",
   FIRST_2: "2 ตัวหน้า",
@@ -52,9 +64,28 @@ function sameDigits(left: string, right: string): boolean {
 }
 
 /**
- * ตรวจเลขชุดหนึ่งรายการกับผล 4–6 หลัก แล้วคืนเฉพาะรางวัลมูลค่าสูงที่สุด
- * ลำดับการตรวจไม่ได้ใช้ตัดสินความใหญ่ แต่เก็บผู้สมัครทั้งหมดแล้ว sort ตามยอดจ่าย
+ * ตรวจเงื่อนไขรางวัลทั้ง 8 ประเภทโดยไม่พึ่งอัตราจ่าย
+ * Settlement ใช้ผลลัพธ์นี้แล้วอ่านอัตราจ่ายจริงจาก PrizeType ในฐานข้อมูล
  */
+export function laoSetMatchedPrizeKeys(numberValue: string, resultValue: string): LaoSetPrizeKey[] {
+  if (!/^\d{4}$/.test(numberValue) || laoResultProblem(resultValue) !== null) return [];
+  const result = laoBreakdown(resultValue);
+  const numberLast3 = numberValue.slice(-3);
+  const numberFirst3 = numberValue.slice(0, 3);
+  const matches: LaoSetPrizeKey[] = [];
+  const add = (condition: boolean, key: LaoSetPrizeKey) => { if (condition) matches.push(key); };
+  add(numberValue === result.last4, "EXACT_4");
+  add(sameDigits(numberValue, result.last4), "PERMUTATION_4");
+  add(numberLast3 === result.last3, "LAST_3_EXACT");
+  add(sameDigits(numberLast3, result.last3), "LAST_3_PERMUTATION");
+  add(numberFirst3 === result.first3, "FIRST_3_EXACT");
+  add(sameDigits(numberFirst3, result.first3), "FIRST_3_PERMUTATION");
+  add(numberValue.slice(0, 2) === result.first2, "FIRST_2");
+  add(numberValue.slice(-2) === result.last2, "LAST_2");
+  return matches;
+}
+
+/** ใช้แสดงตัวอย่างตารางกติกาฝั่ง Client เท่านั้น การคิดเงินจริงอ่าน rate จากฐานข้อมูล */
 export function laoSetMatchedPrizes(
   numberValue: string,
   resultValue: string,
@@ -64,31 +95,17 @@ export function laoSetMatchedPrizes(
   const price = laoSetPackagePrice(packageStake);
   const packageRates = LAO_SET_PACKAGE_PAYOUTS.find((item) => item.price === price);
   if (!packageRates) return [];
-  const result = laoBreakdown(resultValue);
-  const numberLast3 = numberValue.slice(-3);
-  const numberFirst3 = numberValue.slice(0, 3);
-  const candidates: LaoSetWinningPrize[] = [];
-  const add = (condition: boolean, key: LaoSetPrizeKey, payout: number) => {
-    if (condition) candidates.push({ key, label: LAO_SET_PRIZE_LABELS[key], payout });
+  const payoutByKey: Record<LaoSetPrizeKey, number> = {
+    EXACT_4: packageRates.exact,
+    PERMUTATION_4: packageRates.permutation,
+    LAST_3_EXACT: packageRates.last3Exact,
+    LAST_3_PERMUTATION: packageRates.last3Permutation,
+    FIRST_3_EXACT: packageRates.first3Exact,
+    FIRST_3_PERMUTATION: packageRates.first3Permutation,
+    FIRST_2: packageRates.first2,
+    LAST_2: packageRates.last2,
   };
-  add(numberValue === result.last4, "EXACT_4", packageRates.exact);
-  add(sameDigits(numberValue, result.last4), "PERMUTATION_4", packageRates.permutation);
-  add(numberLast3 === result.last3, "LAST_3_EXACT", packageRates.last3Exact);
-  add(sameDigits(numberLast3, result.last3), "LAST_3_PERMUTATION", packageRates.last3Permutation);
-  add(numberFirst3 === result.first3, "FIRST_3_EXACT", packageRates.first3Exact);
-  add(sameDigits(numberFirst3, result.first3), "FIRST_3_PERMUTATION", packageRates.first3Permutation);
-  add(numberValue.slice(0, 2) === result.first2, "FIRST_2", packageRates.first2);
-  add(numberValue.slice(-2) === result.last2, "LAST_2", packageRates.last2);
-  return candidates;
-}
-
-export function laoSetWinningPrize(
-  numberValue: string,
-  resultValue: string,
-  packageStake: { toString(): string } | string | number,
-): LaoSetWinningPrize | null {
-  return [...laoSetMatchedPrizes(numberValue, resultValue, packageStake)]
-    .sort((left, right) => right.payout - left.payout)[0] ?? null;
+  return laoSetMatchedPrizeKeys(numberValue, resultValue).map((key) => ({ key, label: LAO_SET_PRIZE_LABELS[key], payout: payoutByKey[key] }));
 }
 
 export function isSupportedLaoSetPrizeCode(code: number): boolean {
@@ -101,13 +118,13 @@ export const LAO_PRIZE_TYPES: readonly LaoPrizeDefinition[] = [
   { code: 103, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", lotteryType: "LAO", payoutRate: "75.0000", segment: "LAST2", isActive: true },
   { code: 104, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", lotteryType: "LAO", payoutRate: "75.0000", segment: "FIRST2", isActive: true },
   { code: 201, name: "4 ตัวตรง", digits: 4, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "850.0000", segment: "LAST4", isActive: true },
-  { code: 202, name: "3 ตัวท้ายตรง", digits: 3, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "17000.0000", segment: "LAST3", isActive: false },
+  { code: 202, name: "3 ตัวหลังตรง", digits: 3, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "308.3333", segment: "LAST3", isActive: false },
   { code: 203, name: "4 ตัวโต๊ด", digits: 4, matchRule: "PERMUTATION", lotteryType: "LAO_SET", payoutRate: "37.5000", segment: "LAST4", isActive: false },
-  { code: 204, name: "3 ตัวท้ายโต๊ด", digits: 3, matchRule: "PERMUTATION", lotteryType: "LAO_SET", payoutRate: "1250.0000", segment: "LAST3", isActive: false },
-  { code: 205, name: "3 ตัวหน้าตรง", digits: 3, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "600.0000", segment: "FIRST3", isActive: false },
-  // 2 ตัวล่าง = 2 ตัวหน้าของเลข 4 ตัว · 2 ตัวบน = 2 ตัวท้าย (เดิมชื่อ 2 ตัวหน้า/2 ตัวหลัง)
-  { code: 206, name: "2 ตัวล่าง", digits: 2, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "500.0000", segment: "FIRST2", isActive: false },
-  { code: 207, name: "2 ตัวบน", digits: 2, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "500.0000", segment: "LAST2", isActive: false },
+  { code: 204, name: "3 ตัวหลังโต๊ด", digits: 3, matchRule: "PERMUTATION", lotteryType: "LAO_SET", payoutRate: "30.8333", segment: "LAST3", isActive: false },
+  { code: 205, name: "3 ตัวหน้าตรง", digits: 3, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "47.5000", segment: "FIRST3", isActive: false },
+  { code: 206, name: "2 ตัวหน้า", digits: 2, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "11.6667", segment: "FIRST2", isActive: false },
+  { code: 207, name: "2 ตัวหลัง", digits: 2, matchRule: "EXACT", lotteryType: "LAO_SET", payoutRate: "11.6667", segment: "LAST2", isActive: false },
+  { code: 208, name: "3 ตัวหน้าโต๊ด", digits: 3, matchRule: "PERMUTATION", lotteryType: "LAO_SET", payoutRate: "14.1667", segment: "FIRST3", isActive: false },
 ];
 
 const SEGMENT_BY_CODE = new Map(LAO_PRIZE_TYPES.map((prize) => [prize.code, prize.segment]));

@@ -6,7 +6,12 @@ import { ConflictError, NotFoundError } from "@/lib/errors";
 import { commissionOf, itemPayout, netOf, sumMoney, toMoney, ZERO } from "@/lib/money";
 import { isWinningAny } from "@/lib/results/matching";
 import { storedResultValues } from "@/lib/results/values";
-import { laoSetWinningPrize } from "@/lib/lao/rules";
+import {
+  laoSetMatchedPrizeKeys,
+  LAO_SET_PRIZE_LABELS,
+  LAO_SET_PRIZE_TYPE_CODES,
+  type LaoSetPrizeKey,
+} from "@/lib/lao/rules";
 
 /**
  * คำนวณผู้ถูกรางวัลและสรุปการเงินต่อ Agent (LOT-15, LOT-18, LOT-20)
@@ -69,9 +74,31 @@ export async function previewSettlement(
   tx: TxClient,
   drawId: string,
 ): Promise<SettlementPreview[]> {
+  const draw = await tx.draw.findUnique({ where: { id: drawId }, select: { organizationId: true, lotteryType: true } });
+  if (!draw) throw new NotFoundError("ไม่พบรอบ");
   const results = await approvedResults(tx, drawId);
   const bills = await loadSettlementBills(tx, drawId);
-  return evaluateSettlement(bills, results).previews;
+  const laoSetRules = draw.lotteryType === "LAO_SET" ? await loadLaoSetPayoutRules(tx, draw.organizationId) : null;
+  return evaluateSettlement(bills, results, laoSetRules).previews;
+}
+
+type LaoSetPayoutRule = { prizeTypeId: string; payoutRate: Prisma.Decimal };
+
+/** อ่านอัตราจ่ายจริงจาก Rulebook ในฐานข้อมูล เฉพาะตอนคำนวณหวยลาวชุด */
+async function loadLaoSetPayoutRules(tx: TxClient, organizationId: string): Promise<Map<LaoSetPrizeKey, LaoSetPayoutRule>> {
+  const codeByKey = Object.entries(LAO_SET_PRIZE_TYPE_CODES) as [LaoSetPrizeKey, number][];
+  const rows = await tx.prizeType.findMany({
+    where: { organizationId, lotteryType: "LAO_SET", code: { in: codeByKey.map(([, code]) => code) } },
+    select: { id: true, code: true, payoutRate: true },
+  });
+  const rowByCode = new Map(rows.map((row) => [row.code, row]));
+  const rules = new Map<LaoSetPrizeKey, LaoSetPayoutRule>();
+  for (const [key, code] of codeByKey) {
+    const row = rowByCode.get(code);
+    if (!row) throw new ConflictError(`Rulebook หวยลาวชุดไม่ครบ: ไม่พบ ${LAO_SET_PRIZE_LABELS[key]}`);
+    rules.set(key, { prizeTypeId: row.id, payoutRate: row.payoutRate });
+  }
+  return rules;
 }
 
 /** บิลที่มีผลผูกพันของรอบ พร้อมรายการเลข โหลดครั้งเดียวแล้วใช้ทั้งคำนวณยอดและเขียนผล */
@@ -85,6 +112,7 @@ function loadSettlementBills(tx: TxClient, drawId: string) {
       items: {
         select: {
           id: true,
+          organizationId: true,
           prizeTypeId: true,
           number: true,
           stake: true,
@@ -106,6 +134,7 @@ type SettlementBill = Awaited<ReturnType<typeof loadSettlementBills>>[number];
 function evaluateSettlement(
   bills: SettlementBill[],
   results: { byPrizeType: Map<string, string[]>; byPrizeCode: Map<number, string[]> },
+  laoSetRules: Map<LaoSetPrizeKey, LaoSetPayoutRule> | null,
 ) {
   type Bucket = {
     agentCode: string;
@@ -119,6 +148,16 @@ function evaluateSettlement(
 
   const byAgent = new Map<string, Bucket>();
   const winningItems: { itemId: string; payout: Prisma.Decimal }[] = [];
+  const winningPrizeRows: Array<{
+    organizationId: string;
+    billItemId: string;
+    prizeTypeId: string;
+    prizeKey: LaoSetPrizeKey;
+    prizeLabelSnapshot: string;
+    payoutRateSnapshot: Prisma.Decimal;
+    payout: Prisma.Decimal;
+    resultValue: string;
+  }> = [];
   const billPayouts = new Map<string, Prisma.Decimal>();
 
   for (const bill of bills) {
@@ -141,18 +180,32 @@ function evaluateSettlement(
       bucket.stakes.push(item.stake);
       bucket.totalItems += 1;
 
-      // หวยลาวชุดรหัส 201 คือการซื้อ "เลขชุด" หนึ่งรายการ ไม่ใช่เดิมพัน 4 ตัวตรงอย่างเดียว
-      // ตรวจทั้ง 8 รางวัลแล้วบันทึกยอดที่มากที่สุดเพียงยอดเดียวตามราคาชุด 30/60/120
-      if (item.prizeType.code === 201) {
+      // แยกเฉพาะหวยลาวชุดจาก LotteryType ของงวดและรหัสรายการขาย 201
+      // หนึ่งเลขตรวจครบ 8 เงื่อนไขและรวมจ่ายทุกรางวัลที่เข้าเงื่อนไข
+      if (laoSetRules && item.prizeType.code === 201) {
         const resultValue = results.byPrizeCode.get(201)?.[0];
-        const prize = resultValue ? laoSetWinningPrize(item.number, resultValue, item.stake) : null;
-        if (prize) {
-          const payout = toMoney(new Prisma.Decimal(prize.payout));
+        const matchedKeys = resultValue ? laoSetMatchedPrizeKeys(item.number, resultValue) : [];
+        const payoutsOfItem: Prisma.Decimal[] = [];
+        for (const key of matchedKeys) {
+          const rule = laoSetRules.get(key);
+          if (!rule) throw new ConflictError(`Rulebook หวยลาวชุดไม่ครบ: ไม่พบ ${LAO_SET_PRIZE_LABELS[key]}`);
+          const payout = itemPayout(item.stake, rule.payoutRate);
+          payoutsOfItem.push(payout);
           bucket.payouts.push(payout);
           bucket.winningItems += 1;
           payoutsOfBill.push(payout);
-          winningItems.push({ itemId: item.id, payout });
+          winningPrizeRows.push({
+            organizationId: item.organizationId,
+            billItemId: item.id,
+            prizeTypeId: rule.prizeTypeId,
+            prizeKey: key,
+            prizeLabelSnapshot: LAO_SET_PRIZE_LABELS[key],
+            payoutRateSnapshot: rule.payoutRate,
+            payout,
+            resultValue: resultValue!,
+          });
         }
+        if (payoutsOfItem.length > 0) winningItems.push({ itemId: item.id, payout: sumMoney(payoutsOfItem) });
         continue;
       }
 
@@ -205,7 +258,7 @@ function evaluateSettlement(
     })
     .sort((a, b) => a.agentCode.localeCompare(b.agentCode));
 
-  return { previews, winningItems, billPayouts };
+  return { previews, winningItems, winningPrizeRows, billPayouts };
 }
 
 /** จัดกลุ่ม id ตามยอดเงินเดียวกัน เพื่อเขียนด้วย updateMany ครั้งเดียวต่อยอด */
@@ -236,7 +289,7 @@ async function calculateSettlementSingle(
   return prisma.$transaction(async (tx) => {
     const draw = await tx.draw.findFirst({
       where: { id: drawId, ...orgScope(actor) },
-      select: { id: true, status: true, name: true },
+      select: { id: true, organizationId: true, lotteryType: true, status: true, name: true },
     });
     if (!draw) throw new NotFoundError("ไม่พบรอบ");
     if (draw.status === "CLOSED") {
@@ -255,12 +308,17 @@ async function calculateSettlementSingle(
     // เดิมโหลดบิลสองรอบ และ UPDATE ทีละรายการทีละบิลภายใน transaction
     // ซึ่งเป็นหลักร้อยถึงหลักพันคำสั่งต่องวด และเสี่ยงชน timeout ของ transaction เมื่อข้อมูลโต
     const bills = await loadSettlementBills(tx, draw.id);
-    const { previews, winningItems, billPayouts } = evaluateSettlement(bills, results);
+    const laoSetRules = draw.lotteryType === "LAO_SET" ? await loadLaoSetPayoutRules(tx, draw.organizationId) : null;
+    const { previews, winningItems, winningPrizeRows, billPayouts } = evaluateSettlement(bills, results, laoSetRules);
     const billIds = bills.map((bill) => bill.id);
 
     if (billIds.length > 0) {
       // ล้างผลเดิมของทุกรายการก่อน แล้วค่อยเขียนเฉพาะรายการที่ถูกรางวัล
       await tx.billItem.updateMany({ where: { billId: { in: billIds } }, data: { isWinner: false, payout: ZERO } });
+      // ล้างและสร้าง payout ledger ของงวดใหม่ภายใน transaction เดียวกัน
+      // unique(billItemId, prizeKey) ป้องกันรายการซ้ำ และการคำนวณซ้ำให้ผลชุดเดิมเสมอ
+      await tx.billItemWinningPrize.deleteMany({ where: { billItem: { billId: { in: billIds } } } });
+      if (winningPrizeRows.length > 0) await tx.billItemWinningPrize.createMany({ data: winningPrizeRows });
       for (const group of groupByAmount(winningItems, (row) => row.itemId, (row) => row.payout)) {
         await tx.billItem.updateMany({ where: { id: { in: group.ids } }, data: { isWinner: true, payout: group.amount } });
       }
@@ -483,7 +541,7 @@ export async function listSettlements(actor: Actor, drawId: string) {
 
   const draw = await prisma.draw.findFirst({
     where: { id: drawId, ...orgScope(actor) },
-    select: { id: true, name: true, status: true },
+    select: { id: true, name: true, status: true, lotteryType: true },
   });
   if (!draw) throw new NotFoundError("ไม่พบรอบ");
 
@@ -512,27 +570,102 @@ export async function listSettlements(actor: Actor, drawId: string) {
 
   // รายการที่ถูกรางวัล (เขียนไว้ตอนคำนวณ Settlement) ใช้บอกว่าถูกเลขไหน ลงเท่าไหร่ จ่ายกี่เท่า
   // ใช้ชุดบิลเดียวกับที่ Settlement นับ (LOCKED/SETTLED) จึงรวมแล้วเท่ากับยอดจ่ายรางวัลของ Agent
-  const winningItems = settlements.length === 0 ? [] : await prisma.billItem.findMany({
+  const billWhere: Prisma.BillWhereInput = {
+    drawId: draw.id,
+    status: { in: ["LOCKED", "SETTLED"] },
+    ...(actor.role === "AGENT" && { agentId: actor.agentId ?? "__no_agent__" }),
+  };
+  const winningItems = settlements.length === 0 ? [] : draw.lotteryType === "LAO_SET"
+    ? (await prisma.billItemWinningPrize.findMany({
+        where: { ...orgScope(actor), billItem: { bill: billWhere } },
+        orderBy: [{ payout: "desc" }, { id: "asc" }],
+        select: {
+          id: true,
+          prizeLabelSnapshot: true,
+          payoutRateSnapshot: true,
+          payout: true,
+          prizeType: { select: { code: true } },
+          billItem: {
+            select: {
+              number: true,
+              stake: true,
+              bill: { select: { id: true, drawSequence: true, title: true, agentId: true } },
+            },
+          },
+        },
+      })).map((row) => ({
+        id: row.id,
+        number: row.billItem.number,
+        stake: row.billItem.stake,
+        payoutRateSnapshot: row.payoutRateSnapshot,
+        payout: row.payout,
+        prizeType: { code: row.prizeType.code, name: row.prizeLabelSnapshot },
+        bill: row.billItem.bill,
+      }))
+    : await prisma.billItem.findMany({
+        where: { ...orgScope(actor), isWinner: true, bill: billWhere },
+        orderBy: [{ payout: "desc" }, { id: "asc" }],
+        select: {
+          id: true,
+          number: true,
+          stake: true,
+          payoutRateSnapshot: true,
+          payout: true,
+          prizeType: { select: { code: true, name: true } },
+          bill: { select: { id: true, drawSequence: true, title: true, agentId: true } },
+        },
+      });
+
+  return { draw, settlements, winningItems };
+}
+
+/**
+ * รายงานผลกระทบแบบอ่านอย่างเดียวสำหรับ Settlement หวยลาวชุดที่คำนวณด้วยกติกาเดิม
+ * ไม่เขียนฐานข้อมูลและไม่แก้ยอดย้อนหลัง ผู้ใช้ต้องตรวจสอบก่อนกดคำนวณใหม่
+ */
+export async function laoSetSettlementImpact(actor: Actor, drawId: string) {
+  requirePermission(actor, "bill.viewOwn");
+  const draw = await prisma.draw.findFirst({
+    where: { id: drawId, ...orgScope(actor), lotteryType: "LAO_SET" },
+    select: { id: true, organizationId: true, officialNumber: true, status: true },
+  });
+  if (!draw?.officialNumber || (draw.status !== "SETTLED" && draw.status !== "CLOSED")) return null;
+
+  const rules = await loadLaoSetPayoutRules(prisma, draw.organizationId);
+  const items = await prisma.billItem.findMany({
     where: {
       ...orgScope(actor),
-      isWinner: true,
+      prizeType: { code: 201, lotteryType: "LAO_SET" },
       bill: {
         drawId: draw.id,
-        status: { in: ["LOCKED", "SETTLED"] },
+        status: "SETTLED",
         ...(actor.role === "AGENT" && { agentId: actor.agentId ?? "__no_agent__" }),
       },
     },
-    orderBy: [{ payout: "desc" }, { id: "asc" }],
-    select: {
-      id: true,
-      number: true,
-      stake: true,
-      payoutRateSnapshot: true,
-      payout: true,
-      prizeType: { select: { code: true, name: true } },
-      bill: { select: { id: true, drawSequence: true, title: true, agentId: true } },
-    },
+    select: { id: true, number: true, stake: true, payout: true },
   });
 
-  return { draw, settlements, winningItems };
+  let affectedItems = 0;
+  const storedPayouts: Prisma.Decimal[] = [];
+  const expectedPayouts: Prisma.Decimal[] = [];
+  for (const item of items) {
+    const expected = sumMoney(laoSetMatchedPrizeKeys(item.number, draw.officialNumber).map((key) => {
+      const rule = rules.get(key);
+      if (!rule) throw new ConflictError(`Rulebook หวยลาวชุดไม่ครบ: ไม่พบ ${LAO_SET_PRIZE_LABELS[key]}`);
+      return itemPayout(item.stake, rule.payoutRate);
+    }));
+    storedPayouts.push(item.payout);
+    expectedPayouts.push(expected);
+    if (!item.payout.equals(expected)) affectedItems += 1;
+  }
+  const storedPayout = sumMoney(storedPayouts);
+  const expectedPayout = sumMoney(expectedPayouts);
+  return {
+    checkedItems: items.length,
+    affectedItems,
+    storedPayout,
+    expectedPayout,
+    difference: expectedPayout.minus(storedPayout),
+    closed: draw.status === "CLOSED",
+  };
 }

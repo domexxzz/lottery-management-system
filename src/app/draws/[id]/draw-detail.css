@@ -96,8 +96,9 @@
 .settlement-wins-label{color:#0f7a66;font-size:.62rem;font-weight:800}
 .settlement-win-list{display:flex;flex-direction:column;gap:.3rem;margin:0;padding:0;list-style:none}
 .settlement-win-list li{display:grid;grid-template-columns:minmax(90px,auto) minmax(56px,auto) minmax(0,1fr) auto;align-items:center;gap:.6rem;padding:.32rem .5rem;border-radius:7px;background:#fff;font-size:.7rem}
-.settlement-win-prize{color:#5d7480}
-.settlement-win-number{color:#15364d;font-size:.86rem;font-variant-numeric:tabular-nums;letter-spacing:.06em}
+.settlement-win-prize{display:flex;flex-direction:column;color:#5d7480;font-weight:800}.settlement-win-prize small{color:#71859a;font-size:.62rem;font-weight:600}
+.settlement-win-number{display:flex;flex-direction:column;color:#15364d;font-size:.86rem;font-variant-numeric:tabular-nums;letter-spacing:.06em}.settlement-win-number small{color:#71859a;font-size:.62rem;font-weight:600;letter-spacing:0}
+.settlement-impact-notice{display:grid;gap:.25rem;border-left-color:#e39a18;background:#fff7e7}.settlement-impact-notice strong{color:#8a5100}.settlement-impact-notice span{font-variant-numeric:tabular-nums}.settlement-impact-notice small{color:#6f5b37}
 .settlement-win-calc{color:#3d5866;font-variant-numeric:tabular-nums}
 .settlement-win-calc b{color:#0f7a66}
 .settlement-win-bill{color:#168b99;font-size:.66rem;white-space:nowrap}

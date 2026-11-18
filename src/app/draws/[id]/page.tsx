@@ -7,7 +7,7 @@ import { can } from "@/lib/auth/permissions";
 import { expectedResultLength } from "@/lib/results/matching";
 import { listResults } from "@/lib/results/service";
 import { displayResultValues, resultValueCount, storedResultValues } from "@/lib/results/values";
-import { listSettlements } from "@/lib/settlement/service";
+import { laoSetSettlementImpact, listSettlements } from "@/lib/settlement/service";
 import { NotFoundError } from "@/lib/errors";
 import { officialDrawName, recentOfficialDrawDates } from "@/lib/draws/schedule";
 import {
@@ -65,8 +65,8 @@ function WinList({ items }: { items: WinItem[] }) {
     <ul className="settlement-win-list">
       {items.map((item) => (
         <li key={item.id}>
-          <span className="settlement-win-prize">{item.prizeType.name}</span>
-          <strong className="settlement-win-number">{item.number}</strong>
+          <span className="settlement-win-prize"><small>ประเภทรางวัลที่ถูก</small>{item.prizeType.name}</span>
+          <strong className="settlement-win-number"><small>เลขที่กรอก</small>{item.number}</strong>
           <span className="settlement-win-calc">
             ลง {MONEY.format(Number(item.stake))} × {compactRate(item.payoutRateSnapshot)}
             {" = "}
@@ -124,6 +124,7 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
     : [];
   const prizeNameById = new Map(restrictionPrizeTypes.map((prizeType) => [prizeType.id, prizeType.name]));
   const isLao = isLaoLottery(draw.lotteryType);
+  const settlementImpact = draw.lotteryType === "LAO_SET" ? await laoSetSettlementImpact(actor, draw.id) : null;
   const canOverrideCap = can(actor.role, "number.capOverride");
   const capOverrideRows = canManageRestrictions ? await listCapOverrides(actor, draw.id) : [];
   const canEnter = can(actor.role, "result.enter");
@@ -177,6 +178,13 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
           {isLao && draw.officialNumber && <p className="lao-official-number"><span>ผลที่ออก</span><strong>{draw.officialNumber}</strong></p>}
           {isLao && canEnter && editableCount > 0 && approvedCount === 0 && draw.status !== "CLOSED" && <LaoResultForm drawId={draw.id} />}
           {!isLao && canEnter && editableCount > 0 && draw.status !== "CLOSED" && <GloResultImporter drawId={draw.id} dateOptions={gloDateOptions} />}
+          {settlementImpact && settlementImpact.affectedItems > 0 && (
+            <div className="notice settlement-impact-notice" role="alert">
+              <strong>พบ Settlement เดิมที่ต้องกระทบยอด {settlementImpact.affectedItems} จาก {settlementImpact.checkedItems} รายการ</strong>
+              <span>ยอดเดิม {MONEY.format(Number(settlementImpact.storedPayout))} บาท · กติกาใหม่ {MONEY.format(Number(settlementImpact.expectedPayout))} บาท · ต่างกัน {MONEY.format(Number(settlementImpact.difference))} บาท</span>
+              <small>{settlementImpact.closed ? "งวดนี้ปิดบัญชีแล้ว ระบบจะไม่แก้ยอดย้อนหลังอัตโนมัติ กรุณาตรวจสอบและทำ Reconciliation ก่อน" : "ระบบยังไม่แก้ยอดอัตโนมัติ ตรวจสอบแล้วจึงกดคำนวณใหม่"}</small>
+            </div>
+          )}
           <div className="table-wrap" id="result-entry-list"><table className="result-entry-table">
             <thead>
               <tr>

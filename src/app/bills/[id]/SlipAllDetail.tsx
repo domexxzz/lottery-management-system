@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { BET_STATUS_LABEL, compactRate, drawDateLabel, itemBetStatus, lotteryLabel, type BetStatus } from "@/lib/bills/betting";
 import { LotteryFlag } from "../ThaiFlag";
 import { SlipItems, type SlipItemRow } from "./SlipItems";
-import { laoSetPackageLabel, laoSetWinningPrize } from "@/lib/lao/rules";
+import { laoSetPackageLabel } from "@/lib/lao/rules";
 
 type SlipPart = {
   id: string;
@@ -21,6 +21,7 @@ type SlipPart = {
     isWinner: boolean;
     payoutRateSnapshot: Prisma.Decimal;
     prizeType: { name: string };
+    winningPrizes: Array<{ id: string; prizeLabelSnapshot: string; payoutRateSnapshot: Prisma.Decimal; payout: Prisma.Decimal }>;
   }>;
 };
 
@@ -34,9 +35,12 @@ export function SlipAllDetail({ parts }: { parts: SlipPart[] }) {
   const rows: SlipItemRow[] = parts.flatMap((part) => part.items.map((item) => {
     order += 1;
     const status = itemBetStatus(part.status, item.isWinner);
-    const winningPrize = part.draw.lotteryType === "LAO_SET" && status === "WON" && part.draw.officialNumber
-      ? laoSetWinningPrize(item.number, part.draw.officialNumber, item.stake)
-      : null;
+    const winningPrizes = item.winningPrizes.map((prize) => ({
+      id: prize.id,
+      label: prize.prizeLabelSnapshot,
+      rate: Number(prize.payoutRateSnapshot),
+      payout: Number(prize.payout),
+    }));
     return {
       id: item.id,
       order,
@@ -48,11 +52,13 @@ export function SlipAllDetail({ parts }: { parts: SlipPart[] }) {
       stake: Number(item.stake),
       rate: part.status === "DRAFT" ? null : compactRate(item.payoutRateSnapshot),
       rateText: part.draw.lotteryType === "LAO_SET"
-        ? "ตามตาราง 8 รางวัล"
+        ? winningPrizes.length > 0
+          ? `${winningPrizes.length} รางวัล`
+          : "ตามตาราง 8 รางวัล"
         : part.status === "DRAFT" ? "—" : `${compactRate(item.payoutRateSnapshot)} เท่า`,
       status,
       statusLabel: BET_STATUS_LABEL[status],
-      winningPrizeLabel: winningPrize?.label ?? null,
+      winningPrizes,
       prize: status === "WON" ? Number(item.payout) : status === "LOST" || status === "CANCELLED" ? 0 : null,
     };
   }));

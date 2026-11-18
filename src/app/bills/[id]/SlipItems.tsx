@@ -17,8 +17,8 @@ export type SlipItemRow = {
   rateText: string;
   status: "DRAFT" | "PENDING" | "WON" | "LOST" | "CANCELLED";
   statusLabel: string;
-  /** ชื่อรางวัลจริงของหวยลาวชุด เช่น 4 ตัวโต๊ด หรือ 2 ตัวหลัง */
-  winningPrizeLabel: string | null;
+  /** รางวัลย่อยทั้งหมดที่เลขชุดนี้ถูก */
+  winningPrizes: Array<{ id: string; label: string; rate: number; payout: number }>;
   /** ผลได้เสีย = ยอดจ่ายรางวัลเต็ม (เดิมพัน × อัตราจ่าย) ไม่หักอะไร; null = รอผล */
   prize: number | null;
 };
@@ -49,7 +49,7 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
 
   const filtered = useMemo(() => {
     const search = query.trim();
-    return search ? rows.filter((row) => row.number.includes(search) || row.prizeTypeName.includes(search) || row.lotteryLabel.includes(search) || row.packageLabel?.includes(search) || row.winningPrizeLabel?.includes(search)) : rows;
+    return search ? rows.filter((row) => row.number.includes(search) || row.prizeTypeName.includes(search) || row.lotteryLabel.includes(search) || row.packageLabel?.includes(search) || row.winningPrizes.some((prize) => prize.label.includes(search))) : rows;
   }, [rows, query]);
   const visible = filtered.slice(0, limit);
 
@@ -79,7 +79,7 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
             <thead>
               <tr>
                 <th scope="col">ลำดับ</th>
-                <th scope="col">ตัวเลข</th>
+                <th scope="col">เลขที่กรอก</th>
                 <th scope="col">ประเภทหวย</th>
                 <th scope="col">ประเภทรางวัล</th>
                 <th scope="col" className="num">ยอดเดิมพัน</th>
@@ -100,7 +100,7 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
                   <td>
                     <span className="slip-result-cell">
                       <span className={`slip-status slip-status-${row.status.toLowerCase()}`}>{row.statusLabel}</span>
-                      {row.winningPrizeLabel && <strong className="slip-winning-prize-label">{row.winningPrizeLabel}</strong>}
+                      {row.winningPrizes.map((prize) => <strong key={prize.id} className="slip-winning-prize-label">ถูกรางวัล {prize.label} · {baht(prize.payout)}</strong>)}
                     </span>
                   </td>
                   <td className={`num ${row.prize !== null && row.prize > 0 ? "is-plus" : ""}`}>{row.prize === null ? "รอผล" : baht(row.prize)}</td>
@@ -132,12 +132,13 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
               </header>
               <div className="slip-item-body">
                 <div className="slip-item-number">
+                  <small className="slip-number-label">เลขที่กรอก</small>
                   <strong>{row.number}</strong>
                   <span>{row.prizeTypeName}{row.packageLabel && <small className="slip-package-label">{row.packageLabel}</small>}</span>
                 </div>
                 <dl>
                   <div><dt>อัตราจ่าย</dt><dd>{row.rateText}</dd></div>
-                  <div><dt>ผลรางวัล</dt><dd>{row.prize === null ? "รอผล" : row.winningPrizeLabel ? <><span>{row.statusLabel}</span><strong className="slip-winning-prize-label">{row.winningPrizeLabel}</strong></> : row.statusLabel}</dd></div>
+                  <div><dt>ผลรางวัล</dt><dd>{row.prize === null ? "รอผล" : row.winningPrizes.length > 0 ? <><span>{row.statusLabel} {row.winningPrizes.length} รางวัล</span>{row.winningPrizes.map((prize) => <strong key={prize.id} className="slip-winning-prize-label">ถูกรางวัล {prize.label} · {baht(prize.payout)}</strong>)}</> : row.statusLabel}</dd></div>
                 </dl>
               </div>
               <footer className="slip-item-foot">

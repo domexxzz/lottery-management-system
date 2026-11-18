@@ -169,7 +169,7 @@ describe("รับบิลหวยลาว", () => {
 });
 
 describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนวณเงิน", () => {
-  test("ลงผลครั้งเดียวได้ทั้งสองงวด เลขชุดลุ้น 8 รางวัลและแต่ละชุดได้เฉพาะรางวัลสูงสุด", async () => {
+  test("ลงผลครั้งเดียวได้ทั้งสองงวด และเลขชุดรวมจ่ายทุกรางวัลที่เข้าเงื่อนไข", async () => {
     await placeBill(f.actors.AGENT1, {
       drawId: lao.id,
       title: "หวยลาว",
@@ -179,7 +179,7 @@ describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนว
       drawId: laoSet.id,
       title: "หวยลาวชุด",
       items: [
-        bet(201, "9441", "30"), // 4 ตัวตรง 25,500 (แม้เข้าเงื่อนไขย่อยด้วยก็จ่ายรางวัลเดียว)
+        bet(201, "9441", "30"), // เข้าเงื่อนไขครบ 8 รางวัล รวม 39,350
         bet(201, "4194", "30"), // 4 ตัวโต๊ด 1,125
         bet(201, "0441", "30"), // 3 ตัวท้ายตรง 9,250
         bet(201, "0144", "30"), // 3 ตัวท้ายโต๊ด 925
@@ -213,35 +213,40 @@ describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนว
     expect(laoPreview!.winningItems).toBe(4);
 
     const [setPreview] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
-    expect(setPreview!.payout.toFixed(2)).toBe("39350.00");
-    expect(setPreview!.winningItems).toBe(8);
+    expect(setPreview!.payout.toFixed(2)).toBe("55250.00");
+    expect(setPreview!.winningItems).toBe(19);
     expect(setPreview!.gross.toFixed(2)).toBe("270.00");
     const setItems = await prisma.billItem.findMany({
       where: { bill: { drawId: laoSet.id } },
       select: { number: true, payout: true, isWinner: true },
     });
     expect(Object.fromEntries(setItems.map((item) => [item.number, { payout: Number(item.payout), isWinner: item.isWinner }]))).toEqual({
-      "9441": { payout: 25_500, isWinner: true },
+      "9441": { payout: 39_350, isWinner: true },
       "4194": { payout: 1_125, isWinner: true },
-      "0441": { payout: 9_250, isWinner: true },
+      "0441": { payout: 10_525, isWinner: true },
       "0144": { payout: 925, isWinner: true },
-      "9442": { payout: 1_425, isWinner: true },
+      "9442": { payout: 2_200, isWinner: true },
       "4942": { payout: 425, isWinner: true },
       "9412": { payout: 350, isWinner: true },
       "0041": { payout: 350, isWinner: true },
       "1234": { payout: 0, isWinner: false },
     });
+    expect(await prisma.billItemWinningPrize.count({ where: { billItem: { bill: { drawId: laoSet.id } } } })).toBe(19);
   });
 
-  test("ตัวอย่างเลข 1234 ผล 561234 เข้า 8 เงื่อนไข แต่จ่ายเฉพาะรางวัลใหญ่ที่สุดหนึ่งรางวัล", async () => {
+  test("ตัวอย่างเลข 1234 ผล 561234 จ่ายครบ 8 รางวัลและคำนวณซ้ำไม่สร้าง ledger ซ้ำ", async () => {
     await placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "ก", items: [bet(201, "1234", "30")] });
     await lockDrawManually(f.actors.ADMIN, laoSet.id);
     await enterLaoResult(f.actors.ADMIN, laoSet.id, "561234");
     const [preview] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
-    expect(preview!.payout.toFixed(2)).toBe("25500.00");
-    expect(preview!.winningItems).toBe(1);
+    expect(preview!.payout.toFixed(2)).toBe("39350.00");
+    expect(preview!.winningItems).toBe(8);
     const item = await prisma.billItem.findFirstOrThrow({ where: { bill: { drawId: laoSet.id } } });
-    expect(item.payout.toFixed(2)).toBe("25500.00");
+    expect(item.payout.toFixed(2)).toBe("39350.00");
+    expect(await prisma.billItemWinningPrize.count({ where: { billItemId: item.id } })).toBe(8);
+    const [recalculated] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
+    expect(recalculated!.payout.toFixed(2)).toBe("39350.00");
+    expect(await prisma.billItemWinningPrize.count({ where: { billItemId: item.id } })).toBe(8);
   });
 
   test("เลขเดียวกันชุด 30/60/120 ถูกตรง จ่ายแยกครบทั้งสามรายการ", async () => {
@@ -253,8 +258,8 @@ describe("ลงผล 489441 (งวด 17 พ.ย. 2569) และคำนว
     await lockDrawManually(f.actors.ADMIN, laoSet.id);
     await enterLaoResult(f.actors.ADMIN, laoSet.id, "489441");
     const [preview] = await calculateSettlement(f.actors.ADMIN, laoSet.id);
-    expect(preview!.payout.toFixed(2)).toBe("178500.00");
-    expect(preview!.winningItems).toBe(3);
+    expect(preview!.payout.toFixed(2)).toBe("275450.00");
+    expect(preview!.winningItems).toBe(24);
   });
 
   test("งวดเดี่ยววันเดียวกันไม่ถูกปิดหรือบันทึกผลตามคู่งวด", async () => {

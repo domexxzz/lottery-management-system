@@ -20,7 +20,7 @@ import { clearDraft, newSubmissionKey, readDraft, useServerClockOffset, writeDra
 import { CustomerNameCombobox } from "./BillForm";
 import { LaoFlag, ThaiFlag } from "../ThaiFlag";
 import { RulesDialog } from "./RulesDialog";
-import { laoSetPackageLabel, LAO_SET_PACKAGE_PAYOUTS, LAO_SET_PACKAGE_PRICES } from "@/lib/lao/set-package-rates";
+import { laoSetPackageLabel, LAO_SET_PACKAGE_PRICES, type LaoSetPayoutRow } from "@/lib/lao/set-package-rates";
 
 const INITIAL: ActionState = { error: null };
 const CHIPS = [5, 10, 20, 50, 100, 500, 1000] as const;
@@ -199,6 +199,7 @@ function PrizeTypeOptions({
 export function BetSlip({
   lotteries,
   initialLottery,
+  laoSetPayouts,
   restrictions,
   representatives,
   ownNextBillSequence,
@@ -209,6 +210,8 @@ export function BetSlip({
   lotteries: SlipLottery[];
   /** ประเภทหวยที่เปิดแท็บไว้ตอนเข้าหน้า */
   initialLottery: string;
+  /** ตารางยอดจ่ายที่คำนวณจาก Rulebook ในฐานข้อมูล */
+  laoSetPayouts: LaoSetPayoutRow[];
   /** เลขอั้น/เลขเต็ม แยกตามงวด */
   restrictions: Record<string, SlipRestriction[]>;
   /** null สำหรับ Agent ซึ่งสร้างบิลให้ตัวเองเท่านั้น */
@@ -750,6 +753,7 @@ export function BetSlip({
             cutoffLabel={draw.cutoffLabel}
             prizeTypes={prizeTypes}
             restrictions={restrictions[draw.id] ?? []}
+            laoSetPayouts={laoSetPayouts}
           />
           <div className="bs-draw-panel">
             <label className="bs-draw-select">
@@ -929,12 +933,12 @@ export function BetSlip({
               <>
                 <p className="bs-step-help">ราคาต่อชุดกำหนดไว้แล้ว เลือกครั้งละ 1 ราคา และเพิ่มชุด 30/60/120 บาทไว้ในบิลเดียวกันได้</p>
                 <div className="bs-lao-packages" role="group" aria-label="เลือกราคาหวยลาวชุด">
-                  {LAO_SET_PACKAGE_PAYOUTS.map((item) => (
+                  {laoSetPayouts.map((item) => (
                     <button key={item.price} type="button" className={amount === item.price ? "is-active" : ""} aria-pressed={amount === item.price} onClick={() => setAmount(item.price)} disabled={!isOpen}>
                       <strong>{item.price} บาท</strong>
                       <span className="bs-lao-package-rates">
                         <span>ลุ้น 8 รางวัล <b>สูงสุด {item.exact.toLocaleString("th-TH")}</b></span>
-                        <span>จ่ายรางวัลที่สูงที่สุดเพียง 1 รางวัล</span>
+                        <span>ถูกรางวัลใด รับครบทุกเงื่อนไข</span>
                       </span>
                     </button>
                   ))}
@@ -973,7 +977,7 @@ export function BetSlip({
             <h3 className="bs-step-title"><span>2</span>{isLaoSet ? "เลือกประเภท" : "กำหนดจำนวนเงิน"}</h3>
             {isLaoSet ? (
               <>
-                <p className="bs-step-help">เลือก 4 ตัวตรงเพียงรายการเดียว เลขชุด 4 หลักนี้จะลุ้น 8 รางวัล และจ่ายเฉพาะรางวัลที่สูงที่สุด</p>
+                <p className="bs-step-help">เลือก 4 ตัวตรงเพียงรายการเดียว เลขชุด 4 หลักนี้จะลุ้น 8 รางวัล และรวมจ่ายทุกรางวัลที่เข้าเงื่อนไข</p>
                 <PrizeTypeOptions
                   group={group}
                   selectedIds={selectedIds}

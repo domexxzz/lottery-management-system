@@ -7,7 +7,6 @@ import { visibleBillNumber } from "@/lib/bills/numbering";
 import { customerNameFromProfileKey } from "@/lib/customers/profile-key";
 import { prisma } from "@/lib/db";
 import { DashboardIcon as Icon } from "@/app/DashboardIcon";
-import { laoSetWinningPrize } from "@/lib/lao/rules";
 import "./profile.css";
 
 export const dynamic = "force-dynamic";
@@ -59,11 +58,12 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
         stake: true,
         payout: true,
         prizeType: { select: { code: true, name: true } },
+        winningPrizes: { orderBy: [{ payout: "desc" }, { prizeKey: "asc" }], select: { prizeLabelSnapshot: true } },
         bill: {
           select: {
             id: true,
             drawSequence: true,
-            draw: { select: { id: true, name: true, cutoffAt: true, lotteryType: true, officialNumber: true } },
+            draw: { select: { id: true, name: true, cutoffAt: true, lotteryType: true } },
           },
         },
       },
@@ -104,8 +104,8 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const primaryAgent = agentRows[0]?.agent;
   const latestBill = recentBills[0];
   const winningPrizeLabelByItemId = new Map(winningItems.map((item) => {
-    const label = item.bill.draw.lotteryType === "LAO_SET" && item.bill.draw.officialNumber
-      ? laoSetWinningPrize(item.number, item.bill.draw.officialNumber, item.stake)?.label ?? null
+    const label = item.bill.draw.lotteryType === "LAO_SET" && item.winningPrizes.length > 0
+      ? item.winningPrizes.map((prize) => prize.prizeLabelSnapshot).join(", ")
       : null;
     return [item.id, label] as const;
   }));

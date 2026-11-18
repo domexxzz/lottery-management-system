@@ -3,7 +3,7 @@ import { getActor } from "@/lib/auth/context";
 import { getBill } from "@/lib/bills/service";
 import { statusLabel } from "@/lib/bills/lifecycle";
 import { NotFoundError } from "@/lib/errors";
-import { laoSetPackageLabel, laoSetWinningPrize } from "@/lib/lao/rules";
+import { laoSetPackageLabel } from "@/lib/lao/rules";
 import "./print.css";
 
 export const dynamic = "force-dynamic";
@@ -95,17 +95,14 @@ export default async function PrintBillPage({
         <tbody>
           {bill.items.map((item) => {
             const packageLabel = bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.stake) : null;
-            const winningPrize = bill.draw.lotteryType === "LAO_SET" && bill.status === "SETTLED" && item.isWinner && bill.draw.officialNumber
-              ? laoSetWinningPrize(item.number, bill.draw.officialNumber, item.stake)
-              : null;
             return <tr key={item.id}>
               <td>
                 {item.prizeType.code}. {item.prizeType.name}{packageLabel ? ` · ${packageLabel}` : ""}
-                {winningPrize && <small className="sheet-winning-label">ถูกรางวัล: {winningPrize.label}</small>}
+                {item.winningPrizes.map((prize) => <small key={prize.id} className="sheet-winning-label">{prize.prizeLabelSnapshot}: {prize.payout.toNumber().toLocaleString("th-TH")} บาท</small>)}
               </td>
               <td className="number-cell">{item.number}</td>
               <td className="num">{item.stake.toFixed(2)}</td>
-              {!isSlip && <td className="num">{bill.draw.lotteryType === "LAO_SET" ? "ตามตาราง 8 รางวัล" : item.payoutRateSnapshot.toFixed(4)}</td>}
+              {!isSlip && <td className="num">{bill.draw.lotteryType === "LAO_SET" ? item.winningPrizes.length > 0 ? `${item.winningPrizes.length} รางวัล` : "ตามตาราง 8 รางวัล" : item.payoutRateSnapshot.toFixed(4)}</td>}
             </tr>;
           })}
         </tbody>
