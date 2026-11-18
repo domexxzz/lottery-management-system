@@ -286,6 +286,9 @@
 .slip-item-search input { width: 150px; min-height: 38px; padding: 0 .7rem; border: 1px solid #c8dbef; border-radius: 10px; font-size: .88rem; }
 .slip-items-table { min-width: 780px; }
 .slip-table-number { color: var(--sb-blue); font-size: 1.3rem; font-weight: 800; letter-spacing: .03em; }
+.slip-prize-type { display: grid; gap: .12rem; }
+.slip-prize-type small, .slip-package-label { width: fit-content; padding: .12rem .42rem; border-radius: 999px; color: #6a3fb8; background: #efe8ff; font-size: .7rem; font-weight: 800; white-space: nowrap; }
+.slip-item-number span:has(.slip-package-label) { display: grid; justify-items: center; gap: .2rem; }
 .slip-items-table tfoot th, .slip-items-table tfoot td { padding: .85rem .9rem; border-top: 2px solid var(--sb-border); background: #f8fbff; text-align: left; }
 .slip-items-table tfoot .num { text-align: right; }
 .slip-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin: 0; padding: 1rem 1.15rem; list-style: none; }

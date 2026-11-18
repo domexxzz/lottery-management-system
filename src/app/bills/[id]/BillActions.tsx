@@ -47,7 +47,7 @@ export function DeleteBillForm({ billId, billLabel, attachmentCount }: { billId:
   );
 }
 
-type EditableItem = { id: string; prizeTypeId: string; prizeTypeName: string; number: string; stake: string; digits: number };
+type EditableItem = { id: string; prizeTypeId: string; prizeTypeName: string; number: string; stake: string; digits: number; packageLabel?: string | null; lockedStake?: boolean };
 
 export function EditBillForm({ billId, title, items }: { billId: string; title: string; items: EditableItem[] }) {
   const [state, formAction, pending] = useActionState(updateBillAction, INITIAL);
@@ -58,10 +58,14 @@ export function EditBillForm({ billId, title, items }: { billId: string; title: 
       <div className="bill-edit-rows">
         {items.map((item, index) => (
           <fieldset key={item.id}>
-            <legend>รายการ {index + 1} · {item.prizeTypeName}</legend>
+            <legend>รายการ {index + 1} · {item.prizeTypeName}{item.packageLabel ? ` · ${item.packageLabel}` : ""}</legend>
             <input type="hidden" name="prizeTypeId" value={item.prizeTypeId} />
             <label>เลขที่แทง<input name="number" defaultValue={item.number} inputMode="numeric" pattern={`\\d{${item.digits}}`} maxLength={item.digits} required /></label>
-            <label>ยอดเดิมพัน (บาท)<input name="stake" type="number" defaultValue={item.stake} min="5" max="1000" step="1" required /></label>
+            {item.lockedStake ? (
+              <label>ประเภทชุด<input value={item.packageLabel ?? `${item.stake} บาท`} disabled aria-label={`ประเภทชุด ${item.packageLabel ?? item.stake}`} /><input type="hidden" name="stake" value={item.stake} /></label>
+            ) : (
+              <label>ยอดเดิมพัน (บาท)<input name="stake" type="number" defaultValue={item.stake} min="5" max="1000" step="1" required /></label>
+            )}
           </fieldset>
         ))}
       </div>

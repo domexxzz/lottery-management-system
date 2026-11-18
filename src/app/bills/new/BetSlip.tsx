@@ -20,7 +20,7 @@ import { clearDraft, newSubmissionKey, readDraft, useServerClockOffset, writeDra
 import { CustomerNameCombobox } from "./BillForm";
 import { LaoFlag, ThaiFlag } from "../ThaiFlag";
 import { RulesDialog } from "./RulesDialog";
-import { LAO_SET_PACKAGE_PAYOUTS, LAO_SET_PACKAGE_PRICES } from "@/lib/lao/rules";
+import { laoSetPackageLabel, LAO_SET_PACKAGE_PAYOUTS, LAO_SET_PACKAGE_PRICES } from "@/lib/lao/rules";
 
 const INITIAL: ActionState = { error: null };
 const CHIPS = [5, 10, 20, 50, 100, 500, 1000] as const;
@@ -868,6 +868,7 @@ export function BetSlip({
                 <li key={`${entry.drawId}:${entry.prizeTypeId}:${entry.number}`} className={`bs-entry is-${section.lottery?.type.toLowerCase() ?? "x"} ${restriction?.kind === "REDUCED_RATE" ? "is-restricted" : ""} ${rejectedReason ? "is-rejected" : ""}`}>
                   <span className="bs-entry-main">
                     <span className={`bs-badge bs-badge-${badgeKey(rule)}`}>{rule?.name ?? "-"}</span>
+                    {section.lottery?.type === "LAO_SET" && <em className="bs-entry-package">{laoSetPackageLabel(entry.stake)}</em>}
                     <span className="bs-entry-number">{entry.number}</span>
                     {restriction?.kind === "REDUCED_RATE" && <em className="bs-entry-reduced">อั้น {compactRate(restriction.payoutRate ?? "0")}</em>}
                     {rejectedReason && <small className="bs-entry-rejected">รับไม่ได้: {rejectedReason}</small>}

@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { BET_STATUS_LABEL, compactRate, drawDateLabel, itemBetStatus, lotteryLabel, type BetStatus } from "@/lib/bills/betting";
 import { LotteryFlag } from "../ThaiFlag";
 import { SlipItems, type SlipItemRow } from "./SlipItems";
+import { laoSetPackageLabel } from "@/lib/lao/rules";
 
 type SlipPart = {
   id: string;
@@ -40,6 +41,7 @@ export function SlipAllDetail({ parts }: { parts: SlipPart[] }) {
       lotteryType: part.draw.lotteryType,
       lotteryLabel: part.draw.lotteryType === "THAI_GOVERNMENT" ? "หวยไทย" : lotteryLabel(part.draw.lotteryType),
       prizeTypeName: item.prizeType.name,
+      packageLabel: part.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.stake) : null,
       stake: Number(item.stake),
       rate: part.status === "DRAFT" ? null : compactRate(item.payoutRateSnapshot),
       status,

@@ -86,6 +86,7 @@
 .bs-entry-main { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; }
 .bs-entry-number { color: var(--bs-text); font-size: 1.2rem; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
 .bs-entry-reduced { color: #d5263f; font-size: .72rem; font-style: normal; font-weight: 750; }
+.bs-entry-package { padding: .18rem .48rem; border-radius: 999px; color: #6a3fb8; background: #efe8ff; font-size: .72rem; font-style: normal; font-weight: 800; white-space: nowrap; }
 .bs-entry.is-restricted .bs-entry-number { color: #d5263f; }
 .bs-entry-stake { color: var(--bs-blue); font-size: .95rem; font-weight: 700; white-space: nowrap; }
 .bs-entry-stake small { color: var(--bs-muted); font-weight: 500; }

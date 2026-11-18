@@ -304,6 +304,16 @@ export async function updateBillBeforeCutoff(
     }
     assertDrawStillOpen(bill.draw);
 
+    // ราคา 30/60/120 คือประเภทย่อยของหวยลาวชุด ไม่ใช่ยอดที่แก้ภายหลังได้
+    // ตรวจซ้ำฝั่ง server เพื่อกันการแก้ hidden field หรือยิง Server Action โดยตรง
+    if (bill.draw.lotteryType === "LAO_SET") {
+      const changedPackage = input.items.length !== bill.items.length || input.items.some((item, index) => {
+        const existing = bill.items[index];
+        return !existing || item.prizeTypeId !== existing.prizeTypeId || !toDecimal(item.stake).equals(existing.stake);
+      });
+      if (changedPackage) throw new ValidationError("หวยลาวชุดแก้ได้เฉพาะตัวเลข ประเภทชุด 30/60/120 บาทและประเภทตรง/โต๊ดแก้ไม่ได้");
+    }
+
     const rules = await loadPrizeRules(tx, bill.organizationId, bill.draw.lotteryType);
     const restrictions = await loadRestrictions(tx, bill.drawId);
     const numberCap = await loadNumberCapInTx(tx, bill.drawId, bill.draw.numberCap, bill.id, input.items.map((item) => item.prizeTypeId));

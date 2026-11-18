@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { isLaoDrawDay, laoBreakdown, laoResultForCode, laoResultProblem, LAO_DEFAULT_TIMES, LAO_PRIZE_TYPES, LAO_SET_ACTIVE_CODES } from "./rules";
+import { isLaoDrawDay, laoBreakdown, laoResultForCode, laoResultProblem, laoSetPackageLabel, laoSetPackagePrice, LAO_DEFAULT_TIMES, LAO_PRIZE_TYPES, LAO_SET_ACTIVE_CODES } from "./rules";
 import { permutations } from "@/lib/bills/betting";
 import { isWinning } from "@/lib/results/matching";
 
@@ -23,6 +23,13 @@ describe("แยกผลหวยลาว (ใช้ 4 ตัวท้าย�
   test("หวยลาวชุดเปิดรับเฉพาะ 4 ตัวตรงและ 4 ตัวโต๊ด", () => {
     expect(LAO_SET_ACTIVE_CODES).toEqual([201, 203]);
     expect(LAO_PRIZE_TYPES.filter((prize) => prize.lotteryType === "LAO_SET" && prize.isActive).map((prize) => prize.code)).toEqual([201, 203]);
+  });
+
+  test("ราคา 30/60/120 แยกเป็นประเภทย่อยของหวยลาวชุด", () => {
+    expect([30, 60, 120].map(laoSetPackagePrice)).toEqual([30, 60, 120]);
+    expect([30, 60, 120].map(laoSetPackageLabel)).toEqual(["ชุด 30 บาท", "ชุด 60 บาท", "ชุด 120 บาท"]);
+    expect(laoSetPackagePrice(50)).toBeNull();
+    expect(laoSetPackageLabel("50.00")).toBeNull();
   });
 
   test("ตรวจรูปแบบผล", () => {

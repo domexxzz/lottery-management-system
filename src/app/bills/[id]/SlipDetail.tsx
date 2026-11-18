@@ -12,6 +12,7 @@ import {
 } from "@/lib/bills/betting";
 import { LotteryFlag } from "../ThaiFlag";
 import { SlipItems, type SlipItemRow } from "./SlipItems";
+import { laoSetPackageLabel } from "@/lib/lao/rules";
 
 type SlipItem = {
   id: string;
@@ -76,6 +77,7 @@ export function SlipDetail({ bill, settledAt, showDrawLink, beforeItems }: { bil
       lotteryType: bill.draw.lotteryType,
       lotteryLabel: bill.draw.lotteryType === "THAI_GOVERNMENT" ? "หวยไทย" : lotteryLabel(bill.draw.lotteryType),
       prizeTypeName: item.prizeType.name,
+      packageLabel: bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.stake) : null,
       stake: Number(item.stake),
       rate: bill.status === "DRAFT" ? null : compactRate(item.payoutRateSnapshot),
       status,

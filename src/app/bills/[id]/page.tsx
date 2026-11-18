@@ -17,6 +17,7 @@ import { getStorageConfig } from "@/lib/storage/config";
 import { listBillAttachments } from "@/lib/evidence/service";
 import { BET_STATUS_LABEL, betStatusOf, drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
 import { LotteryFlag } from "../ThaiFlag";
+import { laoSetPackageLabel } from "@/lib/lao/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -198,6 +199,8 @@ export default async function BillDetailPage({
                       number: item.number,
                       stake: item.stake.toFixed(2),
                       digits: item.prizeType.digits,
+                      packageLabel: bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.stake) : null,
+                      lockedStake: bill.draw.lotteryType === "LAO_SET",
                     }))}
                   />
                 </details>

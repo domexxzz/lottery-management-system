@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
-import { placeBill } from "@/lib/bills/service";
+import { placeBill, updateBillBeforeCutoff } from "@/lib/bills/service";
 import { lockDrawManually, lockDueDraws } from "@/lib/draws/service";
 import { toBangkokDateTimeLocal } from "@/lib/draws/schedule";
 import { approveSettlement, calculateSettlement } from "@/lib/settlement/service";
@@ -119,6 +119,26 @@ describe("รับบิลหวยลาว", () => {
       select: { code: true },
     })).map((row) => row.code);
     expect(activeCodes).toEqual([201, 203]);
+  });
+
+  test("หวยลาวชุดแก้เลขได้ แต่เปลี่ยนประเภทชุด 30/60/120 หรือประเภทตรง/โต๊ดไม่ได้", async () => {
+    const placed = await placeBill(f.actors.AGENT1, {
+      drawId: laoSet.id,
+      title: "ชุด 30",
+      items: [bet(201, "1234", "30")],
+    });
+    await updateBillBeforeCutoff(f.actors.AGENT1, placed.billId, {
+      title: "ชุด 30 แก้เลข",
+      items: [bet(201, "4321", "30")],
+    });
+    await expect(updateBillBeforeCutoff(f.actors.AGENT1, placed.billId, {
+      title: "พยายามเปลี่ยนเป็นชุด 60",
+      items: [bet(201, "4321", "60")],
+    })).rejects.toThrow(/ประเภทชุด 30\/60\/120/);
+    await expect(updateBillBeforeCutoff(f.actors.AGENT1, placed.billId, {
+      title: "พยายามเปลี่ยนเป็นโต๊ด",
+      items: [bet(203, "4321", "30")],
+    })).rejects.toThrow(/ประเภทตรง\/โต๊ดแก้ไม่ได้/);
   });
 
   test("เพดาน 2,000 แยกตามประเภท และ Owner ตั้งเพดานเฉพาะเลขได้ (Admin ตั้งไม่ได้)", async () => {

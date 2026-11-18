@@ -35,6 +35,22 @@ export const LAO_SET_PACKAGE_PAYOUTS = [
   { price: 120, exact: 102_000, permutation: 4_500 },
 ] as const;
 
+export type LaoSetPackagePrice = (typeof LAO_SET_PACKAGE_PRICES)[number];
+
+/**
+ * หวยลาวชุดถือราคา 30/60/120 เป็นคนละประเภทย่อย แม้ในฐานข้อมูลจะใช้ stake เดิม
+ * เพื่อให้บิลเก่าทำงานต่อได้โดยไม่ต้องย้ายข้อมูลหรือเปลี่ยนอัตราคำนวณ
+ */
+export function laoSetPackagePrice(value: { toString(): string } | string | number): LaoSetPackagePrice | null {
+  const price = Number(value.toString());
+  return LAO_SET_PACKAGE_PRICES.find((allowed) => allowed === price) ?? null;
+}
+
+export function laoSetPackageLabel(value: { toString(): string } | string | number): string | null {
+  const price = laoSetPackagePrice(value);
+  return price === null ? null : `ชุด ${price} บาท`;
+}
+
 export function isSupportedLaoSetPrizeCode(code: number): boolean {
   return LAO_SET_ACTIVE_CODES.some((supported) => supported === code);
 }
