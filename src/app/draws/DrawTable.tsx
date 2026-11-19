@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DashboardIcon } from "../DashboardIcon";
-import { DeleteDrawForm, LockDrawForm } from "./DrawForms";
+import { DeleteDrawForm, LockDrawForm, ReopenDrawForm } from "./DrawForms";
+import { toBangkokDateTimeLocal } from "@/lib/draws/schedule";
 import { DrawReviewButton } from "./DrawReviewButton";
 import type { listDraws } from "@/lib/draws/service";
 import {
@@ -55,6 +56,11 @@ export function DrawTable({
       {draws.length === 0 && <tr><td colSpan={columnCount} className="draw-empty-row">ยังไม่มีงวดในระบบ</td></tr>}
       {draws.map((draw) => {
         const displayStatus = getDrawDisplayStatus(draw);
+        const canReopen = canManage
+          && draw.status === "LOCKED"
+          && draw._count.results === 0
+          && draw.settlements.length === 0;
+        const suggestedCutoffAt = toBangkokDateTimeLocal(new Date(Math.max(draw.cutoffAt.getTime(), Date.now() + 60 * 60 * 1000)));
         return <tr key={draw.id}>
           <td><Link href={`/draws/${draw.id}`}>{draw.name}</Link></td>
           <td>{BANGKOK.format(draw.opensAt)}</td>
@@ -83,6 +89,7 @@ export function DrawTable({
           </td>}
           {(canManage || canDelete) && <td><div className="draw-management-actions">
             {canManage && draw.status === "OPEN" && <LockDrawForm drawId={draw.id} paired={draw.laoFamilyId !== null} />}
+            {canReopen && <ReopenDrawForm drawId={draw.id} drawName={draw.name} paired={draw.laoFamilyId !== null} suggestedCutoffAt={suggestedCutoffAt} />}
             {canDelete && <DeleteDrawForm drawId={draw.id} drawName={draw.name} billCount={draw._count.bills} />}
           </div></td>}
         </tr>;

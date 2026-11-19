@@ -106,6 +106,8 @@ export type ValidateInput = {
   /** ยอดที่ Agent รายนี้ใช้ไปแล้วในรอบนี้จากบิลใบอื่น */
   existingStakeInDraw: Prisma.Decimal;
   now: Date;
+  /** Admin/Owner แก้บิลหลังปิดรับได้ก่อนมีผล โดยยังตรวจเลข วงเงิน และเพดานตามปกติ */
+  ignoreDrawWindow?: boolean;
   /** เลขเต็ม/เลขอั้นของงวด คีย์เดียวกับ dedupeKey */
   restrictions?: ReadonlyMap<string, NumberRestriction>;
   /**
@@ -136,7 +138,7 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
     issues.push({ itemIndex: null, code: "EMPTY_BILL", message: "บิลต้องมีอย่างน้อยหนึ่งรายการ" });
   }
 
-  if (input.draw.status !== "OPEN") {
+  if (!input.ignoreDrawWindow && input.draw.status !== "OPEN") {
     issues.push({
       itemIndex: null,
       code: "DRAW_NOT_OPEN",
@@ -144,7 +146,7 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
     });
   }
 
-  if (input.now.getTime() >= input.draw.cutoffAt.getTime()) {
+  if (!input.ignoreDrawWindow && input.now.getTime() >= input.draw.cutoffAt.getTime()) {
     issues.push({
       itemIndex: null,
       code: "PAST_CUTOFF",

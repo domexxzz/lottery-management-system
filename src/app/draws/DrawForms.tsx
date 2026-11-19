@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { defaultOfficialDrawWindow, officialDrawName, parseBangkokDateTimeLocal, toBangkokDateTimeLocal } from "@/lib/draws/schedule";
 import { AppDropdown } from "../AppDropdown";
-import { createDrawAction, createLaoDrawAction, deleteDrawAction, lockDrawAction, type ActionState } from "./actions";
+import { createDrawAction, createLaoDrawAction, deleteDrawAction, lockDrawAction, reopenDrawAction, type ActionState } from "./actions";
 import { DatePicker, DateTimePicker } from "@/components/calendar";
 import { LAO_DEFAULT_TIMES, isLaoDrawDay } from "@/lib/lao/rules";
 
@@ -120,6 +120,37 @@ export function LockDrawForm({ drawId, paired = false }: { drawId: string; paire
       </button>
     </form>
   );
+}
+
+export function ReopenDrawForm({
+  drawId,
+  drawName,
+  paired = false,
+  suggestedCutoffAt,
+}: {
+  drawId: string;
+  drawName: string;
+  paired?: boolean;
+  suggestedCutoffAt: string;
+}) {
+  const [state, formAction, pending] = useActionState(reopenDrawAction, INITIAL);
+  const [cutoffAt, setCutoffAt] = useState(suggestedCutoffAt);
+
+  return <details className="reopen-draw-form">
+    <summary>{paired ? "เปิดรับคู่งวดอีกครั้ง" : "เปิดรับอีกครั้ง"}</summary>
+    <form action={formAction} onSubmit={(event) => {
+      const target = paired ? "หวยลาวและหวยลาวชุดคู่นี้" : `งวด “${drawName}”`;
+      if (!window.confirm(`เปิดรับ${target}อีกครั้งจนถึงเวลาที่กำหนดใช่ไหม?`)) event.preventDefault();
+    }}>
+      <input type="hidden" name="drawId" value={drawId} />
+      <input type="hidden" name="cutoffAt" value={cutoffAt} />
+      <label htmlFor={`reopen-cutoff-${drawId}`}>เวลาปิดรับใหม่<DateTimePicker id={`reopen-cutoff-${drawId}`} value={cutoffAt} onChange={setCutoffAt} required /></label>
+      <small>บิลที่ล็อกไว้จะกลับมาใช้งาน และ Agent จะสร้าง/แก้บิลได้จนถึงเวลานี้</small>
+      {state.error !== null && <p className="error" role="alert">{state.error}</p>}
+      {state.message !== null && <p role="status">{state.message}</p>}
+      <button type="submit" disabled={pending || !cutoffAt}>{pending ? "กำลังเปิดรับ..." : "ยืนยันเปิดรับอีกครั้ง"}</button>
+    </form>
+  </details>;
 }
 
 export function DeleteDrawForm({ drawId, drawName, billCount }: { drawId: string; drawName: string; billCount: number }) {

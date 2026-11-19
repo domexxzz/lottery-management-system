@@ -46,9 +46,12 @@ export default async function BillDetailPage({
 
   const canConfirm = canTransition(bill.status, "CONFIRMED") && can(actor.role, "bill.confirm");
   const beforeCutoff = bill.draw.status === "OPEN" && Date.now() < bill.draw.cutoffAt.getTime();
-  const editableStatus = bill.status === "CONFIRMED" || bill.status === "DRAFT";
-  const canEditBill = beforeCutoff && editableStatus && can(actor.role, "bill.editBeforeCutoff");
-  const canDeleteBill = beforeCutoff && editableStatus && can(actor.role, "bill.delete");
+  const isManager = actor.role === "ADMIN" || actor.role === "OWNER";
+  const noResultYet = bill.draw.officialNumber === null && bill.draw._count.results === 0 && bill.draw._count.settlements === 0;
+  const managerWindow = isManager && noResultYet && (bill.draw.status === "OPEN" || bill.draw.status === "LOCKED");
+  const editableStatus = bill.status === "CONFIRMED" || bill.status === "DRAFT" || (isManager && bill.status === "LOCKED");
+  const canEditBill = (beforeCutoff || managerWindow) && editableStatus && can(actor.role, "bill.editBeforeCutoff");
+  const canDeleteBill = (beforeCutoff || managerWindow) && editableStatus && can(actor.role, "bill.delete");
   const canDeleteEvidence = can(actor.role, "evidence.delete");
 
   const evidenceConfig = getStorageConfig();
@@ -188,7 +191,7 @@ export default async function BillDetailPage({
             <div className="bill-change-zone">
               {canEditBill && (
                 <details id="bill-edit" className="slip-panel bill-edit-panel" open={edit === "1"}>
-                  <summary><span>แก้ไขเลขและยอดเดิมพัน</span><small>ใช้ได้เฉพาะก่อนปิดรับ · มีผลทันที</small></summary>
+                  <summary><span>แก้ไขเลขและยอดเดิมพัน</span><small>{managerWindow && !beforeCutoff ? "ผู้ดูแลแก้ได้ก่อนกรอกผล · มีผลทันที" : "ใช้ได้เฉพาะก่อนปิดรับ · มีผลทันที"}</small></summary>
                   <EditBillForm
                     billId={bill.id}
                     title={bill.title}
@@ -293,7 +296,7 @@ export default async function BillDetailPage({
           <details className="slip-panel slip-collapse" open={canConfirm}>
             <summary>
               <span>จัดการบิล</span>
-              <small>{canConfirm ? "ยืนยันบิลร่าง" : "ลบบิลก่อนปิดรับ"}</small>
+              <small>{canConfirm ? "ยืนยันบิลร่าง" : managerWindow && !beforeCutoff ? "ผู้ดูแลลบได้ก่อนกรอกผล" : "ลบบิลก่อนปิดรับ"}</small>
             </summary>
             <div className="slip-collapse-body">
               {canConfirm && <ConfirmButton billId={bill.id} evidenceReady={evidenceReady} evidenceMessage={evidenceMessage} />}

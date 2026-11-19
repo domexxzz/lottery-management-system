@@ -50,6 +50,7 @@ function run(overrides: {
   existing?: Prisma.Decimal;
   now?: Date;
   rules?: Map<string, PrizeTypeRule>;
+  ignoreDrawWindow?: boolean;
 }) {
   return validateBill({
     items: overrides.items ?? [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("100") }],
@@ -61,6 +62,7 @@ function run(overrides: {
     draw: overrides.draw ?? OPEN_DRAW,
     existingStakeInDraw: overrides.existing ?? d(0),
     now: overrides.now ?? NOW,
+    ignoreDrawWindow: overrides.ignoreDrawWindow,
   });
 }
 
@@ -280,6 +282,14 @@ describe("เวลาปิดรับ", () => {
 
   test("ยอมรับหนึ่งมิลลิวินาทีก่อน Cutoff", () => {
     expect(run({ now: new Date("2026-11-10T09:59:59.999Z") })).toEqual([]);
+  });
+
+  test("ผู้ดูแลข้ามเฉพาะเงื่อนไขเวลาได้ แต่ยังตรวจข้อมูลเดิมพันตามปกติ", () => {
+    expect(run({
+      draw: { status: "LOCKED", cutoffAt: new Date("2026-11-10T09:00:00Z") },
+      now: new Date("2026-11-10T10:00:00Z"),
+      ignoreDrawWindow: true,
+    })).toEqual([]);
   });
 });
 

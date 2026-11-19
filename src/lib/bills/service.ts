@@ -27,6 +27,31 @@ export type ItemInput = {
 
 const SOFT_DELETE_REASON = "ลบบิลก่อนปิดรับ";
 
+type BillMutationDraw = {
+  status: string;
+  cutoffAt: Date;
+  officialNumber: string | null;
+  _count: { results: number; settlements: number };
+};
+
+function isBillManager(actor: Actor): boolean {
+  return actor.role === "ADMIN" || actor.role === "OWNER";
+}
+
+/** Agent ต้องอยู่ก่อน cutoff; Admin/Owner แก้ย้อนหลังได้เฉพาะช่วงปิดรับแต่ยังไม่มีผล */
+function assertBillMutationAllowed(actor: Actor, draw: BillMutationDraw): void {
+  if (!isBillManager(actor)) {
+    assertDrawStillOpen(draw);
+    return;
+  }
+  if (draw.status !== "OPEN" && draw.status !== "LOCKED") {
+    throw new ConflictError("แก้ไขหรือลบบิลได้เฉพาะก่อนกรอกผลรางวัล");
+  }
+  if (draw.officialNumber !== null || draw._count.results > 0 || draw._count.settlements > 0) {
+    throw new ConflictError("งวดนี้มีผลรางวัลหรือคำนวณยอดแล้ว จึงแก้ไขหรือลบบิลไม่ได้");
+  }
+}
+
 function itemSnapshot(item: { id?: string; prizeTypeId: string; number: string; stake: Prisma.Decimal; prizeType?: { name: string } }) {
   return {
     ...(item.id !== undefined && { id: item.id }),
@@ -290,7 +315,16 @@ export async function updateBillBeforeCutoff(
     const bill = await tx.bill.findFirst({
       where: { id: billId, ...billScope(actor) },
       include: {
-        draw: { select: { status: true, cutoffAt: true, numberCap: true, lotteryType: true } },
+        draw: {
+          select: {
+            status: true,
+            cutoffAt: true,
+            numberCap: true,
+            lotteryType: true,
+            officialNumber: true,
+            _count: { select: { results: true, settlements: true } },
+          },
+        },
         agent: { select: { creditLimit: true, perNumberLimit: true } },
         items: {
           orderBy: { createdAt: "asc" },
@@ -299,10 +333,11 @@ export async function updateBillBeforeCutoff(
       },
     });
     if (!bill) throw new NotFoundError("ไม่พบบิล");
-    if (bill.status !== "CONFIRMED" && bill.status !== "DRAFT") {
+    const managerOverride = isBillManager(actor);
+    if (bill.status !== "CONFIRMED" && bill.status !== "DRAFT" && !(managerOverride && bill.status === "LOCKED")) {
       throw new ConflictError("บิลนี้แก้ไขไม่ได้แล้ว");
     }
-    assertDrawStillOpen(bill.draw);
+    assertBillMutationAllowed(actor, bill.draw);
 
     // ราคา 30/60/120 คือประเภทย่อยของหวยลาวชุด ไม่ใช่ยอดที่แก้ภายหลังได้
     // ตรวจซ้ำฝั่ง server เพื่อกันการแก้ hidden field หรือยิง Server Action โดยตรง
@@ -339,6 +374,7 @@ export async function updateBillBeforeCutoff(
       draw: bill.draw,
       existingStakeInDraw: committed._sum.totalStake ?? new Prisma.Decimal(0),
       now: new Date(),
+      ignoreDrawWindow: managerOverride,
       restrictions,
       numberCap,
     });
@@ -384,7 +420,9 @@ export async function updateBillBeforeCutoff(
       entityId: bill.id,
       before,
       after,
-      reason: "แก้ไขบิลก่อนปิดรับ",
+      reason: managerOverride && (bill.draw.status !== "OPEN" || Date.now() >= bill.draw.cutoffAt.getTime())
+        ? "ผู้ดูแลแก้ไขบิลหลังปิดรับก่อนกรอกผล"
+        : "แก้ไขบิลก่อนปิดรับ",
     });
   });
 }
@@ -396,13 +434,26 @@ export async function softDeleteBillBeforeCutoff(actor: Actor, billId: string): 
     const bill = await tx.bill.findFirst({
       where: { id: billId, ...billScope(actor) },
       include: {
-        draw: { select: { status: true, cutoffAt: true } },
+        draw: {
+          select: {
+            status: true,
+            cutoffAt: true,
+            officialNumber: true,
+            _count: { select: { results: true, settlements: true } },
+          },
+        },
         items: { orderBy: { createdAt: "asc" }, include: { prizeType: { select: { name: true } } } },
       },
     });
     if (!bill) throw new NotFoundError("ไม่พบบิล");
-    if (bill.status !== "CONFIRMED" && bill.status !== "DRAFT") throw new ConflictError("บิลนี้ลบไม่ได้แล้ว");
-    assertDrawStillOpen(bill.draw);
+    const managerOverride = isBillManager(actor);
+    if (bill.status !== "CONFIRMED" && bill.status !== "DRAFT" && !(managerOverride && bill.status === "LOCKED")) {
+      throw new ConflictError("บิลนี้ลบไม่ได้แล้ว");
+    }
+    assertBillMutationAllowed(actor, bill.draw);
+    const deleteReason = managerOverride && (bill.draw.status !== "OPEN" || Date.now() >= bill.draw.cutoffAt.getTime())
+      ? "ผู้ดูแลลบบิลหลังปิดรับก่อนกรอกผล"
+      : SOFT_DELETE_REASON;
     const deletedAt = new Date();
     await tx.bill.update({
       where: { id: bill.id },
@@ -410,7 +461,7 @@ export async function softDeleteBillBeforeCutoff(actor: Actor, billId: string): 
         status: "CANCELLED",
         cancelledById: actor.userId,
         cancelledAt: deletedAt,
-        cancelReason: SOFT_DELETE_REASON,
+        cancelReason: deleteReason,
       },
     });
     await writeAudit(tx, {
@@ -428,7 +479,7 @@ export async function softDeleteBillBeforeCutoff(actor: Actor, billId: string): 
         items: bill.items.map(itemSnapshot),
       },
       after: { status: "CANCELLED", deletedAt: deletedAt.toISOString(), excludedFromCalculation: true },
-      reason: SOFT_DELETE_REASON,
+      reason: deleteReason,
     });
   });
 }
@@ -864,7 +915,17 @@ export async function getBill(actor: Actor, billId: string) {
         },
       },
       agent: { select: { code: true, name: true } },
-      draw: { select: { name: true, cutoffAt: true, status: true, drawDate: true, lotteryType: true, officialNumber: true } },
+      draw: {
+        select: {
+          name: true,
+          cutoffAt: true,
+          status: true,
+          drawDate: true,
+          lotteryType: true,
+          officialNumber: true,
+          _count: { select: { results: true, settlements: true } },
+        },
+      },
       createdBy: { select: { displayName: true } },
       cancelledBy: { select: { displayName: true } },
       cancelRequestedBy: { select: { displayName: true } },

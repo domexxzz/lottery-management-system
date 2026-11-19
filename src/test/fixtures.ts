@@ -146,10 +146,12 @@ export async function createFixtures() {
   ]);
 
   const now = new Date();
+  const bangkokDate = new Date(`${new Date(now.getTime() + 7 * 3_600_000).toISOString().slice(0, 10)}T00:00:00.000Z`);
   const draw = await prisma.draw.create({
     data: {
       organizationId: org.id,
       name: "งวดทดสอบ",
+      drawDate: bangkokDate,
       opensAt: new Date(now.getTime() - 3_600_000),
       cutoffAt: new Date(now.getTime() + 3_600_000),
       status: "OPEN",

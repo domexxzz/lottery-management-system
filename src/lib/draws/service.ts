@@ -37,7 +37,7 @@ export async function listDraws(
       laoFamilyId: true,
       lockedAt: true,
       settlements: { select: { status: true } },
-      _count: { select: { bills: true } },
+      _count: { select: { bills: true, results: true } },
     },
   });
 }
@@ -243,6 +243,98 @@ export async function lockDrawManually(actor: Actor, drawId: string): Promise<Lo
     actorId: actor.userId,
     reason: "ปิดงวดด้วยมือโดยผู้ดูแล",
     requestId: actor.requestId,
+  });
+}
+
+export type ReopenDrawOutcome = {
+  drawId: string;
+  drawName: string;
+  drawsReopened: number;
+  billsUnlocked: number;
+  cutoffAt: Date;
+};
+
+/**
+ * เปิดรับงวดที่ปิดรับแล้วอีกครั้ง ก่อนมีการกรอกผลหรือคำนวณยอดเท่านั้น
+ * งวดหวยลาว/ลาวชุดในครอบครัวเดียวกันจะเปิดพร้อมกันและใช้ cutoff ใหม่เดียวกัน
+ */
+export async function reopenDrawManually(
+  actor: Actor,
+  drawId: string,
+  cutoffAtInput: string,
+): Promise<ReopenDrawOutcome> {
+  requirePermission(actor, "draw.manage");
+  const cutoffAt = parseBangkokDateTimeLocal(cutoffAtInput);
+  if (!cutoffAt) throw new ValidationError("เวลาปิดรับใหม่ไม่ถูกต้อง");
+  if (cutoffAt.getTime() <= Date.now()) throw new ValidationError("เวลาปิดรับใหม่ต้องอยู่หลังเวลาปัจจุบัน");
+
+  return prisma.$transaction(async (tx) => {
+    const selected = await tx.draw.findFirst({
+      where: { id: drawId, ...orgScope(actor) },
+      select: { id: true, laoFamilyId: true, lotteryType: true },
+    });
+    if (!selected) throw new NotFoundError("ไม่พบงวด");
+
+    const paired = (selected.lotteryType === "LAO" || selected.lotteryType === "LAO_SET")
+      && selected.laoFamilyId !== null;
+    const members = await tx.draw.findMany({
+      where: paired
+        ? { organizationId: actor.organizationId, laoFamilyId: selected.laoFamilyId!, lotteryType: { in: ["LAO", "LAO_SET"] } }
+        : { id: selected.id, organizationId: actor.organizationId },
+      orderBy: [{ lotteryType: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        cutoffAt: true,
+        officialNumber: true,
+        _count: { select: { results: true, settlements: true } },
+      },
+    });
+    if (members.length === 0) throw new NotFoundError("ไม่พบงวด");
+
+    const blocked = members.find((draw) => (
+      draw.status !== "LOCKED"
+      || draw.officialNumber !== null
+      || draw._count.results > 0
+      || draw._count.settlements > 0
+    ));
+    if (blocked) {
+      throw new ConflictError(`งวด "${blocked.name}" เปิดรับอีกครั้งไม่ได้ เพราะมีผลรางวัล/ยอดคำนวณแล้ว หรือไม่ได้อยู่ในสถานะปิดรับ`);
+    }
+
+    let billsUnlocked = 0;
+    for (const draw of members) {
+      const bills = await tx.bill.updateMany({
+        where: { drawId: draw.id, status: "LOCKED" },
+        data: { status: "CONFIRMED" },
+      });
+      billsUnlocked += bills.count;
+      await tx.draw.update({
+        where: { id: draw.id },
+        data: { status: "OPEN", cutoffAt, lockedAt: null, closedAt: null },
+      });
+      await writeAudit(tx, {
+        organizationId: actor.organizationId,
+        actorId: actor.userId,
+        requestId: actor.requestId,
+        ipAddress: actor.ipAddress,
+        action: "UPDATE",
+        entityType: "Draw",
+        entityId: draw.id,
+        before: { status: draw.status, cutoffAt: draw.cutoffAt.toISOString() },
+        after: { status: "OPEN", cutoffAt: cutoffAt.toISOString(), billsUnlocked: bills.count },
+        reason: "ผู้ดูแลเปิดรับงวดอีกครั้งก่อนกรอกผล",
+      });
+    }
+
+    return {
+      drawId: selected.id,
+      drawName: members.map((draw) => draw.name).join(" + "),
+      drawsReopened: members.length,
+      billsUnlocked,
+      cutoffAt,
+    };
   });
 }
 

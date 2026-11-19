@@ -39,7 +39,7 @@ export function DeleteBillForm({ billId, billLabel, attachmentCount }: { billId:
     }}>
       <input type="hidden" name="billId" value={billId} />
       {state.error !== null && <p className="error" role="alert">{state.error}</p>}
-      <p className="notice">บิลจะหายจากรายการที่ใช้งานและไม่ถูกนำไปคำนวณ แต่เลขเดิมพัน หลักฐาน และประวัติยังคงอยู่</p>
+      <p className="notice">บิลจะหายจากรายการที่ใช้งานและไม่ถูกนำไปคำนวณ แต่เลขเดิมพัน หลักฐาน ผู้ลบ เวลา และประวัติยังคงอยู่</p>
       <button type="submit" className="danger-button" disabled={pending}>
         {pending ? "กำลังลบบิล..." : "ลบบิล"}
       </button>

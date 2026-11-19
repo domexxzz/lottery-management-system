@@ -96,7 +96,8 @@ describe("คู่มือตรงกับสิทธิ์และเม�
     expect(allowed).toContain("ลงผลรางวัล:");
     expect(allowed).toContain("ตรวจหลักฐาน:");
     expect(allowed).toContain("เปิดงวดและตั้งเลขอั้น:");
-    expect(allowed).toContain("ลบบิลก่อนปิดรับ:");
+    expect(allowed).toContain("แก้ไขหรือลบบิล:");
+    expect(allowed).toContain("Owner/Admin ทำได้ทั้งก่อนและหลังปิดรับ");
     expect(allowed).not.toContain("ปิดบัญชีงวด:");
     expect(denied).toContain("ปิดบัญชีงวด (Owner ทำ)");
     expect(denied).toContain("อนุมัติการแก้ผลรางวัล (Owner ทำ)");
@@ -112,8 +113,8 @@ describe("คู่มือตรงกับสิทธิ์และเม�
     const allowed = block(section, "ทำอะไรได้ และทำยังไง").join("\n");
     expect(allowed).toContain("รับบิล:");
     expect(allowed).toContain("แนบหลักฐาน:");
-    expect(allowed).toContain("ลบบิลก่อนปิดรับ:");
-    expect(allowed).toContain("Agent ลบได้เฉพาะบิลของตัวเอง");
+    expect(allowed).toContain("แก้ไขหรือลบบิล:");
+    expect(allowed).toContain("Agent ทำได้เฉพาะบิลของตัวเองขณะที่งวดยังเปิดรับ");
     for (const forbidden of ["ลงผลรางวัล:", "ตรวจหลักฐาน:", "ปิดบัญชีงวด:", "เปิดงวดและตั้งเลขอั้น:"]) {
       expect(allowed).not.toContain(forbidden);
     }

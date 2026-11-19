@@ -22,6 +22,7 @@
 @media(max-width:850px){.all-draw-filters{grid-template-columns:1fr 1fr}.all-draw-filters button{width:100%}}
 @media(max-width:560px){.all-draw-filters{grid-template-columns:1fr}.all-draw-sort{justify-content:center}}
 .draw-management-actions{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}.draw-management-actions form{margin:0}.draw-management-actions .danger-button{min-height:34px;margin:0;padding:.4rem .62rem;font-size:.61rem;white-space:nowrap}.delete-draw-form>p{max-width:190px;margin:.25rem 0;color:#a43740;font-size:.58rem}
+.reopen-draw-form{min-width:190px;padding:.4rem .5rem;border:1px solid #b9dbe0;border-radius:9px;background:#f3fbfb}.reopen-draw-form>summary{cursor:pointer;color:#087985;font-size:.62rem;font-weight:850;list-style:none}.reopen-draw-form>summary::-webkit-details-marker{display:none}.reopen-draw-form[open]>summary{margin-bottom:.45rem;padding-bottom:.35rem;border-bottom:1px solid #d7e8ea}.reopen-draw-form form{display:grid;gap:.4rem}.reopen-draw-form label{color:#476672;font-size:.58rem}.reopen-draw-form .calendar-field{margin-top:.2rem}.reopen-draw-form small{max-width:240px;color:#687d87;font-size:.55rem;line-height:1.45}.reopen-draw-form button{min-height:36px;margin:0;padding:.4rem .55rem;font-size:.6rem}.reopen-draw-form .error{max-width:240px;margin:0;color:#b02d3a;font-size:.56rem}
 
 /* สร้างงวดหวยลาว */
 .create-draw-panel-lao{margin-top:1rem}

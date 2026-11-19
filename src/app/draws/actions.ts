@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActor } from "@/lib/auth/context";
-import { createDraw, deleteDrawPermanently, lockDrawManually } from "@/lib/draws/service";
+import { createDraw, deleteDrawPermanently, lockDrawManually, reopenDrawManually } from "@/lib/draws/service";
 import { createLaoDraws } from "@/lib/lao/service";
 import { AppError } from "@/lib/errors";
 
@@ -60,6 +60,37 @@ export async function lockDrawAction(
     return {
       error: null,
       message: `ปิดงวด "${outcome.drawName}" แล้ว · ล็อกบิล ${outcome.billsLocked} ใบ · ยกเลิกร่างค้าง ${outcome.draftsCancelled} ใบ`,
+    };
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message, message: null };
+    throw error;
+  }
+}
+
+export async function reopenDrawAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const actor = await requireActor();
+  const parsed = z.object({
+    drawId: z.string().min(1, "ไม่พบงวด"),
+    cutoffAt: z.string().min(1, "กรุณาระบุเวลาปิดรับใหม่"),
+  }).safeParse({
+    drawId: formData.get("drawId"),
+    cutoffAt: formData.get("cutoffAt"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง", message: null };
+
+  try {
+    const outcome = await reopenDrawManually(actor, parsed.data.drawId, parsed.data.cutoffAt);
+    revalidatePath("/draws");
+    revalidatePath("/draws/all");
+    revalidatePath(`/draws/${parsed.data.drawId}`);
+    revalidatePath("/bills");
+    revalidatePath("/bills/new");
+    return {
+      error: null,
+      message: `เปิดรับ "${outcome.drawName}" อีกครั้งแล้ว · คืนสถานะบิล ${outcome.billsUnlocked} ใบ`,
     };
   } catch (error) {
     if (error instanceof AppError) return { error: error.message, message: null };

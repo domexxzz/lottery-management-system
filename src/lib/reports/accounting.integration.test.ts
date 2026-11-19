@@ -73,20 +73,22 @@ describe("สรุปบัญชี", () => {
 
   test("กรองหลายประเภทหวยจากข้อมูลจริงและทำงานร่วมกับ Agent", async () => {
     const now = new Date();
+    // ยึดวันออกผลเป็นวันนี้เวลาไทย ไม่ผูกกับ cutoff +1 ชั่วโมงซึ่งอาจข้ามวันเมื่อเทสใกล้เที่ยงคืน
+    const drawDate = new Date(`${bangkokToday(now)}T00:00:00Z`);
     const [laoPrize, laoSetPrize, laoDraw, laoSetDraw] = await Promise.all([
       prisma.prizeType.create({ data: { organizationId: f.org.id, lotteryType: "LAO", code: 101, name: "3 ตัวบนลาว", digits: 3, matchRule: "EXACT", payoutRate: 650 } }),
       prisma.prizeType.create({ data: { organizationId: f.org.id, lotteryType: "LAO_SET", code: 201, name: "เลขชุด 4 ตัว", digits: 4, matchRule: "EXACT", payoutRate: 25500 } }),
-      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO", name: "ลาวทดสอบ", opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 3_600_000), status: "OPEN" } }),
-      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO_SET", name: "ลาวชุดทดสอบ", opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 3_600_000), status: "OPEN" } }),
+      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO", name: "ลาวทดสอบ", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 3_600_000), status: "OPEN" } }),
+      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO_SET", name: "ลาวชุดทดสอบ", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 3_600_000), status: "OPEN" } }),
     ]);
     await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ไทย", items: [bet(f.prizeTypes.threeTop.id, "123", "100")] });
     await placeBill(f.actors.AGENT1, { drawId: laoDraw.id, title: "ลาว", items: [bet(laoPrize.id, "456", "200")] });
     await placeBill(f.actors.AGENT2, { drawId: laoSetDraw.id, title: "ลาวชุด", items: [bet(laoSetPrize.id, "1234", "30")] });
 
     const previousDraws = await Promise.all([
-      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "THAI_GOVERNMENT", name: "ไทยงวดก่อน", opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
-      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO", name: "ลาวงวดก่อน", opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
-      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO_SET", name: "ลาวชุดงวดก่อน", opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
+      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "THAI_GOVERNMENT", name: "ไทยงวดก่อน", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
+      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO", name: "ลาวงวดก่อน", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
+      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO_SET", name: "ลาวชุดงวดก่อน", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
     ]);
     await placeBill(f.actors.AGENT1, { drawId: previousDraws[0]!.id, title: "ไทยก่อน", items: [bet(f.prizeTypes.threeTop.id, "111", "10")] });
     await placeBill(f.actors.AGENT1, { drawId: previousDraws[1]!.id, title: "ลาวก่อน", items: [bet(laoPrize.id, "222", "20")] });
