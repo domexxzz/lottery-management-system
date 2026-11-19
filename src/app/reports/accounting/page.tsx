@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { getActor, orgScope } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
-import { drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
+import { drawDateLabel } from "@/lib/bills/betting";
+import { groupReportDraws, reportCategoryLabel } from "@/lib/reports/draw-groups";
 import { loadAccountingReport, type AccountingTotals } from "@/lib/reports/accounting";
 import { accountingHref, accountingLotterySelectionLabel, compareValueLabel, comparisonText, customCompareQueries, parseAccountingQuery, previousPeriodLabel, previousPeriodQuery, recentDays, recentMonths, recentWeeks, type CompareUnit } from "@/lib/reports/accounting-period";
 import { COUNT_FORMAT, MONEY_FORMAT } from "@/lib/reports/terms";
@@ -35,38 +36,41 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   const now = new Date();
   const query = parseAccountingQuery(await searchParams, now);
   const previousQuery = query.compare === "previous" ? previousPeriodQuery(query, now) : null;
-  // งวดให้เลือกในการเทียบรายงวด (ล่าสุดก่อน) เปิดรับแล้วเท่านั้น
-  const drawSelect = { id: true, name: true, drawDate: true, lotteryType: true, status: true, cutoffAt: true } as const;
-  const recentDraws = query.compare === "custom" && query.compareUnit === "draw"
-    ? await prisma.draw.findMany({
-        where: { ...orgScope(actor), opensAt: { lte: now } },
-        orderBy: { cutoffAt: "desc" },
-        take: 120,
-        select: drawSelect,
-      })
-    : [];
+  // ใช้ชุดเดียวกันทั้งตัวกรองหลักและการเปรียบเทียบ: ลาว + ลาวชุด family เดียวกันแสดงเพียงครั้งเดียว
+  const drawSelect = { id: true, name: true, drawDate: true, lotteryType: true, status: true, cutoffAt: true, laoFamilyId: true } as const;
+  const recentDraws = await prisma.draw.findMany({
+    where: { ...orgScope(actor), opensAt: { lte: now } },
+    orderBy: { cutoffAt: "desc" },
+    take: 240,
+    select: drawSelect,
+  });
   // งวด A/B ในลิงก์ที่เก่ากว่ารายการ: ดึงมาเพิ่ม ไม่เปลี่ยนเป็นงวดล่าสุดเงียบ ๆ
-  const missingDrawIds = query.compare === "custom" && query.compareUnit === "draw"
-    ? [query.compareA, query.compareB].filter((id) => id && !recentDraws.some((draw) => draw.id === id))
-    : [];
-  const drawOptions = missingDrawIds.length === 0 ? recentDraws : [
+  const requestedDrawIds = [query.drawIds?.[0], ...(query.compare === "custom" && query.compareUnit === "draw" ? [query.compareA, query.compareB] : [])].filter((id): id is string => Boolean(id));
+  const missingDrawIds = requestedDrawIds.filter((id) => !recentDraws.some((draw) => draw.id === id));
+  const physicalOptions = missingDrawIds.length === 0 ? recentDraws : [
     ...recentDraws,
     ...await prisma.draw.findMany({ where: { ...orgScope(actor), id: { in: missingDrawIds } }, select: drawSelect }),
-  ].sort((a, b) => b.cutoffAt.getTime() - a.cutoffAt.getTime());
+  ];
+  const missingFamilies = physicalOptions.filter((draw) => missingDrawIds.includes(draw.id) && draw.laoFamilyId).map((draw) => draw.laoFamilyId!);
+  const withFamilies = missingFamilies.length === 0 ? physicalOptions : [
+    ...physicalOptions,
+    ...await prisma.draw.findMany({ where: { ...orgScope(actor), laoFamilyId: { in: missingFamilies } }, select: drawSelect }),
+  ];
+  const drawOptions = groupReportDraws([...new Map(withFamilies.map((draw) => [draw.id, draw])).values()]);
   // ยังไม่ได้เลือกงวด: A = งวดล่าสุดของประเภทหวยที่กรองอยู่ · B = งวดก่อนหน้าของประเภทเดียวกัน
-  const inFilter = drawOptions.filter((draw) => (query.lotteries as string[]).includes(draw.lotteryType));
+  const inFilter = drawOptions.filter((draw) => draw.category === "THAI_GOVERNMENT" ? query.lotteries.includes("THAI_GOVERNMENT") : query.lotteries.includes("LAO"));
   const drawA = drawOptions.find((draw) => draw.id === query.compareA)?.id ?? inFilter[0]?.id ?? drawOptions[0]?.id ?? "";
-  const drawALottery = drawOptions.find((draw) => draw.id === drawA)?.lotteryType;
+  const drawALottery = drawOptions.find((draw) => draw.id === drawA)?.category;
   // B ที่ยังไม่ได้เลือก: งวดก่อนหน้าของประเภทเดียวกับ A (เก่ากว่า A) ถ้าไม่มีจึงใช้งวดอื่นของประเภทเดียวกัน
   const drawAIndex = drawOptions.findIndex((draw) => draw.id === drawA);
-  const sameLottery = (draw: (typeof drawOptions)[number]) => draw.id !== drawA && draw.lotteryType === drawALottery;
+  const sameLottery = (draw: (typeof drawOptions)[number]) => draw.id !== drawA && draw.category === drawALottery;
   const drawB = drawOptions.find((draw) => draw.id === query.compareB)?.id
     ?? drawOptions.slice(drawAIndex + 1).find(sameLottery)?.id
     ?? drawOptions.find(sameLottery)?.id
     ?? "";
   const drawLabel = (id: string) => {
     const draw = drawOptions.find((row) => row.id === id);
-    return draw ? `${lotteryLabel(draw.lotteryType)} งวด ${drawDateLabel(draw)}` : "ยังไม่มีงวด";
+    return draw ? `${reportCategoryLabel(draw.category)} งวด ${drawDateLabel(draw)}` : "ยังไม่มีงวด";
   };
   // เลือกเอง: เทียบช่วง A กับช่วง B โดยไม่ขึ้นกับช่วงหลักของหน้า
   const customQueries = query.compare === "custom" ? customCompareQueries(query, drawA, drawB) : null;
@@ -140,8 +144,8 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         days={withSelected(recentDays(120, now), "day")}
         draws={drawOptions.map((draw) => ({
           value: draw.id,
-          label: `${lotteryLabel(draw.lotteryType)} งวด ${drawDateLabel(draw)}${draw.status === "OPEN" ? " (เปิดรับ)" : draw.status === "SETTLED" || draw.status === "CLOSED" ? "" : " (รอผล)"}`,
-          lotteryType: draw.lotteryType,
+          label: `${reportCategoryLabel(draw.category)} งวด ${drawDateLabel(draw)}${draw.status === "OPEN" ? " (เปิดรับ)" : draw.status === "SETTLED" || draw.status === "CLOSED" ? "" : " (รอผล)"}`,
+          lotteryType: draw.category,
         }))}
         drawA={drawA}
         drawB={drawB}
@@ -242,7 +246,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                 rows={report.draws.map((draw) => ({
                   drawId: draw.drawId,
                   lotteryType: draw.lotteryType,
-                  title: `${lotteryLabel(draw.lotteryType)} งวด ${drawDateLabel(draw)}`,
+                  title: `${reportCategoryLabel(draw.category)} งวด ${drawDateLabel(draw)}`,
                   settled: draw.settled,
                   bills: draw.bills,
                   winners: draw.winners,

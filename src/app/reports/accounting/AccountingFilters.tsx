@@ -19,12 +19,6 @@ import {
   type AccountingQuery,
 } from "@/lib/reports/accounting-period";
 
-const LOTTERIES = [
-  { value: "THAI_GOVERNMENT", label: "หวยรัฐบาล" },
-  { value: "LAO", label: "หวยลาว" },
-  { value: "LAO_SET", label: "หวยลาวชุด" },
-] as const;
-
 const periodLabel = (period: AccountingPeriodKind) => (period === "custom" ? "กำหนดเอง" : ACCOUNTING_PERIOD_LABELS[period]);
 /** ช่วงที่ไม่อยู่ในชิปหลัก รวมไว้ในเมนู "ช่วงอื่น" */
 const OTHER_PERIODS = ACCOUNTING_QUICK_PERIODS.filter((period) => !ACCOUNTING_MAIN_PERIODS.includes(period));
@@ -80,24 +74,20 @@ export function AccountingFilters({ query, agents, comparison, days, months, wee
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const go = (change: Partial<AccountingQuery>) => startTransition(() => router.replace(accountingHref(pathname, query, change), { scroll: false }));
-  const allSelected = query.lotteries.length === ACCOUNTING_LOTTERIES.length;
   const customMode = query.compare === "custom";
   const otherActive = OTHER_PERIODS.includes(query.period as (typeof OTHER_PERIODS)[number]);
-
-  /**
-   * เลือกได้หลายประเภท เช่น หวยรัฐบาล + หวยลาว (ไม่รวมลาวชุด)
-   * - จาก "ทุกประเภท" แตะประเภทไหน = ดูเฉพาะประเภทนั้น (ไม่ใช่เอาประเภทนั้นออก)
-   * - จากนั้นแตะเพิ่ม/เอาออกทีละประเภท
-   * - เอาออกจนไม่เหลือ หรือเลือกครบทุกประเภท = กลับไปทุกประเภท
-   */
-  const toggleLottery = (lottery: AccountingLottery) => {
-    if (allSelected) return go({ lotteries: [lottery] });
-    const selected = query.lotteries.includes(lottery);
-    const next = selected
-      ? query.lotteries.filter((value) => value !== lottery)
-      : ACCOUNTING_LOTTERIES.filter((value) => query.lotteries.includes(value) || value === lottery);
-    go({ lotteries: next.length === 0 ? [...ACCOUNTING_LOTTERIES] : next });
-  };
+  type Category = "ALL" | "THAI_GOVERNMENT" | "LAO_COMBINED";
+  const activeCategory: Category = query.lotteries.length === ACCOUNTING_LOTTERIES.length
+    ? "ALL"
+    : query.lotteries.includes("THAI_GOVERNMENT") ? "THAI_GOVERNMENT" : "LAO_COMBINED";
+  const categoryLotteries = (category: Category): AccountingLottery[] => category === "ALL"
+    ? [...ACCOUNTING_LOTTERIES]
+    : category === "THAI_GOVERNMENT" ? ["THAI_GOVERNMENT"] : ["LAO", "LAO_SET"];
+  const reportRows: { category: Category; label: string; flag?: string }[] = [
+    { category: "ALL", label: "ทุกประเภท" },
+    { category: "THAI_GOVERNMENT", label: "หวยรัฐบาล", flag: "THAI_GOVERNMENT" },
+    { category: "LAO_COMBINED", label: "หวยลาวและหวยลาวชุด", flag: "LAO" },
+  ];
 
   return (
     <section className={`acc-filters ${pending ? "is-loading" : ""}`} aria-label="เลือกช่วงเวลาและตัวกรอง" aria-busy={pending}>
@@ -105,13 +95,13 @@ export function AccountingFilters({ query, agents, comparison, days, months, wee
         <span className="acc-filter-label">ช่วงเวลา</span>
         <nav className="acc-chips" aria-label="ช่วงเวลา">
           {ACCOUNTING_MAIN_PERIODS.map((period) => (
-            <button key={period} type="button" aria-pressed={!customMode && query.period === period} onClick={() => go({ period, compare: customMode ? "none" : query.compare })}>{periodLabel(period)}</button>
+            <button key={period} type="button" aria-pressed={!customMode && query.period === period} onClick={() => go({ period, drawIds: undefined, compare: customMode ? "none" : query.compare })}>{periodLabel(period)}</button>
           ))}
           <span className={`acc-more-period ${otherActive ? "is-active" : ""}`}>
             <AppDropdown
               ariaLabel="ช่วงเวลาอื่น"
               value={otherActive && !customMode ? query.period : ""}
-              onValueChange={(value) => { if (value) go({ period: value as AccountingPeriodKind, compare: customMode ? "none" : query.compare }); }}
+              onValueChange={(value) => { if (value) go({ period: value as AccountingPeriodKind, drawIds: undefined, compare: customMode ? "none" : query.compare }); }}
               options={[{ value: "", label: "ช่วงอื่น…" }, ...OTHER_PERIODS.map((period) => ({ value: period, label: periodLabel(period) }))]}
             />
           </span>
@@ -129,29 +119,43 @@ export function AccountingFilters({ query, agents, comparison, days, months, wee
         </div>
       )}
 
-      <div className="acc-filter-line">
-        <span className="acc-filter-label">ประเภทหวย</span>
-        <nav className="acc-chips acc-lottery-chips" aria-label="ประเภทหวย (เลือกได้หลายประเภท)">
-          <button type="button" aria-pressed={allSelected} onClick={() => go({ lotteries: [...ACCOUNTING_LOTTERIES] })}>ทุกประเภท</button>
-          {LOTTERIES.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              aria-pressed={!allSelected && query.lotteries.includes(item.value)}
-              onClick={() => toggleLottery(item.value)}
-            >
-              <span className="acc-check" aria-hidden="true">{!allSelected && query.lotteries.includes(item.value) ? "✓" : ""}</span>
-              <LotteryFlag lotteryType={item.value} />
-              {item.label}
-            </button>
-          ))}
-        </nav>
+      <div className="acc-report-picker" aria-label="เลือกประเภทหวยและงวด">
+        {reportRows.map((row) => {
+          const choices = row.category === "ALL" ? draws : draws.filter((draw) => draw.lotteryType === row.category);
+          const active = activeCategory === row.category;
+          const selectedDraw = query.drawIds?.[0] ?? "all";
+          const value = active && choices.some((draw) => draw.value === selectedDraw) ? selectedDraw : "all";
+          return (
+            <div className="acc-report-picker-row" key={row.category}>
+              <button
+                type="button"
+                className="acc-report-type"
+                aria-pressed={active}
+                onClick={() => go({ lotteries: categoryLotteries(row.category), drawIds: undefined })}
+              >
+                {row.flag && <LotteryFlag lotteryType={row.flag} />}
+                {row.label}
+              </button>
+              <AppDropdown
+                ariaLabel={`เลือกงวด ${row.label}`}
+                value={value}
+                searchable={choices.length > 8}
+                searchPlaceholder="ค้นหางวด"
+                onValueChange={(next) => {
+                  if (!next) return;
+                  const selected = choices.find((draw) => draw.value === next);
+                  const category = row.category === "ALL" && selected ? selected.lotteryType as Category : row.category;
+                  go({ lotteries: categoryLotteries(category), drawIds: next === "all" ? undefined : [next] });
+                }}
+                options={[
+                  { value: "all", label: row.category === "ALL" ? "รวมทุกงวด ทุกประเภท" : `รวมทุกงวด ${row.label}` },
+                  ...choices,
+                ]}
+              />
+            </div>
+          );
+        })}
       </div>
-      <p className="acc-lottery-hint">
-        {allSelected
-          ? "แตะประเภทเพื่อดูเฉพาะประเภทนั้น แล้วแตะเพิ่มได้หลายประเภท เช่น หวยรัฐบาล + หวยลาว"
-          : `กำลังดู: ${LOTTERIES.filter((item) => query.lotteries.includes(item.value)).map((item) => item.label).join(" + ")} · แตะเพื่อเพิ่มหรือเอาออก`}
-      </p>
 
       <div className="acc-filter-line acc-filter-extra">
         <label className="acc-agent-filter">

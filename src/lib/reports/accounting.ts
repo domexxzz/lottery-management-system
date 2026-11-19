@@ -2,6 +2,7 @@ import { Prisma, type DrawStatus, type LotteryType } from "@prisma/client";
 import { databaseSchema, prisma } from "@/lib/db";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { resolveRange, type AccountingQuery, type ResolvedRange } from "./accounting-period";
+import { groupReportDraws, type ReportCategory } from "./draw-groups";
 
 /**
  * สรุปบัญชีรายงวด สำหรับ Owner/Admin ทำบัญชี
@@ -43,8 +44,10 @@ export type AccountingAgentLine = {
 
 export type AccountingDrawRow = {
   drawId: string;
+  drawIds: string[];
   name: string;
   lotteryType: LotteryType;
+  category: ReportCategory;
   drawDate: Date | null;
   cutoffAt: Date;
   status: DrawStatus;
@@ -119,20 +122,34 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
   let drawFilter: Prisma.Sql;
   if (query.drawIds) {
     // เปรียบเทียบรายงวด: ดูเฉพาะงวดที่ระบุ (งวดของ org นี้เท่านั้น ด้วยเงื่อนไข organizationId ด้านล่าง)
-    drawFilter = query.drawIds.length > 0 ? Prisma.sql`AND b."drawId" IN (${Prisma.join(query.drawIds)})` : Prisma.sql`AND FALSE`;
+    const selected = query.drawIds.length > 0 ? await prisma.draw.findMany({
+      where: { ...orgScope(actor), id: { in: query.drawIds } },
+      select: { id: true, lotteryType: true, laoFamilyId: true },
+    }) : [];
+    const families = selected.map((draw) => draw.laoFamilyId).filter((id): id is string => Boolean(id));
+    const paired = families.length > 0 ? await prisma.draw.findMany({
+      where: { ...orgScope(actor), laoFamilyId: { in: families }, lotteryType: { in: ["LAO", "LAO_SET"] } },
+      select: { id: true },
+    }) : [];
+    const selectedIds = [...new Set([...selected.map((draw) => draw.id), ...paired.map((draw) => draw.id)])];
+    drawFilter = selectedIds.length > 0 ? Prisma.sql`AND b."drawId" IN (${Prisma.join(selectedIds)})` : Prisma.sql`AND FALSE`;
     range = { from: "", to: "", label: "งวดที่เลือก" };
   } else if (query.period === "all") {
     drawFilter = Prisma.empty;
   } else if (query.period === "current_draw" || query.period === "previous_draw") {
     const drawIndex = query.period === "current_draw" ? 0 : 1;
-    // หาแยกตามประเภทเพื่อไม่ให้หวยที่ออกรายวันเบียดหวยรัฐบาลออกจากรายการล่าสุด
-    const candidatesByLottery = await Promise.all(query.lotteries.map((lotteryType) => prisma.draw.findMany({
-      where: { ...orgScope(actor), lotteryType, opensAt: { lte: now } },
+    // หาแยกตามหมวดรายงาน: รัฐบาล และลาวรวมลาวชุด (หนึ่ง family = หนึ่งงวด)
+    const categories = [
+      ...(query.lotteries.includes("THAI_GOVERNMENT") ? [["THAI_GOVERNMENT"] as LotteryType[]] : []),
+      ...(query.lotteries.includes("LAO") || query.lotteries.includes("LAO_SET") ? [["LAO", "LAO_SET"] as LotteryType[]] : []),
+    ];
+    const candidatesByCategory = await Promise.all(categories.map((lotteryTypes) => prisma.draw.findMany({
+      where: { ...orgScope(actor), lotteryType: { in: lotteryTypes }, opensAt: { lte: now } },
       orderBy: { cutoffAt: "desc" },
-      take: drawIndex + 1,
-      select: { id: true },
+      take: (drawIndex + 1) * lotteryTypes.length,
+      select: { id: true, name: true, lotteryType: true, drawDate: true, cutoffAt: true, status: true, laoFamilyId: true },
     })));
-    const drawIds = candidatesByLottery.map((draws) => draws[drawIndex]?.id).filter((id): id is string => Boolean(id));
+    const drawIds = candidatesByCategory.flatMap((draws) => groupReportDraws(draws)[drawIndex]?.memberIds ?? []);
     drawFilter = drawIds.length > 0
       ? Prisma.sql`AND b."drawId" IN (${Prisma.join(drawIds)})`
       : Prisma.sql`AND FALSE`;
@@ -168,7 +185,7 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
   const [draws, agents, settlements] = drawIds.length === 0 ? [[], [], []] : await Promise.all([
     prisma.draw.findMany({
       where: { ...orgScope(actor), id: { in: drawIds } },
-      select: { id: true, name: true, lotteryType: true, drawDate: true, cutoffAt: true, status: true },
+      select: { id: true, name: true, lotteryType: true, drawDate: true, cutoffAt: true, status: true, laoFamilyId: true },
     }),
     prisma.agent.findMany({
       where: { ...orgScope(actor), id: { in: agentIds } },
@@ -189,7 +206,7 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
     rowsByDraw.set(row.drawId, grouped);
   }
 
-  const drawRows: AccountingDrawRow[] = draws.map((draw) => {
+  const physicalDrawRows = draws.map((draw) => {
     const settled = SETTLED.includes(draw.status);
     const lines: AccountingAgentLine[] = (rowsByDraw.get(draw.id) ?? [])
       .map((row) => {
@@ -219,11 +236,59 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
     const sum = (pick: (line: AccountingAgentLine) => number) => round2(lines.reduce((total, line) => total + pick(line), 0));
     return {
       drawId: draw.id,
+      drawIds: [draw.id],
       name: draw.name,
       lotteryType: draw.lotteryType,
+      category: draw.lotteryType === "THAI_GOVERNMENT" ? "THAI_GOVERNMENT" as const : "LAO_COMBINED" as const,
       drawDate: draw.drawDate,
       cutoffAt: draw.cutoffAt,
       status: draw.status,
+      settled,
+      bills: sum((line) => line.bills),
+      winners: sum((line) => line.winners),
+      gross: sum((line) => line.gross),
+      commission: sum((line) => line.commission),
+      estimated: lines.some((line) => line.estimated),
+      net: sum((line) => line.net),
+      payout: sum((line) => line.payout),
+      profit: settled ? sum((line) => line.profit ?? 0) : null,
+      agents: lines,
+    };
+  });
+
+  const physicalById = new Map(physicalDrawRows.map((draw) => [draw.drawId, draw]));
+  const drawRows: AccountingDrawRow[] = groupReportDraws(draws).map((logical) => {
+    const members = logical.memberIds.map((id) => physicalById.get(id)).filter((row): row is NonNullable<typeof row> => Boolean(row));
+    const linesByAgent = new Map<string, AccountingAgentLine>();
+    for (const member of members) {
+      for (const line of member.agents) {
+        const current = linesByAgent.get(line.agentId);
+        if (!current) linesByAgent.set(line.agentId, { ...line });
+        else linesByAgent.set(line.agentId, {
+          ...current,
+          bills: current.bills + line.bills,
+          winners: current.winners + line.winners,
+          gross: round2(current.gross + line.gross),
+          commission: round2(current.commission + line.commission),
+          estimated: current.estimated || line.estimated,
+          net: round2(current.net + line.net),
+          payout: round2(current.payout + line.payout),
+          profit: current.profit === null || line.profit === null ? null : round2(current.profit + line.profit),
+        });
+      }
+    }
+    const lines = [...linesByAgent.values()].sort((a, b) => b.gross - a.gross || a.code.localeCompare(b.code));
+    const settled = members.length > 0 && members.every((row) => row.settled);
+    const sum = (pick: (line: AccountingAgentLine) => number) => round2(lines.reduce((total, line) => total + pick(line), 0));
+    return {
+      drawId: logical.id,
+      drawIds: logical.memberIds,
+      name: logical.name,
+      lotteryType: logical.lotteryType,
+      category: logical.category,
+      drawDate: logical.drawDate,
+      cutoffAt: logical.cutoffAt,
+      status: logical.status,
       settled,
       bills: sum((line) => line.bills),
       winners: sum((line) => line.winners),

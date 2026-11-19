@@ -31,6 +31,13 @@ export const ACCOUNTING_PERIOD_LABELS: Record<AccountingQuickPeriod, string> = {
 export const ACCOUNTING_LOTTERIES = ["THAI_GOVERNMENT", "LAO", "LAO_SET"] as const;
 export type AccountingLottery = (typeof ACCOUNTING_LOTTERIES)[number];
 
+export function normalizeAccountingLotteries(requested: readonly string[]): AccountingLottery[] {
+  const thai = requested.includes("THAI_GOVERNMENT");
+  const lao = requested.includes("LAO") || requested.includes("LAO_SET");
+  if ((!thai && !lao) || (thai && lao)) return [...ACCOUNTING_LOTTERIES];
+  return thai ? ["THAI_GOVERNMENT"] : ["LAO", "LAO_SET"];
+}
+
 export type AccountingQuery = {
   period: AccountingPeriodKind;
   /** YYYY-MM-DD สำหรับลิงก์กำหนดช่วงเองเดิม */
@@ -92,7 +99,7 @@ export function parseAccountingQuery(raw: Raw, now = new Date()): AccountingQuer
   const requestedPeriod = first(raw.period);
   const period = (isQuickPeriod(requestedPeriod) || requestedPeriod === "custom")
     ? requestedPeriod
-    : legacyPeriod[requestedPeriod] ?? "current_draw";
+    : legacyPeriod[requestedPeriod] ?? "all";
   const legacyLottery = first(raw.lottery);
   const lotteriesParam = first(raw.lotteries);
   const requestedLotteries = lotteriesParam === "none"
@@ -102,7 +109,7 @@ export function parseAccountingQuery(raw: Raw, now = new Date()): AccountingQuer
       : (ACCOUNTING_LOTTERIES as readonly string[]).includes(legacyLottery)
         ? [legacyLottery]
         : [...ACCOUNTING_LOTTERIES];
-  const lotteries = ACCOUNTING_LOTTERIES.filter((lottery) => requestedLotteries.includes(lottery));
+  const lotteries = lotteriesParam === "none" ? [] : normalizeAccountingLotteries(requestedLotteries);
   const compareRaw = first(raw.compare);
   const compare: AccountingCompareMode = compareRaw === "custom" ? "custom" : compareRaw === "1" || compareRaw === "previous" ? "previous" : "none";
   const unitRaw = first(raw.unit);
@@ -408,10 +415,5 @@ export function previousPeriodLabel(query: AccountingQuery, now = new Date()): s
 export function accountingLotterySelectionLabel(lotteries: readonly AccountingLottery[]): string {
   if (lotteries.length === ACCOUNTING_LOTTERIES.length) return "ทุกประเภท";
   if (lotteries.length === 0) return "ยังไม่ได้เลือกประเภทหวย";
-  const labels: Record<AccountingLottery, string> = {
-    THAI_GOVERNMENT: "หวยรัฐบาล",
-    LAO: "หวยลาว",
-    LAO_SET: "หวยลาวชุด",
-  };
-  return lotteries.map((lottery) => labels[lottery]).join(" + ");
+  return lotteries.includes("THAI_GOVERNMENT") ? "หวยรัฐบาล" : "หวยลาวและหวยลาวชุด";
 }

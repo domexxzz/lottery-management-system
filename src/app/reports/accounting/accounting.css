@@ -211,8 +211,17 @@
 .acc-check { display: inline-grid; width: 18px; height: 18px; flex: none; place-items: center; border: 1.5px solid #9fb6cc; border-radius: 5px; background: #fff; color: #123b62; font-size: .72rem; font-weight: 900; }
 .accounting-page .acc-lottery-chips button[aria-pressed="true"] .acc-check { border-color: #fff; }
 .acc-lottery-hint { margin: -.2rem 0 0; padding-left: calc(76px + .7rem); color: #526579; font-size: .8rem; }
+.acc-report-picker { display: grid; gap: .55rem; padding-top: .15rem; }
+.acc-report-picker-row { display: grid; grid-template-columns: minmax(190px, 260px) minmax(260px, 520px); gap: .65rem; align-items: center; }
+.accounting-page .acc-report-type { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: .5rem; padding: .55rem .85rem; border: 1px solid #c8dbef; border-radius: 11px; color: #244a70; background: #fff; box-shadow: none; font-weight: 800; cursor: pointer; }
+.accounting-page .acc-report-type[aria-pressed="true"] { border-color: #1769e0; color: #fff; background: #1769e0; }
+.acc-report-picker-row .app-dropdown { margin-top: 0; }
+.acc-report-picker-row .app-dropdown-trigger { min-height: 44px; border-color: #c8dbef; border-radius: 11px; font-weight: 750; }
 @media (max-width: 700px) {
   .acc-lottery-hint { padding-left: 0; font-size: .76rem; }
+  .acc-report-picker-row { grid-template-columns: minmax(0, 42%) minmax(0, 58%); gap: .4rem; }
+  .accounting-page .acc-report-type { min-height: 48px; padding: .4rem .45rem; font-size: .78rem; line-height: 1.2; }
+  .acc-report-picker-row .app-dropdown-trigger { min-height: 48px; padding-inline: .55rem; font-size: .78rem; }
 }
 
 /* เลือกเอง: แถวหน่วย (วัน/งวด/สัปดาห์/เดือน) แล้วแถว A เทียบกับ B */

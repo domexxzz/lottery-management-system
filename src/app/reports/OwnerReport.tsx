@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { ALL_DRAWS, drawShortLabel, isAllLotteries, reportLotteryParam, type AllDrawsMoney, type DrawMoney, type OwnerReport as Report, type ReportDraw, type WinnerSummary } from "@/lib/reports/owner-report";
-import { lotteryLabel } from "@/lib/bills/betting";
 import { BREAKDOWN_DAYS, type LotteryBreakdown } from "@/lib/reports/owner-report";
+import { reportCategoryLabel } from "@/lib/reports/draw-groups";
 import { COUNT_FORMAT, MONEY_FORMAT } from "@/lib/reports/terms";
 import { InfoTip } from "./InfoTip";
 import { ProfitReceipt } from "./ProfitReceipt";
@@ -27,11 +27,11 @@ const CUTOFF_TIME = new Intl.DateTimeFormat("th-TH", { hour: "2-digit", minute: 
 
 /** ชื่องวดเต็มที่แยกงวดวันเดียวกันออกจากกันได้ เช่น "หวยรัฐบาล 16 พ.ย. 69 · ปิด 14:00" */
 function drawFullLabel(draw: ReportDraw): string {
-  return `${lotteryLabel(draw.lotteryType)} ${drawShortLabel(draw)} · ปิด ${CUTOFF_TIME.format(draw.cutoffAt)}`;
+  return `${reportCategoryLabel(draw.category)} ${drawShortLabel(draw)} · ปิด ${CUTOFF_TIME.format(draw.cutoffAt)}`;
 }
 
 /** ป้ายประเภทหวยแบบสั้นใต้แท่งกราฟ */
-const LOTTERY_SHORT: Record<string, string> = { THAI_GOVERNMENT: "รัฐบาล", LAO: "ลาว", LAO_SET: "ลาวชุด" };
+const LOTTERY_SHORT: Record<string, string> = { THAI_GOVERNMENT: "รัฐบาล", LAO_COMBINED: "ลาว+ลาวชุด" };
 
 /** ตัวเลขสั้นบนกราฟ เช่น 24.5K, 1.2M */
 function short(value: number): string {
@@ -67,7 +67,7 @@ function Comparison({ selected, previous }: { selected: DrawMoney; previous: Dra
 function NetChart({ trend, selectedId }: { trend: DrawMoney[]; selectedId: string }) {
   const width = 720;
   // แท่งมาจากหลายประเภทหวย (ดูทุกงวดของทุกประเภท) ต้องบอกประเภทใต้วันที่ วันเดียวกันจะได้ไม่สับสน
-  const mixed = new Set(trend.map((row) => row.draw.lotteryType)).size > 1;
+  const mixed = new Set(trend.map((row) => row.draw.category)).size > 1;
   const height = mixed ? 244 : 230;
   const top = 26;
   const bottom = mixed ? 48 : 34;
@@ -93,7 +93,7 @@ function NetChart({ trend, selectedId }: { trend: DrawMoney[]; selectedId: strin
         const selected = row.draw.id === selectedId;
         const tone = !row.settled ? "is-pending" : value < 0 ? "is-loss" : "is-profit";
         return (
-          <a key={row.draw.id} href={`/reports?draw=${row.draw.id}`} aria-label={`${lotteryLabel(row.draw.lotteryType)} งวด ${drawShortLabel(row.draw)} ${row.settled ? `${value < 0 ? "ขาดทุน" : "กำไร"} ${MONEY.format(Math.abs(value))} บาท` : "ยังไม่คำนวณ"}`}>
+          <a key={row.draw.id} href={`/reports?draw=${row.draw.id}`} aria-label={`${reportCategoryLabel(row.draw.category)} งวด ${drawShortLabel(row.draw)} ${row.settled ? `${value < 0 ? "ขาดทุน" : "กำไร"} ${MONEY.format(Math.abs(value))} บาท` : "ยังไม่คำนวณ"}`}>
             <g className={`or-chart-bar ${tone}${selected ? " is-selected" : ""}`}>
               <rect x={slot * index} y={0} width={slot} height={height} className="or-chart-hit" />
               {row.settled
@@ -103,7 +103,7 @@ function NetChart({ trend, selectedId }: { trend: DrawMoney[]; selectedId: strin
                 {row.settled ? short(value) : "รอผล"}
               </text>
               <text x={x + barWidth / 2} y={height - (mixed ? 24 : 10)} textAnchor="middle" className="or-chart-label">{drawShortLabel(row.draw)}</text>
-              {mixed && <text x={x + barWidth / 2} y={height - 8} textAnchor="middle" className="or-chart-label">{LOTTERY_SHORT[row.draw.lotteryType] ?? ""}</text>}
+              {mixed && <text x={x + barWidth / 2} y={height - 8} textAnchor="middle" className="or-chart-label">{LOTTERY_SHORT[row.draw.category] ?? ""}</text>}
             </g>
           </a>
         );
@@ -131,7 +131,7 @@ function TrendList({ trend, selectedId, mode }: { trend: DrawMoney[]; selectedId
         return (
           <li key={row.draw.id} className={row.draw.id === selectedId ? "is-selected" : undefined}>
             <a href={`/reports?draw=${row.draw.id}`}>
-              <span className="or-trend-name">{LOTTERY_SHORT[row.draw.lotteryType] ?? ""} {drawShortLabel(row.draw)}</span>
+              <span className="or-trend-name">{LOTTERY_SHORT[row.draw.category] ?? ""} {drawShortLabel(row.draw)}</span>
               <span className={`or-trend-bar ${tone}`}><i style={{ width: `${amount === null ? 0 : Math.max(Math.abs(amount) / max * 100, amount === 0 ? 0 : 3)}%` }} /></span>
               <strong className={tone}>{amount === null ? "รอผล" : `${mode === "net" && amount < 0 ? "−" : mode === "net" && amount > 0 ? "+" : ""}${MONEY.format(Math.abs(amount))}`}</strong>
             </a>
@@ -160,7 +160,7 @@ function DrawProgress({ status, cutoffAt }: { status: string; cutoffAt: Date }) 
 /** ยอดขายรายงวดเมื่อยังไม่มีงวดที่คำนวณผล วาดฝั่ง Server เป็น SVG */
 function SalesChart({ trend, selectedId }: { trend: DrawMoney[]; selectedId: string }) {
   const width = 720;
-  const mixed = new Set(trend.map((row) => row.draw.lotteryType)).size > 1;
+  const mixed = new Set(trend.map((row) => row.draw.category)).size > 1;
   const height = mixed ? 214 : 200;
   const top = 26;
   const bottom = mixed ? 48 : 34;
@@ -179,13 +179,13 @@ function SalesChart({ trend, selectedId }: { trend: DrawMoney[]; selectedId: str
         const x = offset + slot * index + (slot - barWidth) / 2;
         const y = top + plot - barHeight;
         return (
-          <a key={row.draw.id} href={`/reports?draw=${row.draw.id}`} aria-label={`${lotteryLabel(row.draw.lotteryType)} งวด ${drawShortLabel(row.draw)} ยอดขาย ${MONEY.format(value)} บาท รอผล`}>
+          <a key={row.draw.id} href={`/reports?draw=${row.draw.id}`} aria-label={`${reportCategoryLabel(row.draw.category)} งวด ${drawShortLabel(row.draw)} ยอดขาย ${MONEY.format(value)} บาท รอผล`}>
             <g className={`or-chart-bar is-sales${row.draw.id === selectedId ? " is-selected" : ""}`}>
               <rect x={offset + slot * index} y={0} width={slot} height={height} className="or-chart-hit" />
               <rect x={x} y={y} width={barWidth} height={barHeight} rx="4" />
               <text x={x + barWidth / 2} y={y - 7} textAnchor="middle" className="or-chart-value">{short(value)}</text>
               <text x={x + barWidth / 2} y={height - (mixed ? 24 : 10)} textAnchor="middle" className="or-chart-label">{drawShortLabel(row.draw)}</text>
-              {mixed && <text x={x + barWidth / 2} y={height - 8} textAnchor="middle" className="or-chart-label">{LOTTERY_SHORT[row.draw.lotteryType] ?? ""}</text>}
+              {mixed && <text x={x + barWidth / 2} y={height - 8} textAnchor="middle" className="or-chart-label">{LOTTERY_SHORT[row.draw.category] ?? ""}</text>}
             </g>
           </a>
         );
@@ -205,7 +205,7 @@ export function OwnerReport({ report }: { report: Report }) {
   const otherPrizes = prizes.slice(5);
   const biggestPayout = prizes.find((prize) => prize.payout.isPositive());
   const allLotteries = isAllLotteries(report.lotteries);
-  const lotteryName = allLotteries ? "ทุกประเภท" : report.lotteries.map((lottery) => lotteryLabel(lottery)).join(" + ");
+  const lotteryName = allLotteries ? "ทุกประเภท" : report.lotteries.includes("THAI_GOVERNMENT") ? "หวยรัฐบาล" : "หวยลาวและหวยลาวชุด";
   const scopeWord = all ? "ช่วงนี้" : "งวดนี้";
 
   return (
@@ -224,7 +224,7 @@ export function OwnerReport({ report }: { report: Report }) {
             </>
           ) : (
             <>
-              <h1>{lotteryLabel(draw!.lotteryType)} งวด {drawShortLabel(draw!)}</h1>
+              <h1>{reportCategoryLabel(draw!.category)} งวด {drawShortLabel(draw!)}</h1>
               <p>ปิดรับ {CUTOFF_TIME.format(draw!.cutoffAt)} น. · สถานะงวด: <strong>{STATUS_LABEL[draw!.status] ?? draw!.status}</strong></p>
             </>
           )}
@@ -237,7 +237,8 @@ export function OwnerReport({ report }: { report: Report }) {
         draws={report.draws.map((row) => ({
           id: row.id,
           lotteryType: row.lotteryType,
-          fullLabel: `${lotteryLabel(row.lotteryType)} · ${drawShortLabel(row)}`,
+          category: row.category,
+          fullLabel: `${reportCategoryLabel(row.category)} · ${drawShortLabel(row)}`,
           open: row.status === "OPEN",
           settled: row.status === "SETTLED" || row.status === "CLOSED",
         }))}
@@ -480,7 +481,7 @@ function LotteryBreakdownTable({ rows, range, lotteryParam }: { rows: LotteryBre
         <tbody>
           {rows.map((row) => (
             <tr key={row.lotteryType}>
-              <td data-label="ประเภท"><Link href={`/reports?lottery=${row.lotteryType}`}><strong>{lotteryLabel(row.lotteryType)}</strong></Link></td>
+              <td data-label="ประเภท"><Link href={`/reports?lottery=${row.lotteryType === "LAO_COMBINED" ? "LAO,LAO_SET" : "THAI_GOVERNMENT"}`}><strong>{reportCategoryLabel(row.lotteryType)}</strong></Link></td>
               {cells(row, false)}
             </tr>
           ))}

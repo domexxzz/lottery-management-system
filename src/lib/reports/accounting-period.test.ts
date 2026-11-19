@@ -4,10 +4,10 @@ import { accountingHref, compareValueLabel, comparisonText, customCompareQueries
 const NOW = new Date("2026-11-18T05:00:00Z"); // พุธ 18 พ.ย. 2569 เวลาไทย
 
 describe("ช่วงเวลาของสรุปบัญชี", () => {
-  test("ค่าเริ่มต้นคืองวดนี้ ทุกประเภทหวย และยังไม่เปิดการเทียบ", () => {
+  test("ค่าเริ่มต้นคือทุกงวด ทุกประเภทหวย และยังไม่เปิดการเทียบ", () => {
     const query = parseAccountingQuery({}, NOW);
     expect(query).toMatchObject({
-      period: "current_draw",
+      period: "all",
       compare: "none",
       lotteries: ["THAI_GOVERNMENT", "LAO", "LAO_SET"],
       agentId: "",
@@ -29,7 +29,7 @@ describe("ช่วงเวลาของสรุปบัญชี", () => {
     expect(resolveRange(parseAccountingQuery({ period: "previous_year" }, NOW), NOW)).toMatchObject({ from: "2025-01-01", to: "2025-12-31" });
   });
 
-  test("ลิงก์เก็บการเทียบ ตัวกรอง Agent และหลายประเภทหวย", () => {
+  test("ลิงก์เก็บการเทียบ ตัวกรอง Agent และรวมรัฐบาลกับลาวเป็นทุกประเภท", () => {
     const query = parseAccountingQuery({
       period: "this_week",
       agentId: "a1",
@@ -38,7 +38,7 @@ describe("ช่วงเวลาของสรุปบัญชี", () => {
     }, NOW);
     expect(query.compare).toBe("previous");
     expect(accountingHref("/reports/accounting", query, {})).toBe(
-      "/reports/accounting?period=this_week&agentId=a1&lotteries=THAI_GOVERNMENT%2CLAO&compare=previous",
+      "/reports/accounting?period=this_week&agentId=a1&compare=previous",
     );
   });
 
@@ -66,9 +66,10 @@ describe("ช่วงเวลาของสรุปบัญชี", () => {
     expect(comparisonText(parseAccountingQuery({ period: "all" }, NOW), NOW)).toBeNull();
   });
 
-  test("เลือกหลายประเภทได้ เรียงคงที่ รองรับลิงก์เดิม และเลือกศูนย์ประเภทได้", () => {
-    expect(parseAccountingQuery({ lotteries: "LAO_SET,THAI_GOVERNMENT" }, NOW).lotteries).toEqual(["THAI_GOVERNMENT", "LAO_SET"]);
-    expect(parseAccountingQuery({ lottery: "LAO" }, NOW).lotteries).toEqual(["LAO"]);
+  test("ลาวและลาวชุดเป็นหมวดเดียว รองรับลิงก์เดิม และเลือกศูนย์ประเภทได้", () => {
+    expect(parseAccountingQuery({ lotteries: "LAO_SET,THAI_GOVERNMENT" }, NOW).lotteries).toEqual(["THAI_GOVERNMENT", "LAO", "LAO_SET"]);
+    expect(parseAccountingQuery({ lottery: "LAO" }, NOW).lotteries).toEqual(["LAO", "LAO_SET"]);
+    expect(parseAccountingQuery({ lotteries: "LAO_SET" }, NOW).lotteries).toEqual(["LAO", "LAO_SET"]);
     expect(parseAccountingQuery({ period: "month" }, NOW).period).toBe("current_month");
     const none = parseAccountingQuery({ lotteries: "none" }, NOW);
     expect(none.lotteries).toEqual([]);

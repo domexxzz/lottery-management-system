@@ -75,11 +75,13 @@ describe("สรุปบัญชี", () => {
     const now = new Date();
     // ยึดวันออกผลเป็นวันนี้เวลาไทย ไม่ผูกกับ cutoff +1 ชั่วโมงซึ่งอาจข้ามวันเมื่อเทสใกล้เที่ยงคืน
     const drawDate = new Date(`${bangkokToday(now)}T00:00:00Z`);
+    const laoFamilyId = `family-${Date.now()}-latest`;
+    const previousFamilyId = `family-${Date.now()}-previous`;
     const [laoPrize, laoSetPrize, laoDraw, laoSetDraw] = await Promise.all([
       prisma.prizeType.create({ data: { organizationId: f.org.id, lotteryType: "LAO", code: 101, name: "3 ตัวบนลาว", digits: 3, matchRule: "EXACT", payoutRate: 650 } }),
       prisma.prizeType.create({ data: { organizationId: f.org.id, lotteryType: "LAO_SET", code: 201, name: "เลขชุด 4 ตัว", digits: 4, matchRule: "EXACT", payoutRate: 25500 } }),
-      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO", name: "ลาวทดสอบ", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 3_600_000), status: "OPEN" } }),
-      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO_SET", name: "ลาวชุดทดสอบ", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 3_600_000), status: "OPEN" } }),
+      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO", laoFamilyId, name: "ลาวทดสอบ", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 3_600_000), status: "OPEN" } }),
+      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO_SET", laoFamilyId, name: "ลาวชุดทดสอบ", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 3_600_000), status: "OPEN" } }),
     ]);
     await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ไทย", items: [bet(f.prizeTypes.threeTop.id, "123", "100")] });
     await placeBill(f.actors.AGENT1, { drawId: laoDraw.id, title: "ลาว", items: [bet(laoPrize.id, "456", "200")] });
@@ -87,32 +89,32 @@ describe("สรุปบัญชี", () => {
 
     const previousDraws = await Promise.all([
       prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "THAI_GOVERNMENT", name: "ไทยงวดก่อน", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
-      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO", name: "ลาวงวดก่อน", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
-      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO_SET", name: "ลาวชุดงวดก่อน", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
+      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO", laoFamilyId: previousFamilyId, name: "ลาวงวดก่อน", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
+      prisma.draw.create({ data: { organizationId: f.org.id, lotteryType: "LAO_SET", laoFamilyId: previousFamilyId, name: "ลาวชุดงวดก่อน", drawDate, opensAt: new Date(now.getTime() - 3_600_000), cutoffAt: new Date(now.getTime() + 1_800_000), status: "OPEN" } }),
     ]);
     await placeBill(f.actors.AGENT1, { drawId: previousDraws[0]!.id, title: "ไทยก่อน", items: [bet(f.prizeTypes.threeTop.id, "111", "10")] });
     await placeBill(f.actors.AGENT1, { drawId: previousDraws[1]!.id, title: "ลาวก่อน", items: [bet(laoPrize.id, "222", "20")] });
     await placeBill(f.actors.AGENT2, { drawId: previousDraws[2]!.id, title: "ลาวชุดก่อน", items: [bet(laoSetPrize.id, "3333", "30")] });
 
     const thaiLao = await loadAccountingReport(f.actors.OWNER, parseAccountingQuery({ lotteries: "THAI_GOVERNMENT,LAO" }));
-    expect(thaiLao.draws.map((draw) => draw.lotteryType).sort()).toEqual(["LAO", "THAI_GOVERNMENT"]);
-    expect(thaiLao.totals).toMatchObject({ gross: 300, bills: 2, draws: 2 });
+    expect(thaiLao.draws.map((draw) => draw.category).sort()).toEqual(["LAO_COMBINED", "LAO_COMBINED", "THAI_GOVERNMENT", "THAI_GOVERNMENT"]);
+    expect(thaiLao.totals).toMatchObject({ gross: 390, bills: 6, draws: 4 });
 
     const laoAndSet = await loadAccountingReport(f.actors.OWNER, parseAccountingQuery({ lotteries: "LAO,LAO_SET" }));
-    expect(laoAndSet.draws.map((draw) => draw.lotteryType).sort()).toEqual(["LAO", "LAO_SET"]);
-    expect(laoAndSet.totals).toMatchObject({ gross: 230, bills: 2, draws: 2 });
+    expect(laoAndSet.draws.map((draw) => draw.category)).toEqual(["LAO_COMBINED", "LAO_COMBINED"]);
+    expect(laoAndSet.totals).toMatchObject({ gross: 280, bills: 4, draws: 2 });
 
     const onlySetAgent2 = await loadAccountingReport(f.actors.OWNER, parseAccountingQuery({ lotteries: "LAO_SET", agentId: f.agents.agent2.id }));
-    expect(onlySetAgent2.draws.map((draw) => draw.lotteryType)).toEqual(["LAO_SET"]);
-    expect(onlySetAgent2.totals).toMatchObject({ gross: 30, bills: 1, draws: 1 });
+    expect(onlySetAgent2.draws.map((draw) => draw.category)).toEqual(["LAO_COMBINED", "LAO_COMBINED"]);
+    expect(onlySetAgent2.totals).toMatchObject({ gross: 60, bills: 2, draws: 2 });
 
     const setThisMonthAgent2 = await loadAccountingReport(f.actors.OWNER, parseAccountingQuery({ period: "current_month", lotteries: "LAO_SET", agentId: f.agents.agent2.id }));
-    expect(setThisMonthAgent2.draws.every((draw) => draw.lotteryType === "LAO_SET")).toBe(true);
+    expect(setThisMonthAgent2.draws.every((draw) => draw.category === "LAO_COMBINED")).toBe(true);
     expect(setThisMonthAgent2.totals).toMatchObject({ gross: 60, bills: 2, draws: 2 });
 
     const previous = await loadAccountingReport(f.actors.OWNER, parseAccountingQuery({ period: "previous_draw" }));
-    expect(new Set(previous.draws.map((draw) => draw.name))).toEqual(new Set(["ไทยงวดก่อน", "ลาวงวดก่อน", "ลาวชุดงวดก่อน"]));
-    expect(previous.totals).toMatchObject({ gross: 60, bills: 3, draws: 3 });
+    expect(new Set(previous.draws.map((draw) => draw.name))).toEqual(new Set(["ไทยงวดก่อน", "ลาวงวดก่อน"]));
+    expect(previous.totals).toMatchObject({ gross: 60, bills: 3, draws: 2 });
   });
 });
 

@@ -36,7 +36,7 @@ async function sellAndSettle() {
 describe("รายงาน Owner", () => {
   test("ตัวเลขตรงกับผลคำนวณปิดงวด และสมการ ยอดขาย − จ่าย − คอม = กำไร", async () => {
     await sellAndSettle();
-    const report = await loadOwnerReport(f.actors.OWNER);
+    const report = await loadOwnerReport(f.actors.OWNER, f.draw.id);
     expect(report).not.toBeNull();
     const selected = report!.selected!;
 
@@ -131,20 +131,20 @@ describe("รายงาน Owner", () => {
     await prisma.draw.create({
       data: { organizationId: f.org.id, lotteryType: "LAO", name: "หวยลาว", opensAt: new Date(Date.now() - 60_000), cutoffAt: new Date(Date.now() + 60_000) },
     });
-    expect(parseReportLottery("LAO_SET,THAI_GOVERNMENT")).toEqual(["THAI_GOVERNMENT", "LAO_SET"]);
+    expect(parseReportLottery("LAO_SET,THAI_GOVERNMENT")).toEqual(["THAI_GOVERNMENT", "LAO", "LAO_SET"]);
     expect(parseReportLottery("x")).toEqual(["THAI_GOVERNMENT", "LAO", "LAO_SET"]);
 
     const thaiLao = await loadOwnerReport(f.actors.OWNER, "all", "THAI_GOVERNMENT,LAO");
-    expect(thaiLao!.lotteries).toEqual(["THAI_GOVERNMENT", "LAO"]);
+    expect(thaiLao!.lotteries).toEqual(["THAI_GOVERNMENT", "LAO", "LAO_SET"]);
     expect(thaiLao!.all!.drawCount).toBe(2);
     expect(thaiLao!.all!.gross.toFixed(2)).toBe("810.00");
-    expect(thaiLao!.breakdown.map((row) => row.lotteryType)).toEqual(["THAI_GOVERNMENT", "LAO"]);
+    expect(thaiLao!.breakdown.map((row) => row.lotteryType)).toEqual(["THAI_GOVERNMENT", "LAO_COMBINED"]);
 
     const laoOnly = await loadOwnerReport(f.actors.OWNER, "all", "LAO");
     expect(laoOnly!.all!.drawCount).toBe(1);
     expect(laoOnly!.all!.gross.toFixed(2)).toBe("0.00");
     expect(laoOnly!.agents).toHaveLength(0);
-    expect(laoOnly!.breakdown).toHaveLength(0);
+    expect(laoOnly!.breakdown.map((row) => row.lotteryType)).toEqual(["LAO_COMBINED"]);
   });
 
   test("Agent เปิดรายงานภาพรวมไม่ได้", async () => {
