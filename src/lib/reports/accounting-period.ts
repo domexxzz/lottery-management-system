@@ -24,7 +24,7 @@ export const ACCOUNTING_PERIOD_LABELS: Record<AccountingQuickPeriod, string> = {
   current_month: "เดือนนี้",
   "3m": "3 เดือน",
   "6m": "6 เดือน",
-  current_year: "รายปี",
+  current_year: "ปีนี้",
   previous_year: "ปีที่แล้ว",
 };
 
@@ -39,9 +39,33 @@ export type AccountingQuery = {
   agentId: string;
   /** ประเภทหวยที่นำมาคำนวณ เลือกได้หลายประเภทและเรียงตามลำดับมาตรฐานเสมอ */
   lotteries: AccountingLottery[];
-  compareA: AccountingQuickPeriod;
-  compareB: AccountingQuickPeriod;
+  /**
+   * การเปรียบเทียบ
+   * - none: ไม่เทียบ
+   * - previous: เทียบกับช่วงก่อนหน้าแบบเดียวกัน (ระบบเลือกช่วงให้)
+   * - custom: เลือกเองทั้งสองฝั่ง โดยเลือกหน่วยก่อน (วัน/งวด/สัปดาห์/เดือน) แล้ว A กับ B เป็นหน่วยเดียวกันเสมอ
+   */
+  compare: AccountingCompareMode;
+  compareUnit: CompareUnit;
+  /**
+   * ค่าของช่วง A/B ตามหน่วย
+   * วัน: YYYY-MM-DD · สัปดาห์: วันจันทร์ YYYY-MM-DD · เดือน: YYYY-MM · งวด: id ของงวด ("" = ให้หน้าเลือกงวดล่าสุด)
+   */
+  compareA: string;
+  compareB: string;
+  /** ใช้ภายใน: ดูเฉพาะงวดเหล่านี้ (เปรียบเทียบรายงวด) */
+  drawIds?: string[];
 };
+
+export type AccountingCompareMode = "none" | "previous" | "custom";
+export type DateSpan = { from: string; to: string };
+
+export const COMPARE_UNITS = ["day", "draw", "week", "month"] as const;
+export type CompareUnit = (typeof COMPARE_UNITS)[number];
+export const COMPARE_UNIT_LABEL: Record<CompareUnit, string> = { day: "วัน", draw: "งวด", week: "สัปดาห์", month: "เดือน" };
+
+/** ช่วงที่แสดงเป็นชิปหลักของหน้าสรุปบัญชี ที่เหลืออยู่ในเมนู "ช่วงอื่น" */
+export const ACCOUNTING_MAIN_PERIODS: readonly AccountingPeriodKind[] = ["current_draw", "current_month", "current_year", "custom"];
 
 export type ResolvedRange = { from: string; to: string; label: string };
 
@@ -79,17 +103,111 @@ export function parseAccountingQuery(raw: Raw, now = new Date()): AccountingQuer
         ? [legacyLottery]
         : [...ACCOUNTING_LOTTERIES];
   const lotteries = ACCOUNTING_LOTTERIES.filter((lottery) => requestedLotteries.includes(lottery));
-  const compareA = first(raw.compareA);
-  const compareB = first(raw.compareB);
-  return {
+  const compareRaw = first(raw.compare);
+  const compare: AccountingCompareMode = compareRaw === "custom" ? "custom" : compareRaw === "1" || compareRaw === "previous" ? "previous" : "none";
+  const unitRaw = first(raw.unit);
+  const compareUnit: CompareUnit = (COMPARE_UNITS as readonly string[]).includes(unitRaw) ? unitRaw as CompareUnit : "month";
+  const defaults = defaultCompareValues(compareUnit, now);
+  const value = (key: string, fallback: string) => {
+    const raw_ = first(raw[key]);
+    return isCompareValue(compareUnit, raw_) ? (compareUnit === "week" ? mondayOf(raw_) : raw_) : fallback;
+  };
+  const query: AccountingQuery = {
     period,
     from: isDate(first(raw.from)) ? first(raw.from) : "",
     to: isDate(first(raw.to)) ? first(raw.to) : "",
     agentId: first(raw.agentId).slice(0, 64),
     lotteries,
-    compareA: isQuickPeriod(compareA) ? compareA : "current_draw",
-    compareB: isQuickPeriod(compareB) ? compareB : "previous_draw",
+    compare,
+    compareUnit,
+    compareA: value("a", defaults.a),
+    compareB: value("b", defaults.b),
+    // ส่งออกของงวดเดียว (มาจากการเทียบรายงวด)
+    ...(/^[A-Za-z0-9_-]{8,64}$/.test(first(raw.draw)) ? { drawIds: [first(raw.draw)] } : first(raw.draw) === "none" ? { drawIds: [] } : {}),
   };
+  // ช่วงที่เทียบกับช่วงก่อนไม่ได้ (ทั้งหมด/ปีที่แล้ว/งวดที่แล้ว) ถือว่าไม่เทียบ ไม่ค้างโหมดเทียบไว้ในลิงก์
+  if (query.compare === "previous" && !previousPeriodQuery(query, now)) query.compare = "none";
+  return query;
+}
+
+function isCompareValue(unit: CompareUnit, value: string): boolean {
+  if (unit === "month") return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+  if (unit === "draw") return /^[A-Za-z0-9_-]{8,64}$/.test(value);
+  return isDate(value);
+}
+
+/** ค่าเริ่มต้นเมื่อเลือกหน่วย: ช่วงล่าสุด (A) เทียบกับช่วงก่อนหน้า (B) งวดให้หน้าเลือกจากรายการงวด */
+export function defaultCompareValues(unit: CompareUnit, now = new Date()): { a: string; b: string } {
+  const today = bangkokToday(now);
+  switch (unit) {
+    case "day":
+      return { a: today, b: shiftDays(today, -1) };
+    case "week": {
+      const monday = mondayOf(today);
+      return { a: monday, b: shiftDays(monday, -7) };
+    }
+    case "month": {
+      const [year, month] = today.split("-").map(Number);
+      return { a: today.slice(0, 7), b: new Date(Date.UTC(year!, month! - 2, 1)).toISOString().slice(0, 7) };
+    }
+    case "draw":
+      return { a: "", b: "" };
+  }
+}
+
+/** ช่วงวันที่ของค่าในหน่วยวัน/สัปดาห์/เดือน */
+export function compareSpan(unit: Exclude<CompareUnit, "draw">, value: string): DateSpan {
+  if (unit === "day") return { from: value, to: value };
+  if (unit === "week") return { from: value, to: shiftDays(value, 6) };
+  return monthSpan(value);
+}
+
+/** ชื่อของค่าในหน่วยวัน/สัปดาห์/เดือน เช่น "19 พ.ย. 2569" · "สัปดาห์ 16 – 22 พ.ย. 2569" · "มีนาคม 2569" */
+export function compareValueLabel(unit: Exclude<CompareUnit, "draw">, value: string): string {
+  if (unit === "day") return DAY.format(utc(value));
+  if (unit === "week") return `สัปดาห์ ${DAY.format(utc(value))} – ${DAY.format(utc(shiftDays(value, 6)))}`;
+  return MONTH.format(utc(`${value}-01`));
+}
+
+const WEEKDAY = new Intl.DateTimeFormat("th-TH", { weekday: "short", timeZone: "UTC" });
+
+/** รายการวันให้เลือก (ล่าสุดก่อน) เป็นวันที่แบบไทย ไม่ขึ้นกับรูปแบบวันที่ของเบราว์เซอร์ */
+export function recentDays(count: number, now = new Date()): { value: string; label: string }[] {
+  const today = bangkokToday(now);
+  return Array.from({ length: count }, (_, index) => {
+    const value = shiftDays(today, -index);
+    const label = `${WEEKDAY.format(utc(value))} ${DAY.format(utc(value))}`;
+    return { value, label: index === 0 ? `วันนี้ (${label})` : index === 1 ? `เมื่อวาน (${label})` : label };
+  });
+}
+
+/** รายการสัปดาห์ให้เลือก (ล่าสุดก่อน) value = วันจันทร์ */
+export function recentWeeks(count: number, now = new Date()): { value: string; label: string }[] {
+  const monday = mondayOf(bangkokToday(now));
+  return Array.from({ length: count }, (_, index) => {
+    const value = shiftDays(monday, -7 * index);
+    const label = compareValueLabel("week", value).replace(/^สัปดาห์ /, "");
+    return { value, label: index === 0 ? `สัปดาห์นี้ (${label})` : index === 1 ? `สัปดาห์ที่แล้ว (${label})` : label };
+  });
+}
+
+/** ช่วงเดือนเต็ม (YYYY-MM) → วันแรกถึงวันสุดท้ายของเดือน */
+export function monthSpan(month: string): DateSpan {
+  const [year, value] = month.split("-").map(Number);
+  return {
+    from: `${month}-01`,
+    to: new Date(Date.UTC(year!, value!, 0)).toISOString().slice(0, 10),
+  };
+}
+
+/** รายการเดือนให้เลือก (ล่าสุดก่อน) เช่น { value: "2026-11", label: "พฤศจิกายน 2569" } */
+export function recentMonths(count: number, now = new Date()): { value: string; label: string }[] {
+  const today = bangkokToday(now);
+  const [year, month] = today.split("-").map(Number);
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(Date.UTC(year!, month! - 1 - index, 1));
+    return { value: date.toISOString().slice(0, 7), label: MONTH.format(date) };
+  });
 }
 
 const MONTH = new Intl.DateTimeFormat("th-TH", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -174,9 +292,116 @@ export function accountingHref(base: string, query: AccountingQuery, change: Par
   if (next.agentId) params.set("agentId", next.agentId);
   if (next.lotteries.length === 0) params.set("lotteries", "none");
   else if (next.lotteries.length !== ACCOUNTING_LOTTERIES.length) params.set("lotteries", next.lotteries.join(","));
-  if (next.compareA !== "current_draw") params.set("compareA", next.compareA);
-  if (next.compareB !== "previous_draw") params.set("compareB", next.compareB);
+  // งวดที่ระบุ (ส่งออกของการเทียบรายงวด) "none" = ไม่มีงวดให้ดู ส่งออกจึงว่างตรงกับหน้าจอ
+  if (next.drawIds) params.set("draw", next.drawIds[0] ?? "none");
+  if (next.compare === "previous") params.set("compare", "previous");
+  if (next.compare === "custom") {
+    params.set("compare", "custom");
+    params.set("unit", next.compareUnit);
+    if (next.compareA) params.set("a", next.compareA);
+    if (next.compareB) params.set("b", next.compareB);
+  }
   return `${base}?${params}`;
+}
+
+/**
+ * ช่วงก่อนหน้าแบบเดียวกัน สำหรับสวิตช์ "เทียบกับช่วงก่อนหน้า"
+ * - งวดนี้ → งวดที่แล้ว · วันนี้ → เมื่อวาน · สัปดาห์นี้ → สัปดาห์ที่แล้ว
+ * - เดือนนี้ → เดือนก่อนถึงวันที่เดียวกัน · ปีนี้ → ปีก่อนถึงวันเดียวกัน (เทียบช่วงเวลาที่ยาวเท่ากัน)
+ * - ช่วงอื่น → ช่วงยาวเท่ากันที่อยู่ก่อนหน้าทันที
+ * null = เทียบไม่ได้ (ข้อมูลทั้งหมด / งวดที่แล้ว / ปีที่แล้ว)
+ */
+export function previousPeriodQuery(query: AccountingQuery, now = new Date()): AccountingQuery | null {
+  const base = { ...query, compare: "none" as const };
+  switch (query.period) {
+    case "all":
+    case "previous_draw":
+      return null;
+    case "current_draw":
+      return { ...base, period: "previous_draw" };
+    case "today":
+      return { ...base, period: "yesterday" };
+    case "this_week":
+      return { ...base, period: "last_week" };
+    case "current_year": {
+      const today = bangkokToday(now);
+      const year = Number(today.slice(0, 4)) - 1;
+      const to = `${year}${today.slice(4)}` === `${year}-02-29` ? `${year}-02-28` : `${year}${today.slice(4)}`;
+      return { ...base, period: "custom", from: `${year}-01-01`, to };
+    }
+    case "current_month": {
+      const today = bangkokToday(now);
+      const [year, month, day] = today.split("-").map(Number);
+      const start = new Date(Date.UTC(year!, month! - 2, 1));
+      const lastDay = new Date(Date.UTC(year!, month! - 1, 0)).getUTCDate();
+      const from = start.toISOString().slice(0, 10);
+      const to = new Date(Date.UTC(year!, month! - 2, Math.min(day!, lastDay))).toISOString().slice(0, 10);
+      return { ...base, period: "custom", from, to };
+    }
+    default: {
+      // วันเดียว/สัปดาห์ที่แล้ว/3–6 เดือน/ปีที่แล้ว/กำหนดเอง: ช่วงยาวเท่ากันก่อนหน้าทันที
+      if (query.period === "previous_year") return null;
+      const range = resolveRange(query, now);
+      if (!range.from || !range.to) return null;
+      const length = Math.round((utc(range.to).getTime() - utc(range.from).getTime()) / 86_400_000) + 1;
+      const to = shiftDays(range.from, -1);
+      return { ...base, period: "custom", from: shiftDays(to, -(length - 1)), to };
+    }
+  }
+}
+
+/**
+ * ช่วง A/B ของการเลือกเอง แปลงเป็น query ของรายงาน (ใช้ Agent เดียวกับหน้า)
+ * รายงวด: ดูเฉพาะงวดนั้น ไม่กรองประเภทหวยซ้ำ เพราะงวดกำหนดประเภทหวยอยู่แล้ว
+ * วัน/สัปดาห์/เดือน: ใช้ตัวกรองประเภทหวยเดียวกับหน้า
+ */
+export function customCompareQueries(query: AccountingQuery, drawA: string, drawB: string): [AccountingQuery, AccountingQuery] {
+  const base = { ...query, compare: "none" as const, period: "custom" as const };
+  if (query.compareUnit === "draw") {
+    return [
+      { ...base, lotteries: [...ACCOUNTING_LOTTERIES], drawIds: drawA ? [drawA] : [] },
+      { ...base, lotteries: [...ACCOUNTING_LOTTERIES], drawIds: drawB ? [drawB] : [] },
+    ];
+  }
+  const unit = query.compareUnit;
+  const a = compareSpan(unit, query.compareA);
+  const b = compareSpan(unit, query.compareB);
+  return [{ ...base, ...a }, { ...base, ...b }];
+}
+
+/** ชื่อเรียกช่วงก่อนหน้าแบบภาษาพูด ตามช่วงที่ดูอยู่ */
+const PREVIOUS_NAME: Partial<Record<AccountingPeriodKind, string>> = {
+  current_draw: "งวดที่แล้ว",
+  today: "เมื่อวาน",
+  this_week: "สัปดาห์ที่แล้ว",
+  current_month: "เดือนที่แล้ว",
+  current_year: "ปีที่แล้ว",
+};
+
+const dateSpan = (range: { from: string; to: string }) =>
+  range.from === range.to ? DAY.format(utc(range.from)) : `${DAY.format(utc(range.from))} – ${DAY.format(utc(range.to))}`;
+
+/**
+ * ข้อความของปุ่มเปรียบเทียบ ให้รู้ชัดว่าเทียบอะไรกับอะไร
+ * button: "เทียบกับปีที่แล้ว" · current/previous: ช่วงวันที่จริงของทั้งสองฝั่ง
+ * null = ช่วงนี้เทียบไม่ได้
+ */
+export function comparisonText(query: AccountingQuery, now = new Date()): { button: string; current: string; previous: string } | null {
+  const previous = previousPeriodQuery(query, now);
+  if (!previous) return null;
+  const name = PREVIOUS_NAME[query.period] ?? "ช่วงก่อนหน้าที่ยาวเท่ากัน";
+  if (previous.period === "previous_draw") {
+    return { button: `เทียบกับ${name}`, current: "งวดล่าสุดของแต่ละประเภทหวย", previous: "งวดก่อนหน้าของแต่ละประเภทหวย" };
+  }
+  return { button: `เทียบกับ${name}`, current: dateSpan(resolveRange(query, now)), previous: dateSpan(resolveRange(previous, now)) };
+}
+
+/** ชื่อช่วงเปรียบเทียบสำหรับหัวตารางและประโยคสรุป เช่น "ปีที่แล้ว (1 ม.ค. 2568 – 18 พ.ย. 2568)" */
+export function previousPeriodLabel(query: AccountingQuery, now = new Date()): string {
+  const text = comparisonText(query, now);
+  if (!text) return "";
+  const name = PREVIOUS_NAME[query.period] ?? "ช่วงก่อนหน้า";
+  return query.period === "current_draw" ? name : `${name} (${text.previous})`;
 }
 
 /** ชื่อประเภทหวยที่เลือกสำหรับหัวรายงานและไฟล์ส่งออก */

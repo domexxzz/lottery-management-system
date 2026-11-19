@@ -6,7 +6,7 @@ import { lockDrawManually } from "@/lib/draws/service";
 import { approveResult, enterResult } from "@/lib/results/service";
 import { calculateSettlement } from "@/lib/settlement/service";
 import { loadAccountingReport } from "./accounting";
-import { parseAccountingQuery } from "./accounting-period";
+import { bangkokToday, parseAccountingQuery } from "./accounting-period";
 
 let f: Fixtures;
 beforeEach(async () => {
@@ -111,5 +111,53 @@ describe("สรุปบัญชี", () => {
     const previous = await loadAccountingReport(f.actors.OWNER, parseAccountingQuery({ period: "previous_draw" }));
     expect(new Set(previous.draws.map((draw) => draw.name))).toEqual(new Set(["ไทยงวดก่อน", "ลาวงวดก่อน", "ลาวชุดงวดก่อน"]));
     expect(previous.totals).toMatchObject({ gross: 60, bills: 3, draws: 3 });
+  });
+});
+
+describe("สมการกำไรลงตัวเมื่อมีงวดรอผลปนอยู่", () => {
+  test("ยอดขายที่คำนวณแล้ว − จ่ายรางวัล − ค่าคอมที่คำนวณแล้ว = กำไร และยอดรอผลแยกออกมา", async () => {
+    const top = f.prizeTypes.threeTop.id;
+    await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ก", items: [bet(top, "123", "10"), bet(top, "456", "500")] });
+    await lockDrawManually(f.actors.ADMIN, f.draw.id);
+    for (const [prizeTypeId, value] of [[top, "123"], [f.prizeTypes.threeTod.id, "999"], [f.prizeTypes.runTop.id, "000"]] as const) {
+      await enterResult(f.actors.ADMIN, { drawId: f.draw.id, prizeTypeId, value });
+    }
+    for (const draft of await prisma.result.findMany({ where: { drawId: f.draw.id, status: "DRAFT" } })) await approveResult(f.actors.ADMIN, draft.id);
+    await calculateSettlement(f.actors.ADMIN, f.draw.id);
+
+    // งวดที่สองในเดือนเดียวกันยังเปิดรับ (รอผล)
+    // วันออกผลเป็นวันนี้ (เวลาไทย) จึงอยู่ในช่วง "เดือนนี้" แน่นอน
+    const pending = await prisma.draw.create({
+      data: { organizationId: f.org.id, name: "งวดรอผล", drawDate: new Date(`${bangkokToday(new Date())}T00:00:00Z`), opensAt: new Date(Date.now() - 60_000), cutoffAt: new Date(Date.now() + 86_400_000) },
+    });
+    await placeBill(f.actors.AGENT2, { drawId: pending.id, title: "ข", items: [bet(top, "789", "200")] });
+
+    const { totals } = await loadAccountingReport(f.actors.OWNER, thisMonth());
+    expect(totals.draws).toBe(2);
+    expect(totals.settledDraws).toBe(1);
+    expect(totals.settledGross).toBe(510);
+    expect(totals.pendingGross).toBe(200);
+    expect(totals.gross).toBe(710);
+    // สมการที่หน้าแสดงต้องลบกันลงตัว (เดิมใช้ยอดสุทธิที่รวมงวดรอผลจึงไม่ลงตัว)
+    expect(Math.round((totals.settledGross - totals.payout - totals.settledCommission) * 100) / 100).toBe(totals.profit);
+    expect(totals.net).not.toBe(Math.round((totals.settledGross - totals.settledCommission) * 100) / 100);
+  });
+});
+
+describe("เปรียบเทียบรายงวด", () => {
+  test("ดูเฉพาะงวดที่ระบุ ไม่ปนงวดอื่นในช่วงเวลาเดียวกัน", async () => {
+    const top = f.prizeTypes.threeTop.id;
+    await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ก", items: [bet(top, "123", "100")] });
+    const other = await prisma.draw.create({
+      data: { organizationId: f.org.id, name: "งวดอื่น", opensAt: new Date(Date.now() - 60_000), cutoffAt: new Date(Date.now() + 3_600_000) },
+    });
+    await placeBill(f.actors.AGENT1, { drawId: other.id, title: "ข", items: [bet(top, "456", "40")] });
+
+    const onlyFirst = await loadAccountingReport(f.actors.OWNER, { ...thisMonth(), period: "custom", drawIds: [f.draw.id] });
+    expect(onlyFirst.draws.map((draw) => draw.drawId)).toEqual([f.draw.id]);
+    expect(onlyFirst.totals.gross).toBe(100);
+
+    const onlyOther = await loadAccountingReport(f.actors.OWNER, { ...thisMonth(), period: "custom", drawIds: [other.id] });
+    expect(onlyOther.totals.gross).toBe(40);
   });
 });

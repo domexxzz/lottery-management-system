@@ -43,6 +43,7 @@
 .or-empty { margin: 0; color: #5b6976; }
 
 .or-chart { display: block; width: 100%; height: auto; }
+.or-chart-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
 .or-chart-zero { stroke: #c9d3dc; stroke-width: 1; }
 .or-chart-hit { fill: transparent; }
 .or-chart-bar.is-profit rect:not(.or-chart-hit) { fill: #2fae72; }
@@ -72,10 +73,28 @@
   .or-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-  .or-answer strong { font-size: 2.1rem; }
-  .or-equation { display: grid; grid-template-columns: 1fr; }
+  .owner-report { gap: .7rem; min-width: 0; }
+  .or-head { align-items: stretch; flex-direction: column; }
+  .app-page .or-head h1 { font-size: 1.25rem; }
+  .or-head p { font-size: .78rem; line-height: 1.5; }
+  .or-head .draw-picker { width: 100%; min-width: 0; margin: 0; }
+  .or-lottery-tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .25rem; scroll-snap-type: x proximity; scrollbar-width: thin; }
+  .or-tabs-label { position: sticky; z-index: 1; left: 0; flex: 0 0 auto; padding-right: .35rem; background: #f8fbfb; }
+  .or-lottery-tabs a { flex: 0 0 auto; min-height: 42px; scroll-snap-align: start; }
+  .or-card { padding: .75rem; border-radius: 13px; }
+  .or-answer { font-size: 1rem; }
+  .or-answer strong { display: block; margin-top: .08rem; font-size: 1.85rem; }
+  .or-compare { font-size: .8rem; line-height: 1.45; }
+  .or-equation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .or-equation li { grid-template-columns: 1fr auto; align-items: center; }
+  .or-equation li span { font-size: .72rem; }
+  .or-equation li strong { font-size: 1rem; }
+  .or-equation li.or-equation-result { grid-column: 1 / -1; }
   .or-equation li.or-op { display: none; }
+  .or-chart-scroll .or-chart { width: 680px; max-width: none; }
+  .or-card-head { align-items: flex-start; flex-direction: column; }
+  .or-winner-stats { gap: .45rem; }
+  .or-winner-stats > div { padding: .55rem .65rem; }
   /* ตารางเป็นการ์ดทีละแถว ไม่ต้องเลื่อนแนวนอน */
   .or-table thead { display: none; }
   .or-table, .or-table tbody, .or-table tr, .or-table td { display: block; width: 100%; }
@@ -125,3 +144,82 @@
 @media (max-width: 620px) {
   .or-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* ต้องอยู่ท้ายไฟล์เพื่อชนะกฎฐานของแท็บ/สถิติที่ประกาศหลัง media query หลัก */
+@media (max-width: 640px) {
+  .or-lottery-tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .25rem; scroll-snap-type: x proximity; scrollbar-width: thin; }
+  .or-tabs-label { position: sticky; z-index: 1; left: 0; flex: 0 0 auto; padding-right: .35rem; background: #f8fbfb; }
+  .or-lottery-tabs a { flex: 0 0 auto; min-height: 42px; scroll-snap-align: start; }
+  .or-winner-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; }
+  .or-winner-stats > div { padding: .55rem .65rem; }
+}
+
+/* ---------------------------------------------------------------- ตัวเลือกเดียว: ประเภทหวย → งวด */
+.or-view { display: grid; gap: .5rem; padding: .75rem .9rem; border: 1px solid #dfe7ee; border-radius: 14px; background: #fff; transition: opacity .15s; }
+.or-view.is-loading { opacity: .6; }
+.or-view-line { display: flex; align-items: center; gap: .7rem; min-width: 0; }
+.or-view-label { flex: none; width: 76px; color: #526579; font-size: .82rem; font-weight: 750; }
+.or-view-chips { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; min-width: 0; }
+.owner-report .or-view-chips button { display: inline-flex; min-height: 40px; align-items: center; gap: .4rem; padding: 0 .85rem; border: 1px solid #c8dbef; border-radius: 999px; color: #2d4a6b; background: #fff; box-shadow: none; font-size: .88rem; font-weight: 750; white-space: nowrap; cursor: pointer; }
+.owner-report .or-view-chips button:hover { border-color: #1f4d73; transform: none; }
+.owner-report .or-view-chips button[aria-pressed="true"] { border-color: #1f4d73; color: #fff; background: #1f4d73; }
+.or-view-chips svg { flex: none; border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / 10%); }
+/* ช่องติ๊กของประเภทหวย: เห็นว่าเลือกได้หลายอัน */
+.or-check { display: grid; width: 16px; height: 16px; flex: none; place-items: center; border: 1.5px solid #9db8d3; border-radius: 4px; background: #fff; color: #1f4d73; font-size: .7rem; font-weight: 900; line-height: 1; }
+.owner-report .or-view-chips button[aria-pressed="true"] .or-check { border-color: #fff; }
+.or-chip-badge { padding: .05rem .4rem; border-radius: 999px; font-size: .68rem; font-style: normal; font-weight: 800; }
+.or-chip-badge.is-open { color: #087347; background: #dcf6e8; }
+.or-chip-badge.is-pending { color: #1d5a96; background: #e4f0fd; }
+.or-draw-nav { display: flex; flex: 0 1 380px; align-items: center; gap: .35rem; min-width: 0; }
+.or-draw-select.app-dropdown { flex: 1; margin-top: 0; }
+.or-draw-select .app-dropdown-trigger { min-height: 40px; border-color: #c8dbef; border-radius: 10px; color: #1f3d5c; font-size: .88rem; font-weight: 750; }
+.owner-report .or-step { display: grid; flex: none; width: 40px; height: 40px; place-items: center; margin: 0; padding: 0; border: 1px solid #c8dbef; border-radius: 10px; color: #1f4d73; background: #fff; box-shadow: none; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+.owner-report .or-step:hover:not(:disabled) { border-color: #1f4d73; transform: none; }
+.owner-report .or-step:disabled { opacity: .35; cursor: default; }
+.or-view-loading { margin: 0; color: #1769e0; font-size: .82rem; font-weight: 750; }
+
+/* ---------------------------------------------------------------- แนวโน้มแบบรายการ (มือถือ) */
+.or-trend-list { display: none; margin: 0; padding: 0; list-style: none; }
+.or-trend-list li a { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) auto; align-items: center; gap: .55rem; min-height: 44px; padding: .25rem .2rem; border-top: 1px solid #eef2f6; color: #33414f; text-decoration: none; }
+.or-trend-list li:first-child a { border-top: 0; }
+.or-trend-list li.is-selected a { border-radius: 8px; background: #f2f7fc; }
+.or-trend-name { overflow: hidden; font-size: .82rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.or-trend-bar { height: 10px; overflow: hidden; border-radius: 99px; background: #edf2f6; }
+.or-trend-bar i { display: block; height: 100%; border-radius: inherit; background: #8fb8e2; }
+.or-trend-bar.is-profit i { background: #2fae72; }
+.or-trend-bar.is-loss i { background: #e04b62; }
+.or-trend-list strong { font-size: .88rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.or-trend-list strong.is-profit { color: #12814f; }
+.or-trend-list strong.is-loss { color: #c0283f; }
+.or-trend-list strong.is-pending { color: #8a97a3; font-weight: 700; }
+.or-breakdown-more { margin: .5rem 0 0; font-size: .84rem; }
+.or-breakdown-more a { color: #1f4d73; font-weight: 750; }
+
+@media (max-width: 640px) {
+  .or-view { padding: .6rem; border-radius: 12px; }
+  .or-view-line { gap: .45rem; }
+  .or-view-label { width: auto; font-size: .74rem; }
+  .or-view-chips { flex-wrap: nowrap; overflow-x: auto; padding: .1rem 0 .25rem; scroll-snap-type: x proximity; scrollbar-width: none; }
+  .or-view-chips::-webkit-scrollbar { display: none; }
+  .owner-report .or-view-chips button { flex: none; min-height: 42px; scroll-snap-align: start; }
+  .or-view-line:last-child { flex-wrap: wrap; }
+  .or-draw-nav { flex: 1 1 100%; order: 2; }
+  .or-view-line:last-child .or-view-label { flex: 1; }
+  /* กราฟกว้างต้องเลื่อนข้างบนมือถือ ใช้รายการแนวตั้งแทน */
+  .or-chart-scroll { display: none; }
+  .or-trend-list { display: grid; }
+  /* ตาราง 30 วันบนมือถือ: เหลือยอดขาย · รอผล · กำไร ตัวเลขเต็มดูในสรุปบัญชี */
+  .or-breakdown-table .or-col-detail { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .or-view { transition: none; }
+}
+
+/* เทียบกับงวดก่อน: ตัวเลขทั้งสองงวด + ผลต่างเป็นคำ */
+.or-compare-box { display: grid; gap: .2rem; max-width: 520px; margin: .3rem 0 .8rem; padding: .6rem .8rem; border: 1px solid #dfe7ee; border-radius: 12px; background: #fff; }
+.or-compare-row { display: flex; align-items: baseline; justify-content: space-between; gap: .8rem; margin: 0; font-size: .9rem; }
+.or-compare-row span { display: grid; color: #4d5b69; font-weight: 700; }
+.or-compare-row small { color: #7a8a98; font-size: .74rem; font-weight: 600; }
+.or-compare-row strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.or-compare-result { margin: .25rem 0 0; padding-top: .35rem; border-top: 1px solid #eef2f6; color: #4d5b69; font-size: .9rem; font-weight: 800; }
+.or-compare-box.is-good .or-compare-result { color: #12814f; }
+.or-compare-box.is-bad .or-compare-result { color: #c0283f; }

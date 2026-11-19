@@ -1,89 +1,237 @@
-/* สรุปบัญชี · เขียว = กำไร แดง = ขาดทุน */
+/*
+ * สรุปบัญชี · เขียว = กำไร แดง = ขาดทุน ฟ้า = รอผล
+ * มือถือ: ตัวกรองเหลือ 3 แถว (เลื่อนแนวนอนได้) กำไรขึ้นก่อน ตารางเป็นการ์ดที่เห็นยอดขาย/กำไรก่อน
+ */
 .accounting-page { display: grid; gap: 1rem; max-width: 1280px; }
 .acc-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: .8rem; }
 .app-page .acc-head h1 { margin: .15rem 0 .25rem; font-size: 1.5rem; }
 .acc-head p { margin: 0; color: #3f4c59; font-size: .92rem; }
 .acc-head .page-eyebrow a { color: inherit; }
-.acc-csv { padding: .6rem 1rem; border: 1px solid #c8dbef; border-radius: 10px; color: #1f4d73; background: #fff; font-weight: 800; text-decoration: none; }
+.acc-viewing strong { color: #123b62; }
 .acc-export { display: flex; flex-wrap: wrap; gap: .45rem; }
+.acc-csv { padding: .6rem 1rem; border: 1px solid #c8dbef; border-radius: 10px; color: #1f4d73; background: #fff; font-weight: 800; text-decoration: none; }
 .acc-csv.is-primary { border-color: #1769e0; color: #fff; background: #1769e0; }
+.acc-empty { margin: 0; padding: 1rem; color: #4d5b69; text-align: center; }
 
-.acc-filters { display: grid; gap: .7rem; padding: .9rem 1rem; border: 1px solid #dfe7ee; border-radius: 14px; background: #fff; }
-.acc-filters.is-loading { opacity: .65; }
-.acc-tabs, .acc-lottery { display: flex; flex-wrap: wrap; gap: .4rem; }
-.acc-period-rows { display: grid; gap: .45rem; }
-.acc-period-row { display: grid; grid-template-columns: 78px minmax(0, 1fr); align-items: center; gap: .6rem; }
-.acc-period-row > strong { color: #526579; font-size: .82rem; }
-.accounting-page .acc-tabs button, .accounting-page .acc-lottery button { display: inline-flex; align-items: center; gap: .4rem; min-height: 38px; padding: 0 .9rem; border: 1px solid #c8dbef; border-radius: 10px; color: #2d4a6b; background: #fff; box-shadow: none; font-size: .9rem; font-weight: 750; cursor: pointer; }
-.accounting-page .acc-tabs button[aria-pressed="true"], .accounting-page .acc-lottery button[aria-pressed="true"] { border-color: #123b62; color: #fff; background: #123b62; }
-.acc-lottery svg { border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / 10%); }
-.acc-filter-row { display: grid; grid-template-columns: minmax(210px, 280px) minmax(460px, 1fr); align-items: end; gap: .8rem; }
-.acc-filter-row label { display: grid; gap: .25rem; margin: 0; color: #33414f; font-size: .85rem; font-weight: 750; }
-.acc-filter-row label .app-dropdown { margin-top: 0; }
-.acc-filter-row input[type="date"] { min-height: 42px; }
-.acc-compare-picker { display: grid; grid-template-columns: auto minmax(150px, 1fr) auto minmax(150px, 1fr); align-items: end; gap: .45rem; padding: .55rem .65rem; border: 1px solid #c8dbef; border-radius: 12px; background: #f7fbff; }
-.acc-compare-picker > span { align-self: center; color: #123b62; font-size: .86rem; font-weight: 900; }
-.acc-compare-picker > b { align-self: center; padding-bottom: .55rem; color: #687b8d; font-size: .8rem; }
+/* ---------------------------------------------------------------- ตัวกรอง */
+.acc-filters { display: grid; gap: .55rem; padding: .8rem 1rem; border: 1px solid #dfe7ee; border-radius: 14px; background: #fff; transition: opacity .15s; }
+.acc-filters.is-loading { opacity: .6; }
+.acc-filter-line { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; min-width: 0; }
+.acc-filter-label { flex: none; width: 76px; color: #526579; font-size: .82rem; font-weight: 750; }
+.acc-chips { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; min-width: 0; }
+.accounting-page .acc-chips button { display: inline-flex; min-height: 40px; align-items: center; gap: .4rem; padding: 0 .9rem; border: 1px solid #c8dbef; border-radius: 999px; color: #2d4a6b; background: #fff; box-shadow: none; font-size: .9rem; font-weight: 750; white-space: nowrap; cursor: pointer; }
+.accounting-page .acc-chips button:hover { border-color: #123b62; transform: none; }
+.accounting-page .acc-chips button[aria-pressed="true"] { border-color: #123b62; color: #fff; background: #123b62; }
+.acc-chips svg { border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / 10%); }
+.acc-more-period { min-width: 150px; }
+.acc-more-period .app-dropdown { margin-top: 0; }
+.acc-more-period .app-dropdown-trigger { min-height: 40px; border-radius: 999px; }
+.acc-more-period.is-active .app-dropdown-trigger { border-color: #123b62; color: #fff; background: #123b62; }
+.acc-custom-range { display: flex; flex-wrap: wrap; gap: .6rem; padding-left: calc(76px + .7rem); }
+.acc-custom-range label { display: grid; gap: .2rem; margin: 0; color: #33414f; font-size: .82rem; font-weight: 750; }
+.acc-custom-range input { min-height: 42px; }
+.acc-agent-filter { display: flex; align-items: center; gap: .7rem; min-width: min(100%, 360px); margin: 0; }
+.acc-agent-filter .app-dropdown { flex: 1; min-width: 200px; margin-top: 0; }
+.acc-compare-switch { display: inline-flex; min-height: 40px; align-items: center; gap: .5rem; margin: 0; padding: 0 .85rem; border: 1px solid #c8dbef; border-radius: 999px; color: #123b62; background: #f7fbff; font-size: .88rem; font-weight: 750; cursor: pointer; }
+.acc-compare-switch input { width: 18px; height: 18px; accent-color: #1769e0; }
+.acc-loading { color: #1769e0; font-size: .82rem; font-weight: 750; }
 
-.acc-compare { padding: 1rem; border: 1px solid #c9dcf3; border-radius: 16px; background: linear-gradient(135deg, #f7fbff, #fff); }
-.acc-compare > header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: .45rem 1rem; margin-bottom: .8rem; }
-.acc-compare > header p { margin: 0; color: #1769e0; font-size: .78rem; font-weight: 900; text-transform: uppercase; }
-.app-page .acc-compare h2 { margin: .1rem 0 0; font-size: 1.05rem; }
-.acc-compare h2 span { color: #6b7d8c; font-size: .78em; font-weight: 600; }
-.acc-compare > header > small { max-width: 440px; color: #687b8d; }
-.acc-compare-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; }
-.acc-compare-grid article { overflow: hidden; border: 1px solid #dce7f1; border-radius: 12px; background: #fff; }
-.acc-compare-grid h3 { margin: 0; padding: .55rem .7rem; color: #263e59; font-size: .88rem; background: #f2f7fc; }
-.acc-compare-grid article > div { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; padding: .38rem .7rem; }
-.acc-compare-grid article > div span { color: #6b7d8c; font-size: .76rem; }
-.acc-compare-grid article > div strong { font-variant-numeric: tabular-nums; }
-.acc-compare-grid article > div small { font-size: .68rem; font-weight: 500; }
-.acc-compare-grid footer { padding: .48rem .7rem; border-top: 1px solid #edf2f7; color: #526579; font-size: .78rem; font-weight: 800; }
-.acc-compare-grid footer.is-up { color: #087a4b; background: #effaf5; }
-.acc-compare-grid footer.is-down { color: #bd3348; background: #fff3f5; }
+/* ---------------------------------------------------------------- ได้หรือเสีย */
+.acc-hero { display: grid; gap: .35rem; padding: 1.1rem 1.2rem; border: 2px solid #d5dde4; border-radius: 18px; background: #fff; }
+.acc-hero.is-profit { border-color: #9edbbd; background: linear-gradient(135deg, #f1fbf6, #fff 60%); }
+.acc-hero.is-loss { border-color: #f1a7b2; background: linear-gradient(135deg, #fff2f4, #fff 60%); }
+.acc-hero.is-pending { border-color: #b9d3ee; background: linear-gradient(135deg, #eef5fd, #fff 60%); }
+.app-page .acc-hero h2 { margin: 0; color: #3f4c59; font-size: .95rem; font-weight: 800; }
+.acc-hero-answer { margin: 0; color: #33414f; font-size: 1.3rem; font-weight: 800; }
+.acc-hero-answer strong { font-size: 2.5rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.acc-hero.is-profit .acc-hero-answer strong { color: #12814f; }
+.acc-hero.is-loss .acc-hero-answer strong { color: #c0283f; }
+.acc-hero.is-pending .acc-hero-answer { color: #1d5a96; }
+.acc-hero-compare { margin: 0; color: #3f4c59; font-size: .92rem; font-weight: 650; }
+.acc-hero-note { margin: .35rem 0 0; color: #5b6976; font-size: .86rem; line-height: 1.55; }
 
-.acc-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; }
-.acc-cards article { display: grid; gap: .15rem; padding: .85rem 1rem; border: 1px solid #dfe7ee; border-radius: 14px; background: #fff; }
-.acc-cards span { color: #3f4c59; font-size: .9rem; font-weight: 750; }
-.acc-cards strong { font-size: 1.55rem; font-weight: 900; font-variant-numeric: tabular-nums; }
-.acc-cards small { color: #5b6976; font-size: .8rem; }
-.acc-cards .is-profit { border: 2px solid #9edbbd; background: #f1fbf6; }
-.acc-cards .is-profit strong { color: #12814f; }
-.acc-cards .is-loss { border: 2px solid #f1a7b2; background: #fff2f4; }
-.acc-cards .is-loss strong { color: #c0283f; }
+.acc-delta { display: block; color: #687b8d; font-size: .8rem; font-weight: 800; }
+.acc-delta.is-up { color: #087a4b; }
+.acc-delta.is-down { color: #bd3348; }
+.acc-hero-compare .acc-delta { display: inline; font-size: inherit; }
 
+/* ---------------------------------------------------------------- ตัวเลขรอง */
+.acc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .7rem; }
+.acc-kpis article { display: grid; align-content: start; gap: .15rem; min-width: 0; padding: .8rem .95rem; border: 1px solid #dfe7ee; border-radius: 14px; background: #fff; }
+.acc-kpis span { display: inline-flex; align-items: center; color: #3f4c59; font-size: .86rem; font-weight: 750; }
+.acc-kpis strong { font-size: 1.3rem; font-weight: 900; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.acc-kpis small { color: #5b6976; font-size: .78rem; }
+
+/* ---------------------------------------------------------------- ตาราง */
 .acc-card { padding: .9rem 1rem; border: 1px solid #dfe7ee; border-radius: 14px; background: #fff; }
 .acc-card > header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .2rem .8rem; margin-bottom: .6rem; }
 .app-page .acc-card h2 { margin: 0; font-size: 1.05rem; }
 .acc-card > header span { color: #5b6976; font-size: .84rem; }
-.acc-empty { margin: 0; padding: 1rem; color: #4d5b69; text-align: center; }
+.acc-sort { margin-bottom: .6rem; }
+.acc-sort .acc-filter-label { width: auto; }
 .acc-table-wrap { overflow-x: auto; }
 .acc-table { width: 100%; min-width: 820px; margin: 0; border-collapse: collapse; }
 .acc-table th { padding: .5rem .6rem; color: #33414f; font-size: .8rem; font-weight: 800; text-align: left; background: #f6f9fb; white-space: nowrap; }
-.acc-table td { padding: .55rem .6rem; border-top: 1px solid #edf1f5; vertical-align: top; font-size: .92rem; }
+.acc-table td { padding: .55rem .6rem; border-top: 1px solid #edf1f5; vertical-align: middle; font-size: .92rem; }
 .acc-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .acc-table td small { display: block; color: #6b7d8c; font-size: .74rem; font-weight: 500; }
-.acc-table td a { color: inherit; text-decoration: none; }
+.acc-table td a { color: inherit; }
 .acc-table .is-profit { color: #12814f; font-weight: 800; }
 .acc-table .is-loss { color: #c0283f; font-weight: 800; }
+.acc-table .is-pending { color: #1d5a96; font-weight: 700; }
+.acc-table .acc-key { font-weight: 800; }
 .acc-table tfoot th, .acc-table tfoot td { border-top: 2px solid #c9d3dc; background: #f8fafc; font-weight: 900; }
-.acc-draw summary { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .45rem; cursor: pointer; }
-.acc-draw summary small { flex-basis: 100%; color: #6b7d8c; font-size: .74rem; }
-.acc-draw summary svg { border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / 10%); }
-.acc-agent-table { width: max-content; min-width: 100%; margin: .5rem 0 .2rem; border-collapse: collapse; background: #f8fafc; }
-.acc-agent-table th, .acc-agent-table td { padding: .35rem .55rem; font-size: .82rem; border-top: 1px solid #e6edf2; }
-.acc-agent-table .num { text-align: right; }
+.app-page .acc-row-toggle { display: flex; width: 100%; min-height: 44px; align-items: center; gap: .55rem; margin: 0; padding: .2rem 0; border: 0; color: inherit; background: none; box-shadow: none; font: inherit; text-align: left; cursor: pointer; }
+.app-page .acc-row-toggle:hover { transform: none; }
+.acc-row-toggle > span { display: grid; min-width: 0; }
+.acc-row-toggle strong { font-size: .95rem; }
+.acc-row-toggle small { color: #6b7d8c; font-size: .76rem; font-weight: 500; }
+.acc-row-toggle svg { flex: none; border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / 10%); }
+.acc-row-toggle i { margin-left: auto; color: #1769e0; font-style: normal; }
+.acc-row.is-open td { background: #f7fbff; }
+.acc-row-detail > td { padding: .2rem .6rem .8rem; background: #f7fbff; }
+.acc-detail-mobile { display: none; }
+.acc-detail-link { display: inline-block; margin-top: .4rem; color: #1769e0; font-weight: 800; text-decoration: none; }
+.acc-agent-table { width: 100%; margin: .2rem 0 0; border-collapse: collapse; background: #fff; }
+.acc-agent-table th, .acc-agent-table td { padding: .4rem .6rem; border-top: 1px solid #e6edf2; font-size: .84rem; }
+.acc-agent-table th { color: #526579; background: #f2f7fc; text-align: left; }
+.acc-agent-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.acc-badge { margin-left: .4rem; padding: .1rem .45rem; border-radius: 999px; font-size: .7rem; font-style: normal; font-weight: 800; vertical-align: 2px; }
+.acc-badge.is-loss { color: #fff; background: #c0283f; }
+.acc-badge.is-profit { color: #fff; background: #12814f; }
+.acc-export-card .acc-export { gap: .6rem; }
 
-@media (max-width: 900px) {
-  .acc-cards, .acc-compare-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .acc-filter-row { grid-template-columns: 1fr; }
+@media (max-width: 1000px) {
+  .acc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-@media (max-width: 560px) {
-  .acc-cards, .acc-compare-grid { grid-template-columns: 1fr; }
-  .acc-period-row { grid-template-columns: 1fr; gap: .25rem; }
-  .acc-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .accounting-page .acc-tabs button { justify-content: center; padding: 0 .55rem; }
-  .acc-compare-picker { grid-template-columns: 1fr 1fr; }
-  .acc-compare-picker > span { grid-column: 1 / -1; }
-  .acc-compare-picker > b { display: none; }
+
+/* ---------------------------------------------------------------- มือถือ */
+@media (max-width: 700px) {
+  .accounting-page { gap: .7rem; min-width: 0; }
+  .acc-head { align-items: stretch; flex-direction: column; }
+  .app-page .acc-head h1 { font-size: 1.22rem; }
+  .acc-head p { font-size: .82rem; line-height: 1.5; }
+  /* ปุ่มส่งออกบนมือถือย้ายไปท้ายหน้า */
+  .acc-export-top { display: none; }
+  .acc-export { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .acc-export button { width: 100%; min-height: 44px; }
+  .acc-export small { grid-column: 1 / -1; }
+
+  .acc-filters { gap: .5rem; padding: .65rem; border-radius: 12px; }
+  .acc-filter-line { flex-wrap: nowrap; }
+  .acc-filter-label { width: auto; font-size: .74rem; }
+  .acc-chips { flex-wrap: nowrap; overflow-x: auto; padding: .1rem 0 .25rem; scroll-snap-type: x proximity; scrollbar-width: none; }
+  .acc-chips::-webkit-scrollbar { display: none; }
+  .accounting-page .acc-chips button { flex: none; min-height: 42px; padding: 0 .8rem; scroll-snap-align: start; }
+  .acc-more-period { flex: none; min-width: 132px; }
+  .acc-custom-range { padding-left: 0; }
+  .acc-custom-range label { flex: 1; }
+  .acc-filter-extra { flex-wrap: wrap; }
+  .acc-agent-filter { flex: 1 1 100%; min-width: 0; }
+  .acc-agent-filter .app-dropdown { min-width: 0; }
+  .acc-compare-switch { flex: 1 1 100%; min-height: 44px; justify-content: flex-start; }
+
+  .acc-hero { padding: .9rem; border-radius: 14px; }
+  .acc-hero-answer { font-size: 1rem; }
+  .acc-hero-answer strong { display: block; font-size: 2rem; }
+  .acc-hero-compare, .acc-hero-note { font-size: .82rem; }
+
+  .acc-kpis { gap: .5rem; }
+  .acc-kpis article { padding: .65rem .7rem; border-radius: 11px; }
+  .acc-kpis span { font-size: .78rem; }
+  .acc-kpis strong { font-size: 1.08rem; }
+  .acc-kpis small { font-size: .72rem; line-height: 1.4; }
+
+  .acc-card { padding: .7rem; border-radius: 12px; }
+  .acc-card > header { align-items: flex-start; flex-direction: column; }
+  /* ตารางเป็นการ์ด: ชื่อ + ยอดขาย + กำไร ส่วนที่เหลือเปิดดูเมื่อกด */
+  .acc-table-wrap { overflow: visible; }
+  .acc-table { min-width: 0; }
+  .acc-table thead, .acc-table tfoot .acc-col-detail, .acc-table .acc-col-detail { display: none; }
+  .acc-table, .acc-table tbody, .acc-table tfoot { display: block; width: 100%; }
+  .acc-table tr.acc-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .3rem .6rem; margin-top: .55rem; padding: .55rem .65rem; border: 1px solid #dfe7ee; border-radius: 12px; background: #fff; }
+  .acc-table tr.acc-row.is-open { border-color: #9fc3ec; border-radius: 12px 12px 0 0; }
+  .acc-table tr.acc-row td { display: flex; flex-direction: column; align-items: flex-start; gap: .05rem; padding: 0; border: 0; background: none; font-size: 1rem; text-align: left; }
+  .acc-table tr.acc-row td::before { color: #6b7d8c; font-size: .74rem; font-weight: 700; content: attr(data-label); }
+  .acc-table tr.acc-row td.acc-cell-title { grid-column: 1 / -1; }
+  .acc-table tr.acc-row td.acc-cell-title::before { display: none; }
+  .acc-table tr.acc-row-detail { display: block; }
+  .acc-table tr.acc-row-detail > td { display: block; padding: .6rem .65rem .75rem; border: 1px solid #9fc3ec; border-top: 0; border-radius: 0 0 12px 12px; }
+  .acc-detail-mobile { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem .6rem; margin-bottom: .5rem; }
+  .acc-detail-mobile span { display: grid; color: #6b7d8c; font-size: .76rem; font-weight: 700; }
+  .acc-detail-mobile b { color: #0d2847; font-size: .95rem; font-variant-numeric: tabular-nums; }
+  .acc-table tfoot tr { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem .6rem; margin-top: .7rem; padding: .65rem; border: 2px solid #c9d3dc; border-radius: 12px; background: #f8fafc; }
+  .acc-table tfoot th { grid-column: 1 / -1; padding: 0; border: 0; background: none; }
+  .acc-table tfoot td { padding: 0; border: 0; background: none; text-align: left; }
+  /* รายละเอียด Agent ในงวด: การ์ดย่อยแทนตารางกว้าง */
+  .acc-agent-table, .acc-agent-table tbody { display: block; }
+  .acc-agent-table thead { display: none; }
+  .acc-agent-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem .5rem; margin-top: .4rem; padding: .5rem .55rem; border: 1px solid #e0e8ee; border-radius: 9px; background: #fff; }
+  .acc-agent-table td { display: flex; flex-direction: column; gap: .05rem; padding: 0; border: 0; font-size: .88rem; text-align: left !important; }
+  .acc-agent-table td::before { color: #738492; font-size: .7rem; font-weight: 700; content: attr(data-label); }
+  .acc-agent-table td:first-child { grid-column: 1 / -1; }
+  .acc-agent-table td:first-child::before { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .acc-filters { transition: none; }
+}
+
+/* เปรียบเทียบ: ไม่เทียบ | เทียบกับ… + บอกช่วงวันที่ทั้งสองฝั่ง */
+.acc-compare-line { align-items: flex-start; }
+.acc-compare-line .acc-filter-label { padding-top: .6rem; }
+.acc-compare-body { display: grid; gap: .3rem; min-width: 0; }
+.acc-compare-hint { margin: 0; color: #526579; font-size: .82rem; line-height: 1.5; }
+.acc-compare-hint b { color: #123b62; }
+.acc-compare-none { padding-left: calc(76px + .7rem); }
+@media (max-width: 700px) {
+  .acc-compare-line { flex-direction: column; gap: .3rem; }
+  .acc-compare-line .acc-filter-label { padding-top: 0; }
+  .acc-compare-body { width: 100%; }
+  .acc-compare-hint { font-size: .78rem; }
+  .acc-compare-none { padding-left: 0; }
+}
+
+/* เลือกเอง: ช่วง A เทียบกับ ช่วง B */
+.acc-custom-compare { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem .8rem; padding: .6rem .7rem; border: 1px solid #c8dbef; border-radius: 12px; background: #f7fbff; }
+.acc-span-picker { display: grid; gap: .25rem; min-width: 200px; }
+.acc-span-label { color: #123b62; font-size: .8rem; font-weight: 850; }
+.acc-span-picker .app-dropdown { margin-top: 0; }
+.acc-span-dates { display: flex; align-items: center; gap: .35rem; }
+.acc-span-dates input { min-height: 42px; }
+.acc-custom-vs { align-self: center; padding-top: 1.2rem; color: #687b8d; font-size: .85rem; }
+@media (max-width: 700px) {
+  .acc-custom-compare { display: grid; grid-template-columns: 1fr; }
+  .acc-span-picker { min-width: 0; }
+  .acc-span-dates { flex-wrap: wrap; }
+  .acc-span-dates input { flex: 1; min-width: 0; }
+  .acc-custom-vs { padding-top: 0; text-align: center; }
+}
+
+/* ประเภทหวยเลือกได้หลายประเภท: กล่องติ๊กในชิปบอกว่าเลือกอยู่ */
+.acc-check { display: inline-grid; width: 18px; height: 18px; flex: none; place-items: center; border: 1.5px solid #9fb6cc; border-radius: 5px; background: #fff; color: #123b62; font-size: .72rem; font-weight: 900; }
+.accounting-page .acc-lottery-chips button[aria-pressed="true"] .acc-check { border-color: #fff; }
+.acc-lottery-hint { margin: -.2rem 0 0; padding-left: calc(76px + .7rem); color: #526579; font-size: .8rem; }
+@media (max-width: 700px) {
+  .acc-lottery-hint { padding-left: 0; font-size: .76rem; }
+}
+
+/* เลือกเอง: แถวหน่วย (วัน/งวด/สัปดาห์/เดือน) แล้วแถว A เทียบกับ B */
+.acc-custom-compare { display: grid; gap: .6rem; }
+.acc-unit-line { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; }
+.acc-ab-line { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem .8rem; }
+.acc-span-picker input[type="date"] { min-height: 42px; min-width: 180px; }
+@media (max-width: 700px) {
+  .acc-unit-line { flex-direction: column; align-items: stretch; }
+  .acc-ab-line { display: grid; grid-template-columns: 1fr; }
+  .acc-span-picker input[type="date"] { width: 100%; min-width: 0; }
+}
+
+/* ระหว่างเลือกเอง: ช่วงเวลาหลักไม่ได้ใช้ ทำให้จางลงและบอกเหตุผล */
+.acc-filter-line.is-muted .acc-chips { opacity: .55; }
+.acc-filter-line.is-muted .acc-chips:hover { opacity: 1; }
+.acc-muted-note { margin: -.2rem 0 0; padding: .45rem .7rem; border-radius: 10px; color: #7a4b00; background: #fff6e2; font-size: .8rem; }
+.acc-muted-note b { color: #5c3800; }
+.acc-span-picker .app-dropdown { min-width: 230px; }
+@media (max-width: 700px) {
+  .acc-span-picker .app-dropdown { min-width: 0; }
 }

@@ -7,7 +7,9 @@ import { resolveRange, type AccountingQuery, type ResolvedRange } from "./accoun
  * สรุปบัญชีรายงวด สำหรับ Owner/Admin ทำบัญชี
  *
  * แต่ละงวดบอก: ยอดขาย · ลูกค้าถูกรางวัล · จ่ายรางวัล · ค่าคอม (แยกราย Agent)
- * · ยอดสุทธิ = ยอดขาย − ค่าคอม · กำไร/ขาดทุน = ยอดสุทธิ − จ่ายรางวัล
+ * · หลังหักคอม = ยอดขาย − ค่าคอม (ยอดที่ Agent ต้องส่ง)
+ * · กำไร/ขาดทุน = ยอดขาย − จ่ายรางวัล − ค่าคอม นับเฉพาะงวดที่คำนวณแล้ว
+ *   ยอดรวมจึงมี settledGross/settledCommission แยกไว้ ให้สมการกำไรลบกันลงตัวเสมอ
  *
  * - รวมยอดในฐานข้อมูลครั้งเดียว (งวด × Agent) ไม่ดึงบิลทั้งหมดมานับ
  * - ค่าคอมงวดที่คำนวณแล้วใช้ยอดจริงจาก Settlement งวดที่ยังไม่คำนวณประมาณจาก % ของ Agent
@@ -73,6 +75,9 @@ export type AccountingAgentSummary = {
   payout: number;
   profit: number;
   pendingDraws: number;
+  /** ยอดขาย/ค่าคอมของงวดที่คำนวณแล้ว: settledGross − payout − settledCommission = profit */
+  settledGross: number;
+  settledCommission: number;
 };
 
 export type AccountingTotals = {
@@ -80,12 +85,20 @@ export type AccountingTotals = {
   settledDraws: number;
   bills: number;
   winners: number;
+  /** ยอดขายทุกงวดในช่วง รวมงวดที่ยังรอผล */
   gross: number;
+  /** ค่าคอมทุกงวด งวดที่ยังไม่คำนวณประมาณจาก % */
   commission: number;
+  /** ยอดขาย − ค่าคอม ของทุกงวด (ยอดที่ Agent ต้องส่ง) */
   net: number;
   payout: number;
   /** กำไร/ขาดทุนของงวดที่คำนวณแล้ว */
   profit: number;
+  /** ฐานเดียวกับกำไร: settledGross − payout − settledCommission = profit */
+  settledGross: number;
+  settledCommission: number;
+  /** ยอดขายของงวดที่ยังรอผล ยังไม่นับเป็นกำไร */
+  pendingGross: number;
 };
 
 export type AccountingReport = {
@@ -104,7 +117,11 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
   let range = resolveRange(query, now);
 
   let drawFilter: Prisma.Sql;
-  if (query.period === "all") {
+  if (query.drawIds) {
+    // เปรียบเทียบรายงวด: ดูเฉพาะงวดที่ระบุ (งวดของ org นี้เท่านั้น ด้วยเงื่อนไข organizationId ด้านล่าง)
+    drawFilter = query.drawIds.length > 0 ? Prisma.sql`AND b."drawId" IN (${Prisma.join(query.drawIds)})` : Prisma.sql`AND FALSE`;
+    range = { from: "", to: "", label: "งวดที่เลือก" };
+  } else if (query.period === "all") {
     drawFilter = Prisma.empty;
   } else if (query.period === "current_draw" || query.period === "previous_draw") {
     const drawIndex = query.period === "current_draw" ? 0 : 1;
@@ -226,6 +243,7 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
       const current = byAgent.get(line.agentId) ?? {
         agentId: line.agentId, code: line.code, name: line.name, commissionRate: line.commissionRate,
         draws: 0, bills: 0, winners: 0, gross: 0, commission: 0, net: 0, payout: 0, profit: 0, pendingDraws: 0,
+        settledGross: 0, settledCommission: 0,
       };
       current.draws += 1;
       current.bills += line.bills;
@@ -235,7 +253,11 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
       current.net = round2(current.net + line.net);
       current.payout = round2(current.payout + line.payout);
       if (line.profit === null) current.pendingDraws += 1;
-      else current.profit = round2(current.profit + line.profit);
+      else {
+        current.profit = round2(current.profit + line.profit);
+        current.settledGross = round2(current.settledGross + line.gross);
+        current.settledCommission = round2(current.settledCommission + line.commission);
+      }
       byAgent.set(line.agentId, current);
     }
   }
@@ -255,6 +277,9 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
       net: sumDraws((row) => row.net),
       payout: sumDraws((row) => row.payout),
       profit: sumDraws((row) => row.profit ?? 0),
+      settledGross: sumDraws((row) => (row.settled ? row.gross : 0)),
+      settledCommission: sumDraws((row) => (row.settled ? row.commission : 0)),
+      pendingGross: sumDraws((row) => (row.settled ? 0 : row.gross)),
     },
   };
 }

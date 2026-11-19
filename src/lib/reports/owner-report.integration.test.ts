@@ -5,7 +5,9 @@ import { placeBill } from "@/lib/bills/service";
 import { lockDrawManually } from "@/lib/draws/service";
 import { approveResult, enterResult } from "@/lib/results/service";
 import { calculateSettlement } from "@/lib/settlement/service";
-import { defaultReportDraw, loadOwnerReport } from "./owner-report";
+import { defaultReportDraw, loadOwnerReport, parseReportLottery, type LotteryBreakdown } from "./owner-report";
+import { loadAccountingReport } from "./accounting";
+import { parseAccountingQuery } from "./accounting-period";
 
 let f: Fixtures;
 
@@ -124,6 +126,27 @@ describe("รายงาน Owner", () => {
     expect(top.settledGross.toFixed(2)).toBe("810.00");
   });
 
+  test("เลือกได้หลายประเภทหวย: รวมเฉพาะประเภทที่เลือก ตารางแยกประเภทมีเฉพาะที่เลือก", async () => {
+    await sellAndSettle();
+    await prisma.draw.create({
+      data: { organizationId: f.org.id, lotteryType: "LAO", name: "หวยลาว", opensAt: new Date(Date.now() - 60_000), cutoffAt: new Date(Date.now() + 60_000) },
+    });
+    expect(parseReportLottery("LAO_SET,THAI_GOVERNMENT")).toEqual(["THAI_GOVERNMENT", "LAO_SET"]);
+    expect(parseReportLottery("x")).toEqual(["THAI_GOVERNMENT", "LAO", "LAO_SET"]);
+
+    const thaiLao = await loadOwnerReport(f.actors.OWNER, "all", "THAI_GOVERNMENT,LAO");
+    expect(thaiLao!.lotteries).toEqual(["THAI_GOVERNMENT", "LAO"]);
+    expect(thaiLao!.all!.drawCount).toBe(2);
+    expect(thaiLao!.all!.gross.toFixed(2)).toBe("810.00");
+    expect(thaiLao!.breakdown.map((row) => row.lotteryType)).toEqual(["THAI_GOVERNMENT", "LAO"]);
+
+    const laoOnly = await loadOwnerReport(f.actors.OWNER, "all", "LAO");
+    expect(laoOnly!.all!.drawCount).toBe(1);
+    expect(laoOnly!.all!.gross.toFixed(2)).toBe("0.00");
+    expect(laoOnly!.agents).toHaveLength(0);
+    expect(laoOnly!.breakdown).toHaveLength(0);
+  });
+
   test("Agent เปิดรายงานภาพรวมไม่ได้", async () => {
     await expect(loadOwnerReport(f.actors.AGENT1)).rejects.toThrow();
   });
@@ -148,7 +171,7 @@ describe("ผู้ถูกรางวัลและตาราง 30 วั
 
   test("ตาราง 30 วันแยกยอดขายที่คำนวณแล้วจากยอดรอผล สมการลงตัว", async () => {
     await sellAndSettle();
-    // ตาราง 30 วันนับเฉพาะงวดที่ปิดรับแล้ว เลื่อนเวลาปิดรับของงวดทดสอบให้อยู่ในอดีต
+    // เลื่อนเวลาปิดรับของงวดทดสอบให้อยู่ในอดีต (ตาราง 30 วันนับตามวันออกผล เหมือนสรุปบัญชี)
     await prisma.draw.update({ where: { id: f.draw.id }, data: { cutoffAt: new Date(Date.now() - 5_000) } });
     const open = await prisma.draw.create({
       data: { organizationId: f.org.id, name: "งวดรอผล", opensAt: new Date(Date.now() - 3_600_000), cutoffAt: new Date(Date.now() + 86_400_000) },
@@ -161,5 +184,24 @@ describe("ผู้ถูกรางวัลและตาราง 30 วั
     expect(thai.settledGross.toFixed(2)).toBe("810.00");
     expect(thai.gross.minus(thai.settledGross).toFixed(2)).toBe("100.00");
     expect(thai.settledGross.minus(thai.payout).minus(thai.commission).toFixed(2)).toBe(thai.net.toFixed(2));
+  });
+
+  test("ลิงก์ไปสรุปบัญชีใช้ช่วงเดียวกับตาราง 30 วัน ยอดตรงกัน (รวมงวดที่ยังเปิดรับวันนี้)", async () => {
+    await sellAndSettle();
+    // งวดที่ยังเปิดรับ ออกผลวันนี้ สรุปบัญชีนับเป็นยอดรอผล ตาราง 30 วันต้องนับด้วย
+    const open = await prisma.draw.create({
+      data: { organizationId: f.org.id, name: "งวดเปิดรับ", opensAt: new Date(Date.now() - 3_600_000), cutoffAt: new Date(Date.now() + 60_000) },
+    });
+    await placeBill(f.actors.AGENT1, { drawId: open.id, title: "ค", items: [bet(f.prizeTypes.threeTop.id, "111", "100")] });
+
+    const report = await loadOwnerReport(f.actors.OWNER);
+    const { from, to } = report!.breakdownRange;
+    const accounting = await loadAccountingReport(f.actors.OWNER, parseAccountingQuery({ period: "custom", from, to }));
+    const sum = (pick: (row: LotteryBreakdown) => { toNumber(): number }) =>
+      report!.breakdown.reduce((total, row) => total + pick(row).toNumber(), 0);
+    expect(sum((row) => row.gross)).toBe(accounting.totals.gross);
+    expect(sum((row) => row.settledGross)).toBe(accounting.totals.settledGross);
+    expect(sum((row) => row.payout)).toBe(accounting.totals.payout);
+    expect(sum((row) => row.net)).toBe(accounting.totals.profit);
   });
 });

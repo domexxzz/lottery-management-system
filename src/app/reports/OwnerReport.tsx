@@ -1,13 +1,18 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { ALL_DRAWS, drawShortLabel, type AllDrawsMoney, type DrawMoney, type OwnerReport as Report, type ReportDraw, type WinnerSummary } from "@/lib/reports/owner-report";
-import { DrawPicker } from "./DrawPicker";
+import { ALL_DRAWS, drawShortLabel, isAllLotteries, reportLotteryParam, type AllDrawsMoney, type DrawMoney, type OwnerReport as Report, type ReportDraw, type WinnerSummary } from "@/lib/reports/owner-report";
 import { lotteryLabel } from "@/lib/bills/betting";
-import { BREAKDOWN_DAYS, REPORT_LOTTERIES, type LotteryBreakdown } from "@/lib/reports/owner-report";
+import { BREAKDOWN_DAYS, type LotteryBreakdown } from "@/lib/reports/owner-report";
+import { COUNT_FORMAT, MONEY_FORMAT } from "@/lib/reports/terms";
+import { InfoTip } from "./InfoTip";
+import { ProfitReceipt } from "./ProfitReceipt";
+import { ReportViewPicker } from "./ReportViewPicker";
 import "./owner-report.css";
+import "./report-shared.css";
 
-const MONEY = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 2 });
-const COUNT = new Intl.NumberFormat("th-TH");
+// รูปแบบเงินเดียวกับหน้าสรุปบัญชี (ทศนิยม 2 ตำแหน่งเสมอ)
+const MONEY = MONEY_FORMAT;
+const COUNT = COUNT_FORMAT;
 
 const STATUS_LABEL: Record<string, string> = {
   OPEN: "เปิดรับ",
@@ -37,15 +42,24 @@ function short(value: number): string {
   return `${sign}${Math.round(abs)}`;
 }
 
+/**
+ * เทียบกับงวดก่อนของประเภทหวยเดียวกัน บอกทั้งตัวเลขของงวดก่อนและผลต่างเป็นคำ
+ * (เดิมบอกแค่ "ดีกว่า X บาท" ไม่รู้ว่างวดก่อนได้เท่าไร)
+ */
 function Comparison({ selected, previous }: { selected: DrawMoney; previous: DrawMoney | null }) {
-  if (!previous || !previous.settled) return <p className="or-compare">ยังไม่มีงวดก่อนหน้าที่คำนวณแล้วให้เทียบ</p>;
+  if (!previous) return <p className="or-compare">ยังไม่มีงวดก่อนหน้าให้เทียบ</p>;
+  const name = drawFullLabel(previous.draw);
+  if (!previous.settled) return <p className="or-compare">งวดก่อน ({name}) ยังไม่คำนวณผล จึงยังเทียบกำไรไม่ได้</p>;
+  const word = (value: Prisma.Decimal) => `${value.isNegative() ? "ขาดทุน" : "กำไร"} ${baht(value.abs())} บาท`;
   const diff = selected.net.minus(previous.net);
-  const label = `งวดก่อน: ${drawFullLabel(previous.draw)}`;
-  if (diff.isZero()) return <p className="or-compare">เท่ากับ{label}</p>;
   return (
-    <p className={`or-compare ${diff.isPositive() ? "is-up" : "is-down"}`}>
-      {diff.isPositive() ? "▲ ดีกว่า" : "▼ แย่กว่า"}{label} อยู่ <strong>{baht(diff.abs())}</strong> บาท
-    </p>
+    <div className={`or-compare-box ${diff.isZero() ? "" : diff.isPositive() ? "is-good" : "is-bad"}`}>
+      <p className="or-compare-row"><span>งวดนี้</span><strong>{word(selected.net)}</strong></p>
+      <p className="or-compare-row"><span>งวดก่อน <small>{name}</small></span><strong>{word(previous.net)}</strong></p>
+      <p className="or-compare-result">
+        {diff.isZero() ? "ผลเท่ากับงวดก่อน" : `${diff.isPositive() ? "▲ ดีกว่างวดก่อน" : "▼ แย่กว่างวดก่อน"} ${baht(diff.abs())} บาท`}
+      </p>
+    </div>
   );
 }
 
@@ -100,6 +114,33 @@ function NetChart({ trend, selectedId }: { trend: DrawMoney[]; selectedId: strin
 
 const PROGRESS_STEPS = ["เปิดรับ", "ปิดรับ", "ลงผลรางวัล", "คำนวณผล"] as const;
 const PROGRESS_INDEX: Record<string, number> = { OPEN: 0, LOCKED: 1, RESULT_PENDING: 2, SETTLED: 3, CLOSED: 3 };
+
+/**
+ * มือถือ: แท่งแนวนอนทีละงวด (ใหม่ → เก่า) แทนกราฟกว้างที่ต้องเลื่อนข้าง
+ * กดแถวเพื่อดูงวดนั้น
+ */
+function TrendList({ trend, selectedId, mode }: { trend: DrawMoney[]; selectedId: string; mode: "net" | "sales" }) {
+  const rows = [...trend].reverse().slice(0, 6);
+  const value = (row: DrawMoney) => (mode === "net" ? (row.settled ? Number(row.net) : null) : Number(row.gross));
+  const max = Math.max(...rows.map((row) => Math.abs(value(row) ?? 0)), 1);
+  return (
+    <ol className="or-trend-list" aria-label={mode === "net" ? "กำไร/ขาดทุน 6 งวดล่าสุด" : "ยอดขาย 6 งวดล่าสุด"}>
+      {rows.map((row) => {
+        const amount = value(row);
+        const tone = amount === null ? "is-pending" : mode === "sales" ? "is-sales" : amount < 0 ? "is-loss" : "is-profit";
+        return (
+          <li key={row.draw.id} className={row.draw.id === selectedId ? "is-selected" : undefined}>
+            <a href={`/reports?draw=${row.draw.id}`}>
+              <span className="or-trend-name">{LOTTERY_SHORT[row.draw.lotteryType] ?? ""} {drawShortLabel(row.draw)}</span>
+              <span className={`or-trend-bar ${tone}`}><i style={{ width: `${amount === null ? 0 : Math.max(Math.abs(amount) / max * 100, amount === 0 ? 0 : 3)}%` }} /></span>
+              <strong className={tone}>{amount === null ? "รอผล" : `${mode === "net" && amount < 0 ? "−" : mode === "net" && amount > 0 ? "+" : ""}${MONEY.format(Math.abs(amount))}`}</strong>
+            </a>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 /** ขั้นของงวดที่ยังไม่คำนวณ ให้เห็นว่าเหลืออะไรอีกก่อนสรุปกำไรได้ */
 function DrawProgress({ status, cutoffAt }: { status: string; cutoffAt: Date }) {
@@ -163,17 +204,18 @@ export function OwnerReport({ report }: { report: Report }) {
   const topPrizes = prizes.slice(0, 5);
   const otherPrizes = prizes.slice(5);
   const biggestPayout = prizes.find((prize) => prize.payout.isPositive());
-  const lotteryName = report.lottery === "all" ? "ทุกประเภท" : lotteryLabel(report.lottery);
+  const allLotteries = isAllLotteries(report.lotteries);
+  const lotteryName = allLotteries ? "ทุกประเภท" : report.lotteries.map((lottery) => lotteryLabel(lottery)).join(" + ");
   const scopeWord = all ? "ช่วงนี้" : "งวดนี้";
 
   return (
     <main className="workspace-page owner-report">
       <header className="or-head">
         <div>
-          <p className="page-eyebrow">รายงาน · {all ? "กำลังดูรวมทุกงวด" : "งวดที่กำลังดู"}</p>
+          <p className="page-eyebrow">รายงาน · กำลังดู</p>
           {all ? (
             <>
-              <h1>ทุกงวด · {lotteryName}</h1>
+              <h1>รวมทุกงวด · {lotteryName}</h1>
               <p>
                 {COUNT.format(all.drawCount)} งวด
                 {all.firstDraw && all.lastDraw ? ` (${drawShortLabel(all.firstDraw)} – ${drawShortLabel(all.lastDraw)})` : ""}
@@ -187,27 +229,19 @@ export function OwnerReport({ report }: { report: Report }) {
             </>
           )}
         </div>
-        <DrawPicker
-          allInUrl
-          selectedId={all ? ALL_DRAWS : draw!.id}
-          draws={report.draws.map((row) => ({ id: row.id, label: `${lotteryLabel(row.lotteryType)} งวด ${drawShortLabel(row)} — ${STATUS_LABEL[row.status] ?? row.status}`, lotteryType: row.lotteryType }))}
-        />
       </header>
 
-      <nav className="or-lottery-tabs" aria-label="ประเภทหวย">
-        <span className="or-tabs-label">ประเภทหวย</span>
-        {(["all", ...REPORT_LOTTERIES] as const).map((value) => {
-          // อยู่ในโหมดทุกงวดแล้วเปลี่ยนประเภท ให้ยังเป็นทุกงวดของประเภทนั้น
-          const params = new URLSearchParams();
-          if (value !== "all") params.set("lottery", value);
-          if (all) params.set("draw", ALL_DRAWS);
-          return (
-            <Link key={value} href={`/reports${params.size ? `?${params}` : ""}`} aria-current={report.lottery === value ? "page" : undefined}>
-              {value === "all" ? "ทุกประเภท" : lotteryLabel(value)}
-            </Link>
-          );
-        })}
-      </nav>
+      <ReportViewPicker
+        lotteries={[...report.lotteries]}
+        selectedId={all ? ALL_DRAWS : draw!.id}
+        draws={report.draws.map((row) => ({
+          id: row.id,
+          lotteryType: row.lotteryType,
+          fullLabel: `${lotteryLabel(row.lotteryType)} · ${drawShortLabel(row)}`,
+          open: row.status === "OPEN",
+          settled: row.status === "SETTLED" || row.status === "CLOSED",
+        }))}
+      />
 
       {all ? <AllDrawsResult all={all} /> : (
         <section className={`or-card or-result ${selected!.settled ? (loss ? "is-loss" : "is-profit") : "is-pending"}`} aria-labelledby="or-result-heading">
@@ -216,15 +250,12 @@ export function OwnerReport({ report }: { report: Report }) {
             <>
               <p className="or-answer">{loss ? "ขาดทุน" : "กำไร"} <strong>{baht(selected!.net.abs())}</strong> บาท</p>
               <Comparison selected={selected!} previous={previous} />
-              <ol className="or-equation" aria-label="ที่มาของตัวเลข">
-                <li><span>ยอดขาย</span><strong>{baht(selected!.gross)}</strong></li>
-                <li className="or-op" aria-hidden="true">−</li>
-                <li><span>จ่ายรางวัล</span><strong>{baht(selected!.payout)}</strong></li>
-                <li className="or-op" aria-hidden="true">−</li>
-                <li><span>ค่าคอม Agent</span><strong>{baht(selected!.commission)}</strong></li>
-                <li className="or-op" aria-hidden="true">=</li>
-                <li className="or-equation-result"><span>{loss ? "ขาดทุน" : "กำไร"}</span><strong>{baht(selected!.net.abs())}</strong></li>
-              </ol>
+              <ProfitReceipt
+                gross={Number(selected!.gross)}
+                payout={Number(selected!.payout)}
+                commission={Number(selected!.commission)}
+                profit={Number(selected!.net)}
+              />
               <p className="or-note">จาก {COUNT.format(selected!.billCount)} บิล · {COUNT.format(selected!.agentCount)} Agent · หน่วยเป็นบาท</p>
             </>
           ) : (
@@ -248,7 +279,7 @@ export function OwnerReport({ report }: { report: Report }) {
         winners={report.winners}
         settled={settled}
         scopeWord={scopeWord}
-        href={`/bills?tab=WON&scope=all${draw ? `&draw=${draw.id}` : report.lottery !== "all" ? `&lottery=${report.lottery}` : ""}`}
+        href={`/bills?tab=WON&scope=all${draw ? `&draw=${draw.id}` : report.lotteries.length === 1 ? `&lottery=${report.lotteries[0]}` : ""}`}
       />
 
       <section id="where-money-went" className="or-section" aria-labelledby="or-money-heading">
@@ -261,7 +292,8 @@ export function OwnerReport({ report }: { report: Report }) {
                 <h3>กำไร / ขาดทุน {trend.length} งวดล่าสุด</h3>
                 <span>แท่งเขียว = กำไร · แท่งแดง = ขาดทุน · กดแท่งเพื่อดูงวดนั้น</span>
               </header>
-              <NetChart trend={trend} selectedId={draw?.id ?? ""} />
+              <div className="or-chart-scroll"><NetChart trend={trend} selectedId={draw?.id ?? ""} /></div>
+              <TrendList trend={trend} selectedId={draw?.id ?? ""} mode="net" />
             </>
           ) : (
             // ยังไม่มีงวดที่คำนวณผล (เช่นหวยลาวที่เพิ่งเริ่ม) กราฟกำไรว่าง จึงแสดงยอดขายที่รอผลแทน
@@ -270,7 +302,8 @@ export function OwnerReport({ report }: { report: Report }) {
                 <h3>ยอดขาย {trend.length} งวดล่าสุด · รอผล</h3>
                 <span>กราฟกำไร / ขาดทุนจะขึ้นเมื่อคำนวณผลงวดแรก · กดแท่งเพื่อดูงวดนั้น</span>
               </header>
-              <SalesChart trend={trend} selectedId={draw?.id ?? ""} />
+              <div className="or-chart-scroll"><SalesChart trend={trend} selectedId={draw?.id ?? ""} /></div>
+              <TrendList trend={trend} selectedId={draw?.id ?? ""} mode="sales" />
             </>
           )}
         </article>
@@ -284,7 +317,7 @@ export function OwnerReport({ report }: { report: Report }) {
             {agents.length === 0 ? <p className="or-empty">{scopeWord}ยังไม่มียอดขาย</p> : (
               <table className="or-table">
                 <thead>
-                  <tr><th scope="col">Agent</th><th scope="col" className="num">ยอดขาย</th><th scope="col" className="num">จ่ายรางวัล</th><th scope="col" className="num">เราได้ / เสีย</th></tr>
+                  <tr><th scope="col">Agent</th><th scope="col" className="num">ยอดขาย</th><th scope="col" className="num">จ่ายรางวัล</th><th scope="col" className="num">กำไร / ขาดทุน <InfoTip term="profit" /></th></tr>
                 </thead>
                 <tbody>
                   {agents.map((agent) => (
@@ -292,7 +325,7 @@ export function OwnerReport({ report }: { report: Report }) {
                       <td data-label="Agent"><Link href={`/agents/${agent.agentId}`}><strong>{agent.code}</strong> {agent.name}</Link><small>{COUNT.format(agent.billCount)} บิล</small></td>
                       <td data-label="ยอดขาย" className="num">{baht(agent.gross)}</td>
                       <td data-label="จ่ายรางวัล" className="num">{settled ? baht(agent.payout) : "รอผล"}</td>
-                      <td data-label="เราได้ / เสีย" className={`num ${settled ? (agent.net.isNegative() ? "is-loss" : "is-profit") : ""}`}>
+                      <td data-label="กำไร / ขาดทุน" className={`num ${settled ? (agent.net.isNegative() ? "is-loss" : "is-profit") : ""}`}>
                         {settled ? `${agent.net.isNegative() ? "−" : "+"}${baht(agent.net.abs())}` : "รอผล"}
                         {settled && <small>หักค่าคอม {baht(agent.commission)} แล้ว{all ? " · เฉพาะงวดที่คำนวณแล้ว" : ""}</small>}
                       </td>
@@ -323,7 +356,7 @@ export function OwnerReport({ report }: { report: Report }) {
         </div>
       </section>
 
-      {report.lottery === "all" && <LotteryBreakdownTable rows={report.breakdown} />}
+      {report.breakdown.length > 1 && <LotteryBreakdownTable rows={report.breakdown} range={report.breakdownRange} lotteryParam={reportLotteryParam(report.lotteries)} />}
 
       <footer className="or-footer">
         <span>อยากเจาะลึกกว่านี้?</span>
@@ -350,15 +383,14 @@ function AllDrawsResult({ all }: { all: AllDrawsMoney }) {
             รวม {COUNT.format(all.settledCount)} งวดที่คำนวณแล้ว
             {pendingCount > 0 && ` · อีก ${COUNT.format(pendingCount)} งวดยังไม่คำนวณ ยอดขาย ${baht(pendingGross)} บาท ยังไม่นับเป็นกำไร`}
           </p>
-          <ol className="or-equation" aria-label="ที่มาของตัวเลข">
-            <li><span>ยอดขาย (งวดที่คำนวณแล้ว)</span><strong>{baht(all.settledGross)}</strong></li>
-            <li className="or-op" aria-hidden="true">−</li>
-            <li><span>จ่ายรางวัล</span><strong>{baht(all.payout)}</strong></li>
-            <li className="or-op" aria-hidden="true">−</li>
-            <li><span>ค่าคอม Agent</span><strong>{baht(all.commission)}</strong></li>
-            <li className="or-op" aria-hidden="true">=</li>
-            <li className="or-equation-result"><span>{loss ? "ขาดทุน" : "กำไร"}</span><strong>{baht(all.net.abs())}</strong></li>
-          </ol>
+          <ProfitReceipt
+            gross={Number(all.settledGross)}
+            payout={Number(all.payout)}
+            commission={Number(all.commission)}
+            profit={Number(all.net)}
+            grossLabel="ยอดขาย (คำนวณแล้ว)"
+            grossTerm="settledGross"
+          />
           <p className="or-note">ยอดขายทุกงวด {baht(all.gross)} · {COUNT.format(all.billCount)} บิล · {COUNT.format(all.agentCount)} Agent · หน่วยเป็นบาท</p>
         </>
       ) : (
@@ -380,7 +412,7 @@ function PrizeTable({ rows, settled }: { rows: Report["prizes"]; settled: boolea
   return (
     <table className="or-table">
       <thead>
-        <tr><th scope="col">ประเภท</th><th scope="col" className="num">ยอดขาย</th><th scope="col" className="num">จ่ายรางวัล</th><th scope="col" className="num">เหลือ (ก่อนหักคอม)</th></tr>
+        <tr><th scope="col">ประเภท</th><th scope="col" className="num">ยอดขาย</th><th scope="col" className="num">จ่ายรางวัล</th><th scope="col" className="num">ยอดขาย − จ่ายรางวัล <InfoTip text="ส่วนที่เหลือของประเภทการแทงนี้ก่อนหักค่าคอม Agent ค่าคอมคิดรวมทั้งงวด จึงไม่ได้แยกตามประเภท" /></th></tr>
       </thead>
       <tbody>
         {rows.map((prize) => {
@@ -391,7 +423,7 @@ function PrizeTable({ rows, settled }: { rows: Report["prizes"]; settled: boolea
               <td data-label="ประเภท"><strong>{prize.name}</strong><small>{COUNT.format(prize.itemCount)} รายการ{settled && prize.winnerCount > 0 ? ` · ถูก ${COUNT.format(prize.winnerCount)}` : ""}</small></td>
               <td data-label="ยอดขาย" className="num">{baht(prize.gross)}</td>
               <td data-label="จ่ายรางวัล" className="num">{settled ? baht(prize.payout) : "รอผล"}</td>
-              <td data-label="เหลือ (ก่อนหักคอม)" className={`num ${settled ? (left.isNegative() ? "is-loss" : "is-profit") : ""}`}>
+              <td data-label="ยอดขาย − จ่ายรางวัล" className={`num ${settled ? (left.isNegative() ? "is-loss" : "is-profit") : ""}`}>
                 {settled ? `${left.isNegative() ? "−" : "+"}${baht(left.abs())}` : "รอผล"}
               </td>
             </tr>
@@ -407,7 +439,7 @@ function PrizeTable({ rows, settled }: { rows: Report["prizes"]; settled: boolea
  * แยก "ยอดขายที่คำนวณแล้ว" ออกจาก "รอผล" เพราะจ่ายรางวัล ค่าคอม และกำไร มีเฉพาะงวดที่คำนวณแล้ว
  * ยอดขายที่คำนวณแล้ว − จ่ายรางวัล − ค่าคอม = กำไร จึงลบกันได้ตรงในแถวเดียวกัน
  */
-function LotteryBreakdownTable({ rows }: { rows: LotteryBreakdown[] }) {
+function LotteryBreakdownTable({ rows, range, lotteryParam }: { rows: LotteryBreakdown[]; range: { from: string; to: string }; lotteryParam: string }) {
   const zero = rows[0]!.gross.minus(rows[0]!.gross);
   const total = rows.reduce((sum, row) => ({
     gross: sum.gross.plus(row.gross),
@@ -424,12 +456,12 @@ function LotteryBreakdownTable({ rows }: { rows: LotteryBreakdown[] }) {
     const wrap = (text: string) => (strong ? <strong>{text}</strong> : text);
     return (
       <>
-        <td data-label="งวด" className="num">{COUNT.format(row.drawCount)}{row.settledCount < row.drawCount && <small>คำนวณแล้ว {COUNT.format(row.settledCount)}</small>}</td>
+        <td data-label="งวด" className="num or-col-detail">{COUNT.format(row.drawCount)}{row.settledCount < row.drawCount && <small>คำนวณแล้ว {COUNT.format(row.settledCount)}</small>}</td>
         <td data-label="ยอดขายทั้งหมด" className="num">{wrap(baht(row.gross))}</td>
         <td data-label="รอผล" className="num or-pending-cell">{wrap(baht(row.gross.minus(row.settledGross)))}</td>
-        <td data-label="ยอดขายที่คำนวณแล้ว" className="num">{wrap(baht(row.settledGross))}</td>
-        <td data-label="จ่ายรางวัล" className="num">{wrap(baht(row.payout))}</td>
-        <td data-label="ค่าคอม" className="num">{wrap(baht(row.commission))}</td>
+        <td data-label="ยอดขายที่คำนวณแล้ว" className="num or-col-detail">{wrap(baht(row.settledGross))}</td>
+        <td data-label="จ่ายรางวัล" className="num or-col-detail">{wrap(baht(row.payout))}</td>
+        <td data-label="ค่าคอม" className="num or-col-detail">{wrap(baht(row.commission))}</td>
         <td data-label="กำไร (คำนวณแล้ว)" className={`num ${tone(row.net)}`}>{wrap(signed(row.net))}</td>
       </>
     );
@@ -437,9 +469,10 @@ function LotteryBreakdownTable({ rows }: { rows: LotteryBreakdown[] }) {
   return (
     <section className="or-card" aria-labelledby="or-breakdown-heading">
       <header className="or-card-head">
-        <h3 id="or-breakdown-heading">ภาพรวมทุกประเภทหวย · {BREAKDOWN_DAYS} วันล่าสุด</h3>
-        <span>ยอดขายที่คำนวณแล้ว − จ่ายรางวัล − ค่าคอม = กำไร · ยอด &ldquo;รอผล&rdquo; ยังไม่นับเป็นกำไร</span>
+        <h3 id="or-breakdown-heading">ภาพรวมแยกประเภทหวย · {BREAKDOWN_DAYS} วันล่าสุด</h3>
+        <span>ยอดขายที่คำนวณแล้ว − จ่ายรางวัล − ค่าคอม = กำไร · ยอด &ldquo;รอผล&rdquo; ยังไม่นับเป็นกำไร <InfoTip term="pendingGross" /></span>
       </header>
+      <p className="or-breakdown-more"><Link href={`/reports/accounting?period=custom&from=${range.from}&to=${range.to}${lotteryParam ? `&lotteries=${lotteryParam}` : ""}`}>ดูตัวเลขเต็มทุกคอลัมน์ในสรุปบัญชี →</Link></p>
       <table className="or-table or-breakdown-table">
         <thead>
           <tr><th scope="col">ประเภท</th><th scope="col" className="num">งวด</th><th scope="col" className="num">ยอดขายทั้งหมด</th><th scope="col" className="num">รอผล</th><th scope="col" className="num">ยอดขายที่คำนวณแล้ว</th><th scope="col" className="num">จ่ายรางวัล</th><th scope="col" className="num">ค่าคอม</th><th scope="col" className="num">กำไร (คำนวณแล้ว)</th></tr>
