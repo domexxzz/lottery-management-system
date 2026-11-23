@@ -37,6 +37,7 @@ export default async function HomePage({
 
   const filters = {
     drawId: first(query.drawId),
+    lottery: first(query.lottery),
     agentId: undefined,
     status: first(query.status),
     dateFrom: first(query.dateFrom),

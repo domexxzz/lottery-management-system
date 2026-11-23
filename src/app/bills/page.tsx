@@ -37,7 +37,9 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
         ...orgScope(actor),
         status: "OPEN",
         cutoffAt: { gt: new Date() },
-        ...(filter.lotteryType ? { lotteryType: filter.lotteryType } : {}),
+        ...(filter.lotteryType === "LAO_COMBINED"
+          ? { lotteryType: { in: ["LAO", "LAO_SET"] } }
+          : filter.lotteryType ? { lotteryType: filter.lotteryType } : {}),
       },
       orderBy: { cutoffAt: "asc" },
       select: ANNOUNCE_DRAW_SELECT,

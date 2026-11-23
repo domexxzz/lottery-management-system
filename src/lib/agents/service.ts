@@ -10,6 +10,7 @@ export type AgentInput = {
   code: string;
   name: string;
   commissionRate: string;
+  laoCommissionRate?: string;
   creditLimit: string;
   perNumberLimit: string;
 };
@@ -55,6 +56,7 @@ export async function listAgents(actor: Actor) {
       code: true,
       name: true,
       commissionRate: true,
+      laoCommissionRate: true,
       creditLimit: true,
       perNumberLimit: true,
       status: true,
@@ -73,6 +75,7 @@ export async function createAgent(actor: Actor, input: AgentInput): Promise<{ ag
   if (name === "") throw new ValidationError("ต้องกรอกชื่อ Agent");
 
   const commissionRate = parseRate(input.commissionRate);
+  const laoCommissionRate = parseRate(input.laoCommissionRate?.trim() || "28");
   const creditLimit = parseOptionalLimit(input.creditLimit, "วงเงินรวมต่อรอบ");
   const perNumberLimit = parseOptionalLimit(input.perNumberLimit, "วงเงินต่อเลข");
 
@@ -89,6 +92,7 @@ export async function createAgent(actor: Actor, input: AgentInput): Promise<{ ag
         code,
         name,
         commissionRate,
+        laoCommissionRate,
         creditLimit,
         perNumberLimit,
       },

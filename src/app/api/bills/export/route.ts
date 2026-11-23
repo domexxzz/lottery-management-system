@@ -22,7 +22,8 @@ export async function GET(request: Request) {
     const scope = await resolveHistoryScope(actor, filter);
     const bills = await exportBetBills(actor, {
       tab: filter.tab,
-      lotteryType: filter.lotteryType,
+      lotteryType: filter.lotteryType === "LAO_COMBINED" ? undefined : filter.lotteryType,
+      lotteryTypes: filter.lotteryType === "LAO_COMBINED" ? ["LAO", "LAO_SET"] : undefined,
       query: filter.query,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
       subtitle: "ข้อมูลทั้งหมดที่ผ่านตัวกรอง ไม่จำกัดเฉพาะหน้าปัจจุบัน",
       sheetName: "Details",
       metadata: [
-        { label: "ช่วงข้อมูล", value: period }, { label: "ประเภทหวย", value: filter.lotteryType ? lotteryLabel(filter.lotteryType) : "ทุกประเภท" },
+        { label: "ช่วงข้อมูล", value: period }, { label: "ประเภทหวย", value: filter.lotteryType === "LAO_COMBINED" ? "หวยลาวและหวยลาวชุด" : filter.lotteryType ? lotteryLabel(filter.lotteryType) : "ทุกประเภท" },
         { label: "สถานะ", value: filter.tab === "ALL" ? "ทุกสถานะ" : BET_STATUS_LABEL[filter.tab] },
         { label: "คำค้นหา", value: filter.query || "ทั้งหมด" },
       ],

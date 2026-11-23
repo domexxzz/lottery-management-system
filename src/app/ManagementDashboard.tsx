@@ -27,7 +27,7 @@ function dashboardLink(path: string, values: Record<string, string | undefined>)
 
 export async function ManagementDashboard({ actor, filters }: { actor: Actor; filters: DashboardFilter }) {
   // รวมยอดทั้งหมดในฐานข้อมูล ดู src/lib/dashboard/management.ts
-  const { selectedStatus, currentDraw, drawOptions, summary, recentBills, salesTrend, rankedAgents, drawFinance, agentFinance, awaitingClose, pendingCancellations, anomalyCount, activeAgents } = await loadManagementDashboard(actor, filters);
+  const { selectedStatus, currentDraw, drawOptions, lotteryCategory, selectedDrawId, selectedPhysicalDrawIds, summary, businessBreakdown, recentBills, salesTrend, rankedAgents, drawFinance, agentFinance, awaitingClose, pendingCancellations, anomalyCount, activeAgents } = await loadManagementDashboard(actor, filters);
   const currentStep = currentDraw === null ? -1 : STEPS.findIndex((step) => step.key === currentDraw.status);
   const kpis = [
     { label: "ยอดขาย", value: summary.gross, tone: "blue", icon: "bill" as const },
@@ -48,7 +48,25 @@ export async function ManagementDashboard({ actor, filters }: { actor: Actor; fi
   const volumeTrend = salesTrend.map((row) => ({ key: row.key, label: row.label, bills: row.bills, average: row.bills > 0 ? row.value / row.bills : 0 }));
   const billListHref = dashboardLink("/bills", { draw: filters.drawId, agent: filters.agentId, status: selectedStatus });
   const inspectionHref = dashboardLink("/audit", { draw: filters.drawId, agent: filters.agentId });
-  const winnerListHref = dashboardLink("/bills", { draw: filters.drawId, agent: filters.agentId, status: selectedStatus, winner: "1" });
+  const billLottery = lotteryCategory === "ALL" ? undefined : lotteryCategory;
+  const billDrilldown = {
+    scope: "all",
+    lottery: selectedPhysicalDrawIds.length > 0 ? undefined : billLottery,
+    draws: selectedPhysicalDrawIds.length > 0 ? selectedPhysicalDrawIds.join(",") : undefined,
+    agent: filters.agentId,
+    from: filters.dateFrom,
+    to: filters.dateTo,
+  };
+  const winnerListHref = dashboardLink("/reports/winners", { ...billDrilldown, dashboardDraw: selectedDrawId });
+  const loserListHref = dashboardLink("/bills", { ...billDrilldown, tab: "LOST" });
+  const accountingHref = dashboardLink("/reports/accounting", {
+    period: filters.dateFrom || filters.dateTo ? "custom" : "all",
+    from: filters.dateFrom,
+    to: filters.dateTo,
+    agentId: filters.agentId,
+    lotteries: lotteryCategory === "THAI_GOVERNMENT" ? "THAI_GOVERNMENT" : lotteryCategory === "LAO_COMBINED" ? "LAO,LAO_SET" : undefined,
+    draw: selectedDrawId,
+  });
 
   return <main className="dashboard-body">
     <div className="welcome-row">
@@ -60,8 +78,34 @@ export async function ManagementDashboard({ actor, filters }: { actor: Actor; fi
         <Link href="/audit" className="audit-shortcut"><Icon name="audit"/><strong>ประวัติการตรวจผลรางวัล</strong></Link>
       </div>
     </div>
-    <DashboardFilters draws={drawOptions.map((draw) => ({ id: draw.id, label: draw.name, lotteryType: draw.lotteryType }))} />
-    <section className="kpi-grid" aria-label="ตัวเลขสรุป">{kpis.map((kpi) => <article key={kpi.label} className={`kpi-card tone-${kpi.tone}`}><span className="kpi-icon"><Icon name={kpi.icon} /></span><div className="kpi-content"><p>{kpi.label}</p><strong>{MONEY.format(Number(kpi.value ?? 0))}</strong><small>บาท · {filters.drawId || filters.agentId || filters.status || filters.dateFrom || filters.dateTo ? "ตามตัวกรอง" : "ข้อมูลทั้งหมด"}</small></div></article>)}</section>
+    <DashboardFilters draws={drawOptions.map((draw) => ({ id: draw.id, label: draw.name, lotteryType: draw.lotteryType, category: draw.category, status: draw.status }))} category={lotteryCategory} selectedDrawId={selectedDrawId} />
+    <section className="kpi-grid" aria-label="ตัวเลขสรุป">{kpis.map((kpi) => <article key={kpi.label} className={`kpi-card tone-${kpi.tone}`}><span className="kpi-icon"><Icon name={kpi.icon} /></span><div className="kpi-content"><p>{kpi.label}</p><strong>{MONEY.format(Number(kpi.value ?? 0))}</strong><small>บาท · {filters.drawId || filters.lottery || filters.agentId || filters.status || filters.dateFrom || filters.dateTo ? "ตามตัวกรอง" : "ข้อมูลทั้งหมด"}</small></div></article>)}</section>
+    <section className="bill-outcome-overview" aria-labelledby="bill-outcome-heading">
+      <header>
+        <div><p className="eyebrow">ผลบิลและรายได้จริง</p><h2 id="bill-outcome-heading">สรุปบิลที่ตรวจผลแล้ว</h2></div>
+        <small>กดการ์ดเพื่อดูรายการตามตัวกรองปัจจุบัน</small>
+      </header>
+      <div className="bill-outcome-grid">
+        <Link href={winnerListHref} className="bill-outcome-card is-winning" aria-label={`เปิด ${businessBreakdown.winning.billCount} บิลที่ถูกรางวัล`}>
+          <span className="bill-outcome-icon"><Icon name="winner" /></span>
+          <div className="bill-outcome-main"><small>บิลที่ถูกรางวัล</small><strong>{businessBreakdown.winning.billCount.toLocaleString("th-TH")} บิล</strong><p>ค่าคอม Agent <b>{MONEY.format(businessBreakdown.winning.commission)} บาท</b></p></div>
+          <div className="bill-outcome-meta"><span>ยอดขาย {MONEY.format(businessBreakdown.winning.gross)}</span><span>จ่ายรางวัล {MONEY.format(businessBreakdown.winning.payout)}</span></div>
+          <Icon name="arrow" />
+        </Link>
+        <Link href={loserListHref} className="bill-outcome-card is-losing" aria-label={`เปิด ${businessBreakdown.losing.billCount} บิลที่ไม่ถูกรางวัล`}>
+          <span className="bill-outcome-icon"><Icon name="bill" /></span>
+          <div className="bill-outcome-main"><small>บิลที่ไม่ถูกรางวัล</small><strong>{businessBreakdown.losing.billCount.toLocaleString("th-TH")} บิล</strong><p>ค่าคอม Agent <b>{MONEY.format(businessBreakdown.losing.commission)} บาท</b></p></div>
+          <div className="bill-outcome-meta"><span>ยอดขาย {MONEY.format(businessBreakdown.losing.gross)}</span><span>จ่ายรางวัล 0.00</span></div>
+          <Icon name="arrow" />
+        </Link>
+        <Link href={accountingHref} className={`bill-outcome-card is-net ${businessBreakdown.settled.net < 0 ? "is-negative" : ""}`} aria-label="เปิดสรุปบัญชีตามตัวกรองปัจจุบัน">
+          <span className="bill-outcome-icon"><Icon name="report" /></span>
+          <div className="bill-outcome-main"><small>สุทธิที่กิจการได้รับ</small><strong>{MONEY.format(businessBreakdown.settled.net)} บาท</strong><p>หลังหักรางวัลและค่าคอมแล้ว</p></div>
+          <div className="bill-outcome-meta"><span>ค่าคอมรวม {MONEY.format(businessBreakdown.settled.commission)}</span><span>{businessBreakdown.pendingBillCount > 0 ? `ยังรอผล ${businessBreakdown.pendingBillCount.toLocaleString("th-TH")} บิล` : `ตรวจแล้ว ${businessBreakdown.settled.billCount.toLocaleString("th-TH")} บิล`}</span></div>
+          <Icon name="arrow" />
+        </Link>
+      </div>
+    </section>
     <OwnerBusinessCharts draws={drawFinance} agents={agentFinance} volume={summary.billCount ? volumeTrend : []} />
     <section className="insight-grid" aria-label="แนวโน้มและสรุปจำนวนข้อมูล">
       <article className="dashboard-panel trend-panel"><div className="panel-heading"><div><p className="eyebrow">แนวโน้มธุรกิจ</p><h2>ยอดขาย 7 วันล่าสุด</h2></div><Link href="/reports">ดูรายงาน <Icon name="arrow" /></Link></div><div className="trend-summary"><strong>{MONEY.format(salesTrend.reduce((sum, point) => sum + point.value, 0))}</strong><span>บาท · ยอดรวม 7 วัน</span></div><div className="line-chart" role="img" aria-label="กราฟเส้นยอดขายย้อนหลัง 7 วัน"><svg viewBox="0 0 700 190" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="salesArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#1697a6" stopOpacity=".3"/><stop offset="100%" stopColor="#1697a6" stopOpacity=".02"/></linearGradient></defs>{[40, 82, 124, 166].map((y) => <line key={y} x1="20" x2="680" y1={y} y2={y} className="chart-gridline" />)}<path d={areaPath} fill="url(#salesArea)"/><polyline points={linePoints} className="sales-line"/>{chartPoints.map((point) => <circle key={point.key} cx={point.x} cy={point.y} r="4.5" />)}</svg><div className="chart-days">{salesTrend.map((point) => <span key={point.key}>{point.label}</span>)}</div></div></article>

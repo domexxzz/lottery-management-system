@@ -8,6 +8,8 @@ export type HistoryParams = {
   from?: string;
   to?: string;
   draw?: string;
+  /** หลายงวดที่ต้องดูพร้อมกัน เช่น หวยลาว + หวยลาวชุด family เดียวกัน */
+  draws?: string;
   agent?: string;
   scope?: string;
   page?: string;
@@ -30,13 +32,14 @@ export function readDrawScope(value: string | undefined): DrawScope {
 
 export type ParsedHistoryFilter = {
   tab: BetTab;
-  lotteryType: "THAI_GOVERNMENT" | "LAO" | "LAO_SET" | undefined;
+  lotteryType: "THAI_GOVERNMENT" | "LAO" | "LAO_SET" | "LAO_COMBINED" | undefined;
   query: string;
   from: string;
   to: string;
   dateFrom: Date | undefined;
   dateTo: Date | undefined;
   drawId: string;
+  drawIds: string[];
   agentId: string;
   scope: DrawScope;
   page: number;
@@ -60,13 +63,14 @@ export function parseHistoryFilter(params: HistoryParams): ParsedHistoryFilter {
   const to = bangkokBoundary(params.to) ? params.to ?? "" : "";
   return {
     tab: readBetTab(params.tab),
-    lotteryType: params.lottery === "THAI_GOVERNMENT" || params.lottery === "LAO" || params.lottery === "LAO_SET" ? params.lottery : undefined,
+    lotteryType: params.lottery === "THAI_GOVERNMENT" || params.lottery === "LAO" || params.lottery === "LAO_SET" || params.lottery === "LAO_COMBINED" ? params.lottery : undefined,
     query: (params.q ?? "").trim().slice(0, 80),
     from,
     to,
     dateFrom: bangkokBoundary(from),
     dateTo: bangkokBoundary(to, true),
     drawId: (params.draw ?? "").trim(),
+    drawIds: [...new Set((params.draws ?? "").split(",").map((value) => value.trim()).filter((value) => /^[A-Za-z0-9_-]{8,64}$/.test(value)))].slice(0, 12),
     agentId: (params.agent ?? "").trim(),
     scope: readDrawScope(params.scope),
     page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
@@ -84,6 +88,7 @@ export function historyHref(base: string, filter: ParsedHistoryFilter, override:
     from: filter.from,
     to: filter.to,
     draw: filter.drawId,
+    draws: filter.drawIds.join(","),
     agent: filter.agentId,
     scope: filter.scope === "current" ? "" : filter.scope,
     page: filter.page > 1 ? String(filter.page) : "",

@@ -24,9 +24,14 @@ export type ResolvedHistoryScope = {
 };
 
 /** ตัวเลือกช่องงวด: งวดเปิดรับเรียงตามปิดรับก่อน งวดอื่นเรียงล่าสุดก่อน */
-async function drawsForScope(actor: Actor, scope: DrawScope, now: Date, lotteryType?: LotteryType): Promise<ScopeDraw[]> {
+function lotteryWhere(lotteryType: ParsedHistoryFilter["lotteryType"]): Prisma.DrawWhereInput {
+  if (lotteryType === "LAO_COMBINED") return { lotteryType: { in: ["LAO", "LAO_SET"] } };
+  return lotteryType ? { lotteryType } : {};
+}
+
+async function drawsForScope(actor: Actor, scope: DrawScope, now: Date, lotteryType?: ParsedHistoryFilter["lotteryType"]): Promise<ScopeDraw[]> {
   return prisma.draw.findMany({
-    where: { ...orgScope(actor), ...drawWhereOf(scope, now), ...(lotteryType ? { lotteryType } : {}) },
+    where: { ...orgScope(actor), ...drawWhereOf(scope, now), ...lotteryWhere(lotteryType) },
     orderBy: { cutoffAt: scope === "current" ? "asc" : "desc" },
     take: 24,
     select: DRAW_SELECT,
@@ -53,6 +58,23 @@ function toOptions(draws: ScopeDraw[], withLottery: boolean) {
 export async function resolveHistoryScope(actor: Actor, filter: ParsedHistoryFilter, now = new Date()): Promise<ResolvedHistoryScope> {
   const lotteryType = filter.lotteryType;
   const withLottery = !lotteryType;
+  if (filter.drawIds.length > 0) {
+    const selected = await prisma.draw.findMany({
+      where: { ...orgScope(actor), id: { in: filter.drawIds } },
+      orderBy: { cutoffAt: "desc" },
+      select: DRAW_SELECT,
+    });
+    const draws = await drawsForScope(actor, "all", now, lotteryType);
+    for (const draw of selected) if (!draws.some((item) => item.id === draw.id)) draws.push(draw);
+    return {
+      scope: "all",
+      drawId: "",
+      drawWhere: { id: { in: selected.map((draw) => draw.id) } },
+      focusDraw: selected.length === 1 ? selected[0]! : null,
+      drawOptions: toOptions(draws, withLottery),
+      noCurrentDraw: false,
+    };
+  }
   if (filter.drawId) {
     const draw = await prisma.draw.findFirst({ where: { ...orgScope(actor), id: filter.drawId }, select: DRAW_SELECT });
     if (draw) {

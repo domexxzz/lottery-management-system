@@ -8,9 +8,11 @@ import { prisma } from "@/lib/db";
 import { DashboardIcon as Icon } from "./DashboardIcon";
 import { DashboardFilters } from "./DashboardFilters";
 import { AdminOperationsChart } from "./AdminOperationsChart";
+import { dashboardDrawLabel, resolveDashboardDrawScope } from "@/lib/dashboard/lottery-draw-filter";
+import { reportCategoryLabel } from "@/lib/reports/draw-groups";
 import "./admin-dashboard.css";
 
-type DashboardFilter = { drawId?: string; agentId?: string; status?: string; dateFrom?: string; dateTo?: string };
+type DashboardFilter = { drawId?: string; lottery?: string; agentId?: string; status?: string; dateFrom?: string; dateTo?: string };
 const BILL_STATUSES: BillStatus[] = ["DRAFT", "CONFIRMED", "LOCKED", "SETTLED", "CANCELLED"];
 const DATE_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
 const ACTION_LABEL: Record<string, string> = {
@@ -27,9 +29,16 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
   const parsedTo = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59.999+07:00`) : undefined;
   const dateFilter = parsedFrom || parsedTo ? { createdAt: { ...(parsedFrom && !Number.isNaN(parsedFrom.getTime()) ? { gte: parsedFrom } : {}), ...(parsedTo && !Number.isNaN(parsedTo.getTime()) ? { lte: parsedTo } : {}) } } : {};
   const selectedStatus = BILL_STATUSES.includes(filters.status as BillStatus) ? filters.status as BillStatus : undefined;
+  const physicalDraws = await prisma.draw.findMany({
+    where: scope,
+    orderBy: { cutoffAt: "desc" },
+    select: { id: true, name: true, drawDate: true, status: true, cutoffAt: true, lotteryType: true, laoFamilyId: true },
+  });
+  const drawScope = resolveDashboardDrawScope(physicalDraws, filters.lottery, filters.drawId);
+  const drawWhere: Prisma.BillWhereInput = drawScope.drawIds === undefined ? {} : { drawId: { in: drawScope.drawIds } };
   const billWhere: Prisma.BillWhereInput = {
     ...scope,
-    ...(filters.drawId ? { drawId: filters.drawId } : {}),
+    ...drawWhere,
     ...(filters.agentId ? { agentId: filters.agentId } : {}),
     ...(selectedStatus ? { status: selectedStatus } : {}),
     ...dateFilter,
@@ -38,29 +47,30 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
   const todayStart = new Date(`${todayKey}T00:00:00+07:00`);
   const trendStart = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
 
-  const [draws, currentDraw, pendingEvidence, pendingEvidenceCount, awaitingResultDraws, reviewedToday, rejectedToday, pendingSettlements, pendingCancellations, missingEvidence, rejectedOutstanding, recentAudit, todayBills, trendBills, trendReviews] = await Promise.all([
-    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true, cutoffAt: true, lotteryType: true } }),
-    filters.drawId
-      ? prisma.draw.findFirst({ where: { ...scope, id: filters.drawId }, select: { id: true, name: true, status: true, cutoffAt: true } })
-      : prisma.draw.findFirst({ where: { ...scope, status: { in: ["OPEN", "LOCKED", "RESULT_PENDING", "SETTLED"] } }, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true, cutoffAt: true } }),
+  const [pendingEvidence, pendingEvidenceCount, awaitingResultDraws, reviewedToday, rejectedToday, pendingSettlements, pendingCancellations, missingEvidence, rejectedOutstanding, recentAudit, todayBills, trendBills, trendReviews] = await Promise.all([
     prisma.billAttachment.findMany({
       where: { ...scope, status: "PENDING", replacedBy: null, bill: billWhere },
       orderBy: { createdAt: "asc" }, take: 30,
       select: { id: true, type: true, createdAt: true, bill: { select: { id: true, drawSequence: true, title: true, agent: { select: { code: true, name: true } }, draw: { select: { name: true } } } } },
     }),
     prisma.billAttachment.count({ where: { ...scope, status: "PENDING", replacedBy: null, bill: billWhere } }),
-    prisma.draw.count({ where: { ...scope, status: { in: ["LOCKED", "RESULT_PENDING"] } } }),
-    prisma.billAttachment.count({ where: { ...scope, status: "VERIFIED", verifiedAt: { gte: todayStart }, verifiedById: actor.userId } }),
-    prisma.billAttachment.count({ where: { ...scope, status: "REJECTED", verifiedAt: { gte: todayStart }, verifiedById: actor.userId } }),
-    prisma.draw.count({ where: { ...scope, status: "SETTLED", ...(filters.drawId ? { id: filters.drawId } : {}) } }),
+    prisma.draw.count({ where: { ...scope, status: { in: ["LOCKED", "RESULT_PENDING"] }, ...(drawScope.drawIds === undefined ? {} : { id: { in: drawScope.drawIds } }) } }),
+    prisma.billAttachment.count({ where: { ...scope, status: "VERIFIED", verifiedAt: { gte: todayStart }, verifiedById: actor.userId, bill: billWhere } }),
+    prisma.billAttachment.count({ where: { ...scope, status: "REJECTED", verifiedAt: { gte: todayStart }, verifiedById: actor.userId, bill: billWhere } }),
+    prisma.draw.count({ where: { ...scope, status: "SETTLED", ...(drawScope.drawIds === undefined ? {} : { id: { in: drawScope.drawIds } }) } }),
     prisma.bill.count({ where: { ...billWhere, cancelRequestedAt: { not: null }, cancelledAt: null } }),
     prisma.bill.count({ where: { ...billWhere, status: { in: ["CONFIRMED", "LOCKED"] }, slipId: null, attachments: { none: { type: "ORDER_EVIDENCE", replacedBy: null, status: { not: "REJECTED" } } } } }),
     prisma.billAttachment.count({ where: { ...scope, status: "REJECTED", replacedBy: null, bill: billWhere } }),
     prisma.auditEvent.findMany({ where: scope, orderBy: { createdAt: "desc" }, take: 8, select: { id: true, action: true, entityType: true, reason: true, createdAt: true, actor: { select: { displayName: true } } } }),
     prisma.bill.count({ where: { ...billWhere, createdAt: { gte: todayStart } } }),
     prisma.bill.findMany({ where: { ...billWhere, createdAt: { gte: trendStart } }, select: { createdAt: true, totalStake: true } }),
-    prisma.billAttachment.findMany({ where: { ...scope, verifiedById: actor.userId, verifiedAt: { gte: trendStart } }, select: { verifiedAt: true } }),
+    prisma.billAttachment.findMany({ where: { ...scope, verifiedById: actor.userId, verifiedAt: { gte: trendStart }, bill: billWhere }, select: { verifiedAt: true } }),
   ]);
+
+  const currentDraw = drawScope.selectedDraw
+    ?? drawScope.logicalDraws.find((draw) => (drawScope.category === "ALL" || draw.category === drawScope.category) && ["OPEN", "LOCKED", "RESULT_PENDING", "SETTLED"].includes(draw.status))
+    ?? drawScope.logicalDraws.find((draw) => drawScope.category === "ALL" || draw.category === drawScope.category)
+    ?? null;
 
   const evidenceByBill = new Map<string, { bill: (typeof pendingEvidence)[number]["bill"]; count: number; oldest: Date }>();
   for (const item of pendingEvidence) {
@@ -98,7 +108,11 @@ export async function AdminDashboard({ actor, filters }: { actor: Actor; filters
       <div className="admin-primary-actions"><Link href="/evidence"><Icon name="evidence"/><span><small>งานเร่งด่วน</small><strong>ตรวจหลักฐาน</strong></span><Icon name="arrow"/></Link><Link href={drawAction.href} className="secondary"><Icon name="draw"/><span><small>ขั้นตอนถัดไป</small><strong>{drawAction.label}</strong></span><Icon name="arrow"/></Link></div>
     </div>
 
-    <DashboardFilters draws={draws.map((draw) => ({ id: draw.id, label: draw.name, lotteryType: draw.lotteryType }))} />
+    <DashboardFilters
+      draws={drawScope.logicalDraws.map((draw) => ({ id: draw.id, label: `${reportCategoryLabel(draw.category)} · ${dashboardDrawLabel(draw)}`, lotteryType: draw.lotteryType, category: draw.category, status: draw.status }))}
+      category={drawScope.category}
+      selectedDrawId={drawScope.selectedDraw?.id}
+    />
 
     <section className="admin-kpi-grid" aria-label="สรุปงานวันนี้">
       <article><span><Icon name="bill"/></span><div><small>บิลใหม่วันนี้</small><strong>{todayBills}</strong><p>ตามตัวกรองที่เลือก</p></div></article>

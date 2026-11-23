@@ -7,7 +7,7 @@ import { AppDropdown } from "../AppDropdown";
 
 type Option = { value: string; label: string; lotteryType?: string };
 
-type Values = { q: string; from: string; to: string; draw: string; agent: string; pageSize: string; sort: string };
+type Values = { q: string; from: string; to: string; draw: string; draws: string; agent: string; pageSize: string; sort: string };
 
 /** วันที่ในรูป YYYY-MM-DD → "18 พ.ย. 69" สำหรับชิปตัวกรอง */
 function shortDate(value: string): string {
@@ -31,6 +31,7 @@ export function AgentBillFilters({
   from,
   to,
   drawId,
+  drawIds,
   defaultDrawId,
   scope,
   lottery,
@@ -46,6 +47,8 @@ export function AgentBillFilters({
   to: string;
   /** งวดที่ผู้ใช้เลือกเองใน URL ("" = ใช้ค่าเริ่มต้นของขอบเขต) */
   drawId: string;
+  /** งวดจริงหลายงวดจากหน้า Dashboard เช่นลาวและลาวชุดคู่กัน */
+  drawIds: string;
   /** งวดที่กรองอยู่จริง เช่นงวดปัจจุบันที่ระบบเลือกให้ */
   defaultDrawId: string;
   /** ขอบเขตงวด: current | past | all */
@@ -67,7 +70,7 @@ export function AgentBillFilters({
   const [agent, setAgent] = useState(agentId);
   const [size, setSize] = useState(String(pageSize));
   const [order, setOrder] = useState(sort);
-  const hasFilter = Boolean(q || range.startDate || range.endDate || draw || agent || size !== "10" || order !== "newest");
+  const hasFilter = Boolean(q || range.startDate || range.endDate || draw || drawIds || agent || size !== "10" || order !== "newest");
   const typingTimer = useRef<number | undefined>(undefined);
 
   // คำค้นที่ส่งไปล่าสุด กันยิงซ้ำเมื่อค่าไม่เปลี่ยน
@@ -75,7 +78,7 @@ export function AgentBillFilters({
 
   function apply(overrides: Partial<Values> = {}) {
     window.clearTimeout(typingTimer.current);
-    const values: Values = { q, from: range.startDate, to: range.endDate, draw, agent, pageSize: size, sort: order, ...overrides };
+    const values: Values = { q, from: range.startDate, to: range.endDate, draw, draws: drawIds, agent, pageSize: size, sort: order, ...overrides };
     values.q = values.q.trim();
     appliedQuery.current = values.q;
 
@@ -116,7 +119,7 @@ export function AgentBillFilters({
     setAgent("");
     setSize("10");
     setOrder("newest");
-    apply({ q: "", from: "", to: "", draw: "", agent: "", pageSize: "10", sort: "newest" });
+    apply({ q: "", from: "", to: "", draw: "", draws: "", agent: "", pageSize: "10", sort: "newest" });
   }
 
   // มือถือ: ด้านบนเหลือช่องค้นหากับปุ่ม "ตัวกรอง" ตัวกรองที่เหลือเปิดเป็น Bottom Sheet
@@ -144,6 +147,10 @@ export function AgentBillFilters({
 
   // ตัวกรองที่ใช้อยู่ แสดงเป็นชิปใต้ช่องค้นหาบนมือถือ กดชิปเพื่อเอาตัวกรองนั้นออก
   const chips: { key: string; label: string; clear: () => void }[] = [];
+  if (drawIds) {
+    const count = drawIds.split(",").filter(Boolean).length;
+    chips.push({ key: "draws", label: count > 1 ? `งวดที่เลือก ${count} ประเภทหวย` : "งวดที่เลือก", clear: () => apply({ draws: "" }) });
+  }
   if (draw) {
     chips.push({ key: "draw", label: draws.find((option) => option.value === draw)?.label ?? "งวดที่เลือก", clear: () => { setDraw(""); apply({ draw: "" }); } });
   }
@@ -214,7 +221,7 @@ export function AgentBillFilters({
         <AppDropdown
           ariaLabel="เลือกงวด"
           value={draw || defaultDrawId}
-          onValueChange={(value) => { setDraw(value); apply({ draw: value }); }}
+          onValueChange={(value) => { setDraw(value); apply({ draw: value, draws: "" }); }}
           searchable={draws.length > 8}
           searchPlaceholder="ค้นหางวด"
           options={[

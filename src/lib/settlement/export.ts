@@ -25,6 +25,8 @@ const COLUMNS = [
   "ชื่อรางวัล",
   "วิธีตัดสิน",
   "เลขที่แทง",
+  "ราคาต่อชุด (บาท)",
+  "จำนวนชุด",
   "ยอดเดิมพัน (บาท)",
   "อัตราจ่ายที่ล็อกไว้",
   "ผลที่ออก",
@@ -62,6 +64,8 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
           select: {
             number: true,
             stake: true,
+            packagePrice: true,
+            quantity: true,
             payoutRateSnapshot: true,
             isWinner: true,
             payout: true,
@@ -115,11 +119,13 @@ export async function reconciliationExport(actor: Actor, drawId: string): Promis
           item.prizeType.name,
           isLaoSetEntry ? "ตรวจ 8 รางวัล เลือกจ่ายรางวัลสูงสุด 1 รางวัลต่อรายการ" : MATCH_RULE_LABEL[item.prizeType.matchRule] ?? item.prizeType.matchRule,
           item.number,
+          item.packagePrice === null ? 0 : Number(item.packagePrice),
+          item.quantity,
           Number(item.stake),
           isLaoSetEntry
             ? winningRateText
               ? winningRateText
-              : `ตามตาราง ${laoSetPackageLabel(item.stake) ?? ""}`.trim()
+              : `ตามตาราง ${laoSetPackageLabel(item.packagePrice ?? item.stake) ?? ""} × ${item.quantity} ชุด`.trim()
             : Number(item.payoutRateSnapshot),
           resultValue ?? "ยังไม่มีผล",
           resultValue === undefined ? "รอผล" : item.isWinner ? "ถูก" : "ไม่ถูก",

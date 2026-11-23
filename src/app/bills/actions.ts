@@ -1,22 +1,25 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActor } from "@/lib/auth/context";
 import {
   confirmBill,
   createDraftBill,
+  deleteBillItemBeforeCutoff,
   placeSlip,
   replaceDraftItems,
   softDeleteBillBeforeCutoff,
   updateBillBeforeCutoff,
+  updateBillItemBeforeCutoff,
 } from "@/lib/bills/service";
 import { AppError, BillItemsRejectedError, type RejectedBillItem } from "@/lib/errors";
 import { MAX_STAKE_PER_ITEM } from "@/lib/bills/betting";
 
 export type ActionState = {
   error: string | null;
+  saved?: boolean;
   /** เลขที่ Server ปฏิเสธตอนยืนยัน (เช่นเลขเต็มระหว่างกรอก) หน้าสร้างบิลใช้ไฮไลต์รายการที่ต้องแก้ */
   rejected?: RejectedBillItem[];
 };
@@ -25,6 +28,7 @@ const ItemSchema = z.object({
   prizeTypeId: z.string().min(1),
   number: z.string().trim().min(1).max(12),
   stake: z.string().trim().min(1).max(20),
+  quantity: z.coerce.number().int("จำนวนชุดต้องเป็นจำนวนเต็ม").min(1, "จำนวนชุดต้องอย่างน้อย 1").max(999, "จำนวนชุดต้องไม่เกิน 999").optional().default(1),
 });
 
 const CreateSchema = z.object({
@@ -40,15 +44,60 @@ function readItems(formData: FormData) {
   const prizeTypeIds = formData.getAll("prizeTypeId").map(String);
   const numbers = formData.getAll("number").map(String);
   const stakes = formData.getAll("stake").map(String);
+  const quantities = formData.getAll("quantity").map(String);
 
   return prizeTypeIds
     .map((prizeTypeId, i) => ({
       prizeTypeId,
       number: numbers[i] ?? "",
       stake: stakes[i] ?? "",
+      quantity: quantities[i] || "1",
     }))
     // แถวที่ผู้ใช้เว้นว่างไว้ ไม่ถือเป็นรายการ
     .filter((row) => row.number.trim() !== "" || row.stake.trim() !== "");
+}
+
+export async function updateBillItemAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const parsed = z.object({
+    billId: z.string().min(1),
+    itemId: z.string().min(1),
+    number: z.string().trim().regex(/^\d{1,6}$/, "เลขที่แทงไม่ถูกต้อง"),
+    stake: z.string().trim().min(1),
+    quantity: z.coerce.number().int().min(1).max(999).optional().default(1),
+  }).safeParse({
+    billId: formData.get("billId"), itemId: formData.get("itemId"), number: formData.get("number"),
+    stake: formData.get("stake"), quantity: formData.get("quantity") || "1",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง" };
+  try {
+    await updateBillItemBeforeCutoff(actor, parsed.data.billId, parsed.data.itemId, parsed.data);
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message };
+    throw error;
+  }
+  revalidatePath(`/bills/${parsed.data.billId}`);
+  revalidatePath("/bills");
+  revalidatePath("/reports");
+  refresh();
+  return { error: null, saved: true };
+}
+
+export async function deleteBillItemAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const billId = String(formData.get("billId") ?? "");
+  const itemId = String(formData.get("itemId") ?? "");
+  try {
+    await deleteBillItemBeforeCutoff(actor, billId, itemId);
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message };
+    throw error;
+  }
+  revalidatePath(`/bills/${billId}`);
+  revalidatePath("/bills");
+  revalidatePath("/reports");
+  refresh();
+  return { error: null, saved: true };
 }
 
 export async function createBillAction(
@@ -160,6 +209,7 @@ const PlaceSchema = z.object({
         prizeTypeId: z.string().min(1),
         number: z.string().regex(/^\d{1,6}$/, "เลขไม่ถูกต้อง"),
         stake: z.number().int("ยอดเดิมพันต้องเป็นจำนวนเต็ม").positive("ยอดเดิมพันต้องมากกว่า 0").max(MAX_STAKE_PER_ITEM, "ยอดเดิมพันต่อรายการต้องไม่เกิน 1,000 บาท"),
+        quantity: z.number().int("จำนวนชุดต้องเป็นจำนวนเต็ม").min(1, "จำนวนชุดต้องอย่างน้อย 1").max(999, "จำนวนชุดต้องไม่เกิน 999").optional().default(1),
       }),
     )
     .min(1, "ยังไม่มีรายการแทง")
@@ -197,6 +247,7 @@ const SlipItemSchema = z.object({
   prizeTypeId: z.string().min(1),
   number: z.string().regex(/^\d{1,6}$/, "เลขไม่ถูกต้อง"),
   stake: z.number().int("ยอดเดิมพันต้องเป็นจำนวนเต็ม").positive("ยอดเดิมพันต้องมากกว่า 0").max(MAX_STAKE_PER_ITEM, "ยอดเดิมพันต่อรายการต้องไม่เกิน 1,000 บาท"),
+  quantity: z.number().int("จำนวนชุดต้องเป็นจำนวนเต็ม").min(1, "จำนวนชุดต้องอย่างน้อย 1").max(999, "จำนวนชุดต้องไม่เกิน 999").optional().default(1),
 });
 
 /** บิลเดียวหลายประเภทหวย: รายการแยกตามงวด */

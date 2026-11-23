@@ -144,6 +144,13 @@
 .bs-lao-package-rates b { color: var(--bs-text); font-size: .78rem; white-space: nowrap; }
 .app-page .bet-slip .bs-lao-packages button.is-active { border-color: var(--bs-blue); color: #fff; background: linear-gradient(135deg, var(--bs-blue), var(--bs-blue-dark)); box-shadow: 0 8px 20px rgb(11 108 240 / 20%); }
 .app-page .bet-slip .bs-lao-packages button.is-active .bs-lao-package-rates, .app-page .bet-slip .bs-lao-packages button.is-active .bs-lao-package-rates b { color: rgb(255 255 255 / 88%); }
+.bs-lao-quantity { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(210px, 1.4fr) minmax(140px, .8fr); align-items: center; gap: .65rem .85rem; margin-top: .85rem; padding: .8rem; border: 1px solid #cfe0f3; border-radius: 14px; background: #f6faff; }
+.bs-lao-quantity > div:first-child { display: grid; gap: .15rem; }
+.bs-lao-quantity > div:first-child small { color: var(--bs-muted); }
+.bs-lao-quantity-presets { display: grid; grid-column: 2; grid-row: 2; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .35rem; }
+.app-page .bet-slip .bs-lao-quantity-presets button { min-height: 42px; padding: 0; border: 1px solid #bcd3ed; border-radius: 10px; color: var(--bs-blue-dark); background: #fff; box-shadow: none; font-weight: 800; }
+.app-page .bet-slip .bs-lao-quantity-presets button.is-active { border-color: var(--bs-blue); color: #fff; background: var(--bs-blue); }
+.bs-lao-quantity-total { grid-column: 3; grid-row: 1; color: var(--bs-blue-dark); text-align: right; font-size: 1.04rem; }
 .app-page .bet-slip .bs-chip { --chip: #f2c230; display: grid; width: 46px; min-height: 46px; height: 46px; place-items: center; padding: 0; border: 3px dashed rgb(255 255 255 / 85%); border-radius: 50%; color: #1f2a37; background: radial-gradient(circle, #fff 0 52%, var(--chip) 54%); box-shadow: 0 0 0 2px var(--chip), 0 3px 8px rgb(0 0 0 / 15%); font-size: .74rem; font-weight: 800; }
 .app-page .bet-slip .bs-chip:hover:not(:disabled) { transform: translateY(-2px); }
 .app-page .bet-slip .bs-chip-10 { --chip: #e46ab7; }
@@ -371,6 +378,9 @@
   .app-page .bet-slip .bs-lao-packages button strong { text-align: left; }
   .bs-lao-package-rates { padding-left: .7rem; border-left: 1px solid #d7e5f4; }
   .app-page .bet-slip .bs-lao-packages button.is-active .bs-lao-package-rates { border-left-color: rgb(255 255 255 / 35%); }
+  .bs-lao-quantity { grid-template-columns: 1fr; gap: .55rem; }
+  .bs-lao-quantity-presets, .bs-lao-quantity-total { grid-column: 1; grid-row: auto; }
+  .bs-lao-quantity-total { padding-top: .15rem; text-align: center; }
   .app-page .bet-slip .bs-options.is-lao-set .bs-option { min-height: 52px; padding: .4rem .3rem; font-size: .82rem; }
   .bs-rules-body { padding: 1rem; }
   .app-page .bet-slip .bs-rules-close { width: 44px; height: 44px; }

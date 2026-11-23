@@ -52,7 +52,8 @@ export function readDraft(scope: string): SlipDraft | null {
       ? draft.entries.map((entry) => ({ ...entry, drawId: draft.drawId }))
       : draft.entries;
     const entries = rawEntries.filter((entry) =>
-      typeof entry?.prizeTypeId === "string" && typeof entry.drawId === "string" && /^\d{1,6}$/.test(entry.number) && Number.isInteger(entry.stake) && entry.stake > 0);
+      typeof entry?.prizeTypeId === "string" && typeof entry.drawId === "string" && /^\d{1,6}$/.test(entry.number) && Number.isInteger(entry.stake) && entry.stake > 0)
+      .map((entry) => ({ ...entry, quantity: Number.isInteger(entry.quantity) && (entry.quantity ?? 0) > 0 ? entry.quantity : 1 }));
     return {
       version: 2,
       entries,

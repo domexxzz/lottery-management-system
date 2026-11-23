@@ -4,6 +4,7 @@ import { orgScope, requirePermission } from "@/lib/auth/context";
 import { databaseSchema, prisma } from "@/lib/db";
 import { ForbiddenError } from "@/lib/errors";
 import { sumMoney, ZERO } from "@/lib/money";
+import { commissionRateForLottery } from "@/lib/agents/commission";
 
 const COUNTED_STATUSES: BillStatus[] = ["CONFIRMED", "LOCKED", "SETTLED"];
 const SETTLEMENT_STATUSES: SettlementStatus[] = ["DRAFT", "RECONCILED", "APPROVED"];
@@ -259,13 +260,13 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
   const [agent, drawOptions] = await Promise.all([
     prisma.agent.findFirst({
       where: { ...scope, id: actor.agentId },
-      select: { code: true, name: true, commissionRate: true },
+      select: { code: true, name: true, commissionRate: true, laoCommissionRate: true },
     }),
     prisma.draw.findMany({
       where: scope,
       orderBy: { cutoffAt: "desc" },
       take: 50,
-      select: { id: true, name: true, cutoffAt: true },
+      select: { id: true, name: true, cutoffAt: true, lotteryType: true },
     }),
   ]);
   if (!agent) throw new ForbiddenError("ไม่พบบัญชี Agent");
@@ -338,7 +339,7 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
       billCount: bill?._count._all ?? 0,
       winnerCount: winnersByDraw.get(draw.id) ?? 0,
       gross,
-      commission: settlement?.commission ?? gross.times(agent.commissionRate).dividedBy(100),
+      commission: settlement?.commission ?? gross.times(commissionRateForLottery(agent, draw.lotteryType)).dividedBy(100),
       commissionFinal: Boolean(settlement),
     };
   });

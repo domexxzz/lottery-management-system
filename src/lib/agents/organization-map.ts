@@ -57,7 +57,7 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
     prisma.agent.findMany({
       where: orgScope(actor),
       orderBy: { code: "asc" },
-      select: { id: true, code: true, name: true, status: true, commissionRate: true },
+      select: { id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true },
     }),
     prisma.$queryRaw<StatRow[]>(Prisma.sql`
       WITH bill_agg AS (

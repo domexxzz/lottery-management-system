@@ -3,6 +3,7 @@ import { databaseSchema, prisma } from "@/lib/db";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { resolveRange, type AccountingQuery, type ResolvedRange } from "./accounting-period";
 import { groupReportDraws, type ReportCategory } from "./draw-groups";
+import { commissionRateForLottery } from "@/lib/agents/commission";
 
 /**
  * สรุปบัญชีรายงวด สำหรับ Owner/Admin ทำบัญชี
@@ -189,7 +190,7 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
     }),
     prisma.agent.findMany({
       where: { ...orgScope(actor), id: { in: agentIds } },
-      select: { id: true, code: true, name: true, commissionRate: true },
+      select: { id: true, code: true, name: true, commissionRate: true, laoCommissionRate: true },
     }),
     prisma.settlement.findMany({
       where: { ...orgScope(actor), drawId: { in: drawIds }, agentId: { in: agentIds } },
@@ -211,7 +212,7 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
     const lines: AccountingAgentLine[] = (rowsByDraw.get(draw.id) ?? [])
       .map((row) => {
         const agent = agentById.get(row.agentId)!;
-        const rate = money(agent.commissionRate);
+        const rate = money(commissionRateForLottery(agent, draw.lotteryType));
         const gross = money(row.gross);
         const actual = commissionByKey.get(`${draw.id}:${row.agentId}`);
         const commission = actual ?? round2(gross * rate / 100);

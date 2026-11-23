@@ -36,6 +36,7 @@ export default async function EditUserPage({ params }: { params: Promise<{ id: s
       code: managedUser.agent.code,
       name: managedUser.agent.name,
       commissionRate: managedUser.agent.commissionRate.toString(),
+      laoCommissionRate: managedUser.agent.laoCommissionRate.toString(),
       creditLimit: managedUser.agent.creditLimit?.toString() ?? "",
       perNumberLimit: managedUser.agent.perNumberLimit?.toString() ?? "",
     } : null,

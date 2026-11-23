@@ -49,7 +49,7 @@ export function CreateUserForm({ nextAgentLogin }: { nextAgentLogin: string }) {
     )}
     <label>ชื่อที่แสดง<input name="displayName" required maxLength={120} placeholder={isAgent ? "เช่น ตัวแทน โคราช, พี่เบส" : "เช่น แอดมินบัญชี"} /><small className="user-field-hint">ชื่อนี้จะแสดงในบิล รายงาน และรายชื่อ Agent</small></label>
     <label>รหัสผ่าน<input name="password" type="text" required maxLength={256} autoComplete="off" spellCheck={false} placeholder="ตั้งได้ตามต้องการ" /><small className="user-field-hint">ไม่มีข้อกำหนด ตั้งอะไรก็ได้ เจ้าของบัญชีใช้รหัสนี้เข้าได้เลย</small></label>
-    {isAgent && <fieldset className="agent-account-fields"><legend>ข้อมูล Agent</legend><label>คอมมิชชัน (%)<input name="commissionRate" inputMode="decimal" value="30" readOnly aria-describedby="agent-commission-help" /><small id="agent-commission-help">คิด 30% จากยอดเดิมพันรวม</small></label><label>วงเงินรวมต่องวด<input name="creditLimit" inputMode="decimal" placeholder="เว้นว่าง = ไม่จำกัด" /></label><label>วงเงินต่อเลข<input name="perNumberLimit" inputMode="decimal" placeholder="เว้นว่าง = ไม่จำกัด" /></label></fieldset>}
+    {isAgent && <fieldset className="agent-account-fields"><legend>ข้อมูล Agent</legend><label>ค่าคอมหวยรัฐบาล (%)<input name="commissionRate" inputMode="decimal" value="30" readOnly aria-describedby="agent-thai-commission-help" /><small id="agent-thai-commission-help">ค่าเริ่มต้น 30% ของยอดเดิมพันหวยรัฐบาล</small></label><label>ค่าคอมหวยลาวและหวยลาวชุด (%)<input name="laoCommissionRate" inputMode="decimal" value="28" readOnly aria-describedby="agent-lao-commission-help" /><small id="agent-lao-commission-help">ค่าเริ่มต้น 28% ใช้ร่วมกันทั้งหวยลาวและหวยลาวชุด</small></label><label>วงเงินรวมต่องวด<input name="creditLimit" inputMode="decimal" placeholder="เว้นว่าง = ไม่จำกัด" /></label><label>วงเงินต่อเลข<input name="perNumberLimit" inputMode="decimal" placeholder="เว้นว่าง = ไม่จำกัด" /></label></fieldset>}
     {state.error && <p className="error" role="alert">{state.error}</p>}
     {state.ok && state.message && <p className="success" role="status">{state.message}</p>}
     {state.ok && state.credentials && <CredentialsCard login={state.credentials.login} password={state.credentials.password} />}
@@ -67,6 +67,7 @@ export type EditableUser = {
     code: string;
     name: string;
     commissionRate: string;
+    laoCommissionRate: string;
     creditLimit: string;
     perNumberLimit: string;
   };
@@ -95,7 +96,8 @@ export function EditUserForm({ user }: { user: EditableUser }) {
       <div className="user-edit-grid user-edit-agent-grid">
         <label>รหัส Agent<input name="agentCode" defaultValue={user.agent?.code ?? ""} maxLength={32} placeholder="เว้นว่างให้ระบบสร้างอัตโนมัติ" /><small>ใช้ A-Z, 0-9, จุด ขีดกลาง หรือขีดล่าง</small></label>
         <label>ชื่อ Agent<input name="agentName" defaultValue={user.agent?.name ?? user.displayName} maxLength={120} required /></label>
-        <label>คอมมิชชัน (%)<input name="commissionRate" type="number" min="0" max="100" step="0.0001" defaultValue={user.agent?.commissionRate ?? "30"} required /></label>
+        <label>ค่าคอมหวยรัฐบาล (%)<input name="commissionRate" type="number" min="0" max="100" step="0.0001" defaultValue={user.agent?.commissionRate ?? "30"} required /><small>ใช้เฉพาะยอดขายหวยรัฐบาล</small></label>
+        <label>ค่าคอมหวยลาวและหวยลาวชุด (%)<input name="laoCommissionRate" type="number" min="0" max="100" step="0.0001" defaultValue={user.agent?.laoCommissionRate ?? "28"} required /><small>ใช้ร่วมกันทั้งหวยลาวปกติและหวยลาวชุด</small></label>
         <label>วงเงินรวมต่องวด<input name="creditLimit" type="number" min="0.01" step="0.01" defaultValue={user.agent?.creditLimit ?? ""} placeholder="ไม่จำกัด" /><small>เว้นว่าง = ไม่จำกัด</small></label>
         <label>วงเงินต่อเลข<input name="perNumberLimit" type="number" min="0.01" step="0.01" defaultValue={user.agent?.perNumberLimit ?? ""} placeholder="ไม่จำกัด" /><small>เว้นว่าง = ไม่จำกัด</small></label>
       </div>

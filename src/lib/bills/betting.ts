@@ -20,6 +20,8 @@ export type BetEntry = {
   number: string;
   /** ยอดเดิมพันเป็นจำนวนเต็มบาท */
   stake: number;
+  /** จำนวนชุด ใช้กับหวยลาวชุด; หวยประเภทอื่นถือเป็น 1 */
+  quantity?: number;
 };
 
 export type BetGroup = {

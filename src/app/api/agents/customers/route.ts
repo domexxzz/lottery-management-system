@@ -1,18 +1,14 @@
 import { NextResponse } from "next/server";
-import { getActor, orgScope, type Actor } from "@/lib/auth/context";
+import { getActor, orgScope } from "@/lib/auth/context";
 import { prisma } from "@/lib/db";
 import { listOrganizationCustomers } from "@/lib/agents/customers";
 import { AppError } from "@/lib/errors";
 import { drawDay, inRange, parseDay } from "@/lib/draws/range";
 import { createReportDownload, type ReportExportInput } from "@/lib/export/report";
+import { dashboardDrawLabel, drawMatchesDashboardCategory, resolveDashboardDrawScope } from "@/lib/dashboard/lottery-draw-filter";
+import { reportCategoryLabel } from "@/lib/reports/draw-groups";
 
 export const dynamic = "force-dynamic";
-
-/** id ของงวดที่วันออกรางวัลอยู่ในช่วง — ไม่มีงวดในช่วงต้องได้ [] (ผลว่าง) ไม่ใช่ทุกงวด */
-async function drawIdsInRange(actor: Actor, from: string | undefined, to: string | undefined): Promise<string[]> {
-  const draws = await prisma.draw.findMany({ where: orgScope(actor), select: { id: true, drawDate: true, cutoffAt: true } });
-  return draws.filter((draw) => inRange(drawDay(draw), from, to)).map((draw) => draw.id);
-}
 
 export async function GET(request: Request) {
   const actor = await getActor();
@@ -22,15 +18,23 @@ export async function GET(request: Request) {
   const from = parseDay(params.get("from"));
   const to = parseDay(params.get("to"));
   const drawId = params.get("draw") || undefined;
+  const lottery = params.get("lottery");
   try {
+    const physicalDraws = await prisma.draw.findMany({
+      where: orgScope(actor),
+      orderBy: { cutoffAt: "desc" },
+      select: { id: true, name: true, drawDate: true, cutoffAt: true, status: true, lotteryType: true, laoFamilyId: true },
+    });
+    const drawScope = resolveDashboardDrawScope(physicalDraws, lottery, drawId);
     // ช่วงวันที่มาก่อนงวดเดียว ให้ตรงกับที่หน้าภาพรวม Agent แสดง
-    const draws = from || to ? await drawIdsInRange(actor, from, to) : drawId;
-    const selectedDraw = drawId && !from && !to
-      ? await prisma.draw.findFirst({ where: { ...orgScope(actor), id: drawId }, select: { name: true } })
-      : null;
+    const draws = from || to
+      ? physicalDraws.filter((draw) => drawMatchesDashboardCategory(draw, drawScope.category) && inRange(drawDay(draw), from, to)).map((draw) => draw.id)
+      : drawScope.drawIds;
     const scopeLabel = from || to
       ? `${from ?? "เริ่มต้น"} ถึง ${to ?? "ปัจจุบัน"}`
-      : selectedDraw?.name ?? "ทุกงวด";
+      : drawScope.selectedDraw
+        ? `${reportCategoryLabel(drawScope.selectedDraw.category)} · ${dashboardDrawLabel(drawScope.selectedDraw)}`
+        : drawScope.category === "ALL" ? "ทุกประเภท · ทุกงวด" : `${reportCategoryLabel(drawScope.category)} · ทุกงวด`;
     const customers = await listOrganizationCustomers(actor, draws);
     const report: ReportExportInput = {
       filename: `customers_${from || "all"}_${to || from || "all"}`,

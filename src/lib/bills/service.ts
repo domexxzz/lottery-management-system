@@ -22,7 +22,9 @@ import { LAO_SET_ACTIVE_CODES } from "@/lib/lao/rules";
 export type ItemInput = {
   prizeTypeId: string;
   number: string;
+  /** ราคาต่อหนึ่งชุดสำหรับหวยลาวชุด; หวยทั่วไปคือยอดเดิมพันตามปกติ */
   stake: string;
+  quantity?: number;
 };
 
 const SOFT_DELETE_REASON = "ลบบิลก่อนปิดรับ";
@@ -52,14 +54,32 @@ function assertBillMutationAllowed(actor: Actor, draw: BillMutationDraw): void {
   }
 }
 
-function itemSnapshot(item: { id?: string; prizeTypeId: string; number: string; stake: Prisma.Decimal; prizeType?: { name: string } }) {
+function itemSnapshot(item: { id?: string; prizeTypeId: string; number: string; stake: Prisma.Decimal; packagePrice?: Prisma.Decimal | null; quantity?: number; prizeType?: { name: string } }) {
   return {
     ...(item.id !== undefined && { id: item.id }),
     prizeTypeId: item.prizeTypeId,
     prizeTypeName: item.prizeType?.name,
     number: item.number,
     stake: item.stake.toFixed(2),
+    packagePrice: item.packagePrice?.toFixed(2) ?? null,
+    quantity: item.quantity ?? 1,
   };
+}
+
+function parseItems(items: readonly ItemInput[], rules: ReadonlyMap<string, PrizeTypeRule>): DraftItem[] {
+  return items.map((item) => {
+    const rule = rules.get(item.prizeTypeId);
+    const isLaoSet = rule !== undefined && LAO_SET_ACTIVE_CODES.some((code) => code === rule.code);
+    const unitStake = toDecimal(item.stake);
+    const quantity = isLaoSet ? (item.quantity ?? 1) : 1;
+    return {
+      prizeTypeId: item.prizeTypeId,
+      number: item.number.trim(),
+      stake: isLaoSet ? unitStake.mul(quantity) : unitStake,
+      packagePrice: isLaoSet ? unitStake : null,
+      quantity,
+    };
+  });
 }
 
 function assertDrawStillOpen(draw: { status: string; cutoffAt: Date }): void {
@@ -256,11 +276,7 @@ export async function replaceDraftItems(
   }
 
   const rules = await loadPrizeRules(prisma, actor.organizationId);
-  const parsed = items.map((item) => ({
-    prizeTypeId: item.prizeTypeId,
-    number: item.number.trim(),
-    stake: toDecimal(item.stake),
-  }));
+  const parsed = parseItems(items, rules);
 
   await prisma.$transaction(async (tx) => {
     await tx.billItem.deleteMany({ where: { billId: bill.id } });
@@ -273,6 +289,8 @@ export async function replaceDraftItems(
           prizeTypeId: item.prizeTypeId,
           number: item.number,
           stake: item.stake,
+          packagePrice: item.packagePrice,
+          quantity: item.quantity,
           payoutRateSnapshot: rules.get(item.prizeTypeId)?.payoutRate ?? new Prisma.Decimal(0),
         })),
       });
@@ -305,6 +323,8 @@ export async function updateBillBeforeCutoff(
   actor: Actor,
   billId: string,
   input: { title: string; items: readonly ItemInput[] },
+  reasonOverride?: string,
+  allowItemRemoval = false,
 ): Promise<void> {
   requirePermission(actor, "bill.editBeforeCutoff");
   const title = input.title.trim();
@@ -342,21 +362,28 @@ export async function updateBillBeforeCutoff(
     // ราคา 30/60/120 คือประเภทย่อยของหวยลาวชุด ไม่ใช่ยอดที่แก้ภายหลังได้
     // ตรวจซ้ำฝั่ง server เพื่อกันการแก้ hidden field หรือยิง Server Action โดยตรง
     if (bill.draw.lotteryType === "LAO_SET") {
-      const changedPackage = input.items.length !== bill.items.length || input.items.some((item, index) => {
-        const existing = bill.items[index];
-        return !existing || item.prizeTypeId !== existing.prizeTypeId || !toDecimal(item.stake).equals(existing.stake);
-      });
+      const signature = (prizeTypeId: string, packagePrice: Prisma.Decimal) => `${prizeTypeId}:${packagePrice.toFixed(2)}`;
+      const existingCounts = new Map<string, number>();
+      for (const item of bill.items) {
+        const key = signature(item.prizeTypeId, item.packagePrice ?? item.stake);
+        existingCounts.set(key, (existingCounts.get(key) ?? 0) + 1);
+      }
+      const nextCounts = new Map<string, number>();
+      for (const item of input.items) {
+        const key = signature(item.prizeTypeId, toDecimal(item.stake));
+        nextCounts.set(key, (nextCounts.get(key) ?? 0) + 1);
+      }
+      const changedPackage = (!allowItemRemoval && input.items.length !== bill.items.length)
+        || input.items.length > bill.items.length
+        || [...nextCounts].some(([key, count]) => count > (existingCounts.get(key) ?? 0))
+        || (!allowItemRemoval && [...existingCounts].some(([key, count]) => count !== (nextCounts.get(key) ?? 0)));
       if (changedPackage) throw new ValidationError("หวยลาวชุดแก้ได้เฉพาะตัวเลข ประเภทชุด 30/60/120 บาทและประเภทตรง/โต๊ดแก้ไม่ได้");
     }
 
     const rules = await loadPrizeRules(tx, bill.organizationId, bill.draw.lotteryType);
     const restrictions = await loadRestrictions(tx, bill.drawId);
     const numberCap = await loadNumberCapInTx(tx, bill.drawId, bill.draw.numberCap, bill.id, input.items.map((item) => item.prizeTypeId));
-    const parsed: DraftItem[] = input.items.map((item) => ({
-      prizeTypeId: item.prizeTypeId,
-      number: item.number.trim(),
-      stake: toDecimal(item.stake),
-    }));
+    const parsed = parseItems(input.items, rules);
     const committed = await tx.bill.aggregate({
       where: {
         organizationId: bill.organizationId,
@@ -397,6 +424,8 @@ export async function updateBillBeforeCutoff(
           prizeTypeId: item.prizeTypeId,
           number: item.number,
           stake: item.stake,
+          packagePrice: item.packagePrice,
+          quantity: item.quantity,
           payoutRateSnapshot: restriction?.kind === "REDUCED_RATE" && restriction.payoutRate !== null
             ? restriction.payoutRate
             : rule.payoutRate,
@@ -420,11 +449,69 @@ export async function updateBillBeforeCutoff(
       entityId: bill.id,
       before,
       after,
-      reason: managerOverride && (bill.draw.status !== "OPEN" || Date.now() >= bill.draw.cutoffAt.getTime())
+      reason: reasonOverride ?? (managerOverride && (bill.draw.status !== "OPEN" || Date.now() >= bill.draw.cutoffAt.getTime())
         ? "ผู้ดูแลแก้ไขบิลหลังปิดรับก่อนกรอกผล"
-        : "แก้ไขบิลก่อนปิดรับ",
+        : "แก้ไขบิลก่อนปิดรับ"),
     });
   });
+}
+
+function editableItemInput(item: {
+  prizeTypeId: string;
+  number: string;
+  stake: Prisma.Decimal;
+  packagePrice: Prisma.Decimal | null;
+  quantity: number;
+}): ItemInput {
+  return {
+    prizeTypeId: item.prizeTypeId,
+    number: item.number,
+    stake: (item.packagePrice ?? item.stake).toFixed(2),
+    quantity: item.quantity,
+  };
+}
+
+/** แก้รายการเดียวจากการ์ด โดยยังตรวจทั้งบิลและเก็บ Audit แบบเดียวกับหน้าแก้บิล */
+export async function updateBillItemBeforeCutoff(
+  actor: Actor,
+  billId: string,
+  itemId: string,
+  input: { number: string; stake: string; quantity?: number },
+): Promise<void> {
+  const bill = await prisma.bill.findFirst({
+    where: { id: billId, ...billScope(actor) },
+    select: {
+      title: true,
+      items: { orderBy: { createdAt: "asc" }, select: { id: true, prizeTypeId: true, number: true, stake: true, packagePrice: true, quantity: true } },
+    },
+  });
+  if (!bill) throw new NotFoundError("ไม่พบบิล");
+  if (!bill.items.some((item) => item.id === itemId)) throw new NotFoundError("ไม่พบรายการเลขในบิล");
+  await updateBillBeforeCutoff(actor, billId, {
+    title: bill.title,
+    items: bill.items.map((item) => item.id === itemId
+      ? { ...editableItemInput(item), number: input.number, stake: input.stake, quantity: input.quantity ?? item.quantity }
+      : editableItemInput(item)),
+  }, `แก้ไขรายการเลข ${input.number} จากการ์ดบิล`);
+}
+
+/** ลบเฉพาะรายการเดียวจากบิล รายการสุดท้ายต้องใช้การลบทั้งบิลเพื่อคงประวัติให้ครบ */
+export async function deleteBillItemBeforeCutoff(actor: Actor, billId: string, itemId: string): Promise<void> {
+  const bill = await prisma.bill.findFirst({
+    where: { id: billId, ...billScope(actor) },
+    select: {
+      title: true,
+      items: { orderBy: { createdAt: "asc" }, select: { id: true, prizeTypeId: true, number: true, stake: true, packagePrice: true, quantity: true } },
+    },
+  });
+  if (!bill) throw new NotFoundError("ไม่พบบิล");
+  if (!bill.items.some((item) => item.id === itemId)) throw new NotFoundError("ไม่พบรายการเลขในบิล");
+  if (bill.items.length <= 1) throw new ValidationError("รายการสุดท้ายลบแยกไม่ได้ กรุณาใช้เมนูจัดการบิลเพื่อลบทั้งบิล");
+  const removed = bill.items.find((item) => item.id === itemId)!;
+  await updateBillBeforeCutoff(actor, billId, {
+    title: bill.title,
+    items: bill.items.filter((item) => item.id !== itemId).map(editableItemInput),
+  }, `ลบรายการเลข ${removed.number} ออกจากบิล`, true);
 }
 
 /** ลบเชิงระบบ: เก็บบิล รายการเลข และหลักฐานไว้ แต่ตัดออกจากการคำนวณทันที */
@@ -559,7 +646,7 @@ async function confirmInTx(
   const bill = await tx.bill.findFirst({
     where: { id: billId, ...billScope(actor) },
     include: {
-      items: { select: { id: true, prizeTypeId: true, number: true, stake: true } },
+      items: { select: { id: true, prizeTypeId: true, number: true, stake: true, packagePrice: true, quantity: true } },
       draw: { select: { id: true, status: true, cutoffAt: true, drawDate: true, lotteryType: true, numberCap: true } },
       agent: { select: { id: true, code: true, status: true, creditLimit: true, perNumberLimit: true } },
     },
@@ -597,6 +684,8 @@ async function confirmInTx(
     prizeTypeId: item.prizeTypeId,
     number: item.number,
     stake: item.stake,
+    packagePrice: item.packagePrice,
+    quantity: item.quantity,
   }));
 
   const issues = validateBill({
@@ -818,11 +907,7 @@ async function placeSlipOnce(
     let shared: { drawSequence: number; sequencePeriod: string } | undefined;
 
     for (const [drawId, items] of parts) {
-      const parsed = items.map((item) => ({
-        prizeTypeId: item.prizeTypeId,
-        number: item.number.trim(),
-        stake: toDecimal(item.stake),
-      }));
+      const parsed = parseItems(items, rules);
       const created = await tx.bill.create({
         data: {
           organizationId: actor.organizationId,
@@ -846,6 +931,8 @@ async function placeSlipOnce(
           prizeTypeId: item.prizeTypeId,
           number: item.number,
           stake: item.stake,
+          packagePrice: item.packagePrice,
+          quantity: item.quantity,
           payoutRateSnapshot: rules.get(item.prizeTypeId)?.payoutRate ?? new Prisma.Decimal(0),
         })),
       });
@@ -977,6 +1064,7 @@ function betTabWhere(tab: BetTab): Prisma.BillWhereInput {
 export type BetBillFilter = {
   tab: BetTab;
   lotteryType?: LotteryType;
+  lotteryTypes?: LotteryType[];
   query?: string;
   dateFrom?: Date;
   dateTo?: Date;
@@ -1003,10 +1091,11 @@ function betBaseWhere(actor: Actor, filter: BetBillFilter): Prisma.BillWhereInpu
     ...billScope(actor),
     ...(filter.agentId && actor.role !== "AGENT" && { agentId: filter.agentId }),
     ...(filter.drawId && { drawId: filter.drawId }),
-    ...((filter.lotteryType !== undefined || filter.drawWhere) && {
+    ...((filter.lotteryType !== undefined || filter.lotteryTypes !== undefined || filter.drawWhere) && {
       draw: {
         ...filter.drawWhere,
         ...(filter.lotteryType !== undefined && { lotteryType: filter.lotteryType }),
+        ...(filter.lotteryTypes !== undefined && { lotteryType: { in: filter.lotteryTypes } }),
       },
     }),
     ...(query && {

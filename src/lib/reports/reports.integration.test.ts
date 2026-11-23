@@ -8,6 +8,8 @@ import { calculateSettlement } from "@/lib/settlement/service";
 import { byAgent, byDraw, byPrizeType, chartMatrix, drawSummary, searchBills } from "@/lib/reports/service";
 import { getAgentReport, getSimpleAgentReport } from "@/lib/reports/agent-report";
 import { sumMoney } from "@/lib/money";
+import { loadWinningBillsReport } from "@/lib/reports/winning-bills";
+import { parseWinningBillsQuery } from "@/lib/reports/winning-bills-query";
 
 /**
  * รายงานต้องตรงกับ Settlement เสมอ
@@ -133,6 +135,20 @@ describe("รายงานตรงกับ Settlement", () => {
 
     const otherAgent = await getAgentReport(f.actors.AGENT2, { drawId: f.draw.id, view: "winners" });
     expect(otherAgent.bills).toHaveLength(0);
+  });
+
+  test("หน้าบิลถูกรางวัลแสดง Agent เลข ประเภทรางวัล ยอดจ่าย และค่าคอมครบ", async () => {
+    await settledDraw();
+    const report = await loadWinningBillsReport(f.actors.OWNER, parseWinningBillsQuery({ draws: f.draw.id }));
+
+    expect(report.totalBills).toBe(1);
+    expect(report.totals.payout).toBeGreaterThan(0);
+    expect(report.totals.commission).toBeGreaterThan(0);
+    expect(report.agents).toHaveLength(1);
+    expect(report.agents[0]).toMatchObject({ code: f.agents.agent1.code, billCount: 1 });
+    expect(report.agents[0]!.bills[0]!.prizes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ number: "123", label: f.prizeTypes.threeTop.name }),
+    ]));
   });
 
   test("รายงาน Agent แบบย่อแสดง 2 งวดล่าสุด ยอดขาย ค่าคอม และบิลถูกรางวัล", async () => {

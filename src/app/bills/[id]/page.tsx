@@ -85,6 +85,13 @@ export default async function BillDetailPage({
   const detailedParts = viewAll
     ? await Promise.all(slipParts.map((part) => part.id === bill.id ? Promise.resolve(bill) : getBill(actor, part.id)))
     : [];
+  const manageableBillIds = detailedParts.filter((part) => {
+    const partBeforeCutoff = part.draw.status === "OPEN" && Date.now() < part.draw.cutoffAt.getTime();
+    const partNoResult = part.draw.officialNumber === null && part.draw._count.results === 0 && part.draw._count.settlements === 0;
+    const partManagerWindow = isManager && partNoResult && (part.draw.status === "OPEN" || part.draw.status === "LOCKED");
+    const partEditableStatus = part.status === "CONFIRMED" || part.status === "DRAFT" || (isManager && part.status === "LOCKED");
+    return (partBeforeCutoff || partManagerWindow) && partEditableStatus && can(actor.role, "bill.editBeforeCutoff");
+  }).map((part) => part.id);
   const activeParts = slipParts.filter((part) => part.status !== "CANCELLED");
   const slipTotal = activeParts.reduce((sum, part) => sum + Number(part.totalStake), 0);
   const slipItemCount = activeParts.reduce((sum, part) => sum + part._count.items, 0);
@@ -181,12 +188,13 @@ export default async function BillDetailPage({
         )}
 
         {viewAll ? (
-          <SlipAllDetail parts={detailedParts} />
+          <SlipAllDetail parts={detailedParts} manageableBillIds={manageableBillIds} />
         ) : (
         <SlipDetail
           bill={bill}
           settledAt={settlement?.calculatedAt ?? null}
           showDrawLink={actor.role !== "AGENT"}
+          canManageItems={canEditBill}
           beforeItems={(
             <div className="bill-change-zone">
               {canEditBill && (
@@ -200,9 +208,10 @@ export default async function BillDetailPage({
                       prizeTypeId: item.prizeTypeId,
                       prizeTypeName: item.prizeType.name,
                       number: item.number,
-                      stake: item.stake.toFixed(2),
+                      stake: (item.packagePrice ?? item.stake).toFixed(2),
+                      quantity: item.quantity,
                       digits: item.prizeType.digits,
-                      packageLabel: bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.stake) : null,
+                      packageLabel: bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.packagePrice ?? item.stake) : null,
                       lockedStake: bill.draw.lotteryType === "LAO_SET",
                     }))}
                   />
@@ -217,15 +226,21 @@ export default async function BillDetailPage({
                       const after = event.after as { title?: string; totalStake?: string; items?: Array<{ number?: string; stake?: string; prizeTypeName?: string }>; status?: string } | null;
                       const changes: string[] = [];
                       if (event.action === "DELETE") changes.push("ลบบิลแล้ว และนำออกจากการคำนวณ");
+                      const deletedOneItem = event.action === "UPDATE" && event.reason?.startsWith("ลบรายการเลข");
+                      if (deletedOneItem && event.reason) changes.push(event.reason);
                       if (before?.title !== undefined && after?.title !== undefined && before.title !== after.title) changes.push(`ชื่อลูกค้า “${before.title}” → “${after.title}”`);
                       const count = Math.max(before?.items?.length ?? 0, after?.items?.length ?? 0);
-                      for (let index = 0; index < count; index += 1) {
+                      for (let index = 0; index < count && !deletedOneItem; index += 1) {
                         const oldItem = before?.items?.[index];
                         const newItem = after?.items?.[index];
                         if (oldItem && newItem) {
                           const prefix = `รายการ ${index + 1} ${newItem.prizeTypeName ?? oldItem.prizeTypeName ?? ""}`.trim();
                           if (oldItem.number !== newItem.number) changes.push(`${prefix}: เลข ${oldItem.number} → ${newItem.number}`);
                           if (oldItem.stake !== newItem.stake) changes.push(`${prefix}: เดิมพัน ${oldItem.stake} → ${newItem.stake} บาท`);
+                        } else if (oldItem && !newItem) {
+                          changes.push(`ลบรายการ ${index + 1} ${oldItem.prizeTypeName ?? ""} เลข ${oldItem.number ?? "-"}`.trim());
+                        } else if (!oldItem && newItem) {
+                          changes.push(`เพิ่มรายการ ${index + 1} ${newItem.prizeTypeName ?? ""} เลข ${newItem.number ?? "-"}`.trim());
                         }
                       }
                       if (changes.length === 0) changes.push(event.reason ?? "ปรับปรุงข้อมูลบิล");

@@ -66,7 +66,7 @@ describe("หน้าประวัติแยกตามประเภท�
       prisma.draw.create({ data: { organizationId: f.org.id, name, lotteryType, status: "OPEN", opensAt: at("2026-11-18T03:00:00Z"), cutoffAt: at(cutoffAt), drawDate: at(drawDate) } });
     await make("ไทย 1 ธ.ค.", "THAI_GOVERNMENT", "2026-12-01T07:00:00Z", "2026-12-01T00:00:00Z");
     const lao = await make("หวยลาว 18", "LAO", "2026-11-18T13:00:00Z", "2026-11-18T00:00:00Z");
-    await make("หวยลาวชุด 18", "LAO_SET", "2026-11-18T13:00:00Z", "2026-11-18T00:00:00Z");
+    const laoSet = await make("หวยลาวชุด 18", "LAO_SET", "2026-11-18T13:00:00Z", "2026-11-18T00:00:00Z");
 
     const all = await resolveHistoryScope(f.actors.OWNER, parseHistoryFilter({}), now);
     expect(all.focusDraw).toBeNull();
@@ -77,6 +77,13 @@ describe("หน้าประวัติแยกตามประเภท�
     const onlyLao = await resolveHistoryScope(f.actors.OWNER, parseHistoryFilter({ lottery: "LAO" }), now);
     expect(onlyLao.focusDraw?.id).toBe(lao.id);
     expect(onlyLao.drawOptions.map((option) => option.label)).toEqual(["งวด 18/11/2026"]);
+
+    const combined = await resolveHistoryScope(f.actors.OWNER, parseHistoryFilter({ lottery: "LAO_COMBINED", scope: "all" }), now);
+    expect(combined.drawOptions.map((option) => option.value).sort()).toEqual([lao.id, laoSet.id].sort());
+
+    const paired = await resolveHistoryScope(f.actors.OWNER, parseHistoryFilter({ draws: `${lao.id},${laoSet.id}`, scope: "all" }), now);
+    expect(paired.drawWhere).toEqual({ id: { in: expect.arrayContaining([lao.id, laoSet.id]) } });
+    expect(paired.focusDraw).toBeNull();
 
     const none = await resolveHistoryScope(f.actors.OWNER, parseHistoryFilter({ lottery: "LAO_SET", scope: "past" }), now);
     expect(none.drawOptions).toEqual([]);

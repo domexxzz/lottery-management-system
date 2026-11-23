@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { LotteryFlag } from "../ThaiFlag";
+import { DeleteBillItemButton, InlineEditBillItemForm } from "./BillActions";
 
 export type SlipItemRow = {
   id: string;
+  billId: string;
   order: number;
   number: string;
   lotteryType: string;
@@ -12,6 +14,11 @@ export type SlipItemRow = {
   prizeTypeName: string;
   /** ประเภทย่อยหวยลาวชุด: ชุด 30/60/120 บาท */
   packageLabel: string | null;
+  quantity: number;
+  /** ราคาต่อชุดสำหรับหวยลาวชุด หรือยอดเดิมพันสำหรับหวยทั่วไป */
+  unitStake: number;
+  digits: number;
+  canManage: boolean;
   stake: number;
   rate: string | null;
   rateText: string;
@@ -24,6 +31,7 @@ export type SlipItemRow = {
 };
 
 const PAGE = 50;
+const LOTTERY_ORDER: Record<string, number> = { THAI_GOVERNMENT: 0, LAO: 1, LAO_SET: 2 };
 
 function baht(value: number): string {
   return value.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -44,14 +52,55 @@ function LotteryBadge({ type, label }: { type: string; label: string }) {
  */
 export function SlipItems({ rows, totalStake, prizeTotal, heading = "รายการเลขในบิล" }: { rows: SlipItemRow[]; totalStake: number; prizeTotal: number | null; heading?: string }) {
   const [view, setView] = useState<"table" | "card">("card");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(PAGE);
 
+  const orderedRows = useMemo(() => rows.map((row, index) => ({ row, index })).sort((a, b) => {
+    const lottery = (LOTTERY_ORDER[a.row.lotteryType] ?? 99) - (LOTTERY_ORDER[b.row.lotteryType] ?? 99);
+    if (lottery !== 0) return lottery;
+    if (a.row.lotteryType === "LAO_SET" && b.row.lotteryType === "LAO_SET") {
+      const packageOrder = a.row.unitStake - b.row.unitStake;
+      if (packageOrder !== 0) return packageOrder;
+    }
+    return a.index - b.index;
+  }).map(({ row }) => row), [rows]);
+
   const filtered = useMemo(() => {
     const search = query.trim();
-    return search ? rows.filter((row) => row.number.includes(search) || row.prizeTypeName.includes(search) || row.lotteryLabel.includes(search) || row.packageLabel?.includes(search) || row.winningPrizes.some((prize) => prize.label.includes(search))) : rows;
-  }, [rows, query]);
+    return search ? orderedRows.filter((row) => row.number.includes(search) || row.prizeTypeName.includes(search) || row.lotteryLabel.includes(search) || row.packageLabel?.includes(search) || row.winningPrizes.some((prize) => prize.label.includes(search))) : orderedRows;
+  }, [orderedRows, query]);
   const visible = filtered.slice(0, limit);
+  const filteredGroupMetrics = useMemo(() => {
+    const metrics = new Map<string, { itemCount: number; setCount: number; stake: number }>();
+    for (const row of filtered) {
+      const key = row.lotteryType === "LAO_SET" ? `${row.lotteryType}:${row.unitStake}` : row.lotteryType;
+      const current = metrics.get(key) ?? { itemCount: 0, setCount: 0, stake: 0 };
+      current.itemCount += 1;
+      current.setCount += row.quantity;
+      current.stake += row.stake;
+      metrics.set(key, current);
+    }
+    return metrics;
+  }, [filtered]);
+  const visibleGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; lotteryType: string; label: string; packagePrice: number | null; rows: SlipItemRow[] }>();
+    for (const row of visible) {
+      const packagePrice = row.lotteryType === "LAO_SET" ? row.unitStake : null;
+      const key = packagePrice === null ? row.lotteryType : `${row.lotteryType}:${packagePrice}`;
+      const label = row.lotteryType === "THAI_GOVERNMENT" ? "หวยรัฐบาล" : row.lotteryType === "LAO" ? "หวยลาว" : "หวยลาวชุด";
+      const group = groups.get(key) ?? { key, lotteryType: row.lotteryType, label, packagePrice, rows: [] };
+      group.rows.push(row);
+      groups.set(key, group);
+    }
+    return [...groups.values()].map((group) => ({ ...group, ...(filteredGroupMetrics.get(group.key) ?? { itemCount: 0, setCount: 0, stake: 0 }) }));
+  }, [visible, filteredGroupMetrics]);
+
+  function groupSummary(group: (typeof visibleGroups)[number]) {
+    return group.packagePrice === null
+      ? `${group.itemCount.toLocaleString("th-TH")} รายการ · ${baht(group.stake)} บาท`
+      : `ชุดละ ${group.packagePrice.toLocaleString("th-TH")} บาท · ${group.setCount.toLocaleString("th-TH")} ชุด · ${group.packagePrice.toLocaleString("th-TH")} × ${group.setCount.toLocaleString("th-TH")} = ${baht(group.stake)} บาท`;
+  }
 
   return (
     <section className="slip-panel slip-items-panel" aria-labelledby="slip-items-heading">
@@ -89,12 +138,17 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
               </tr>
             </thead>
             <tbody>
-              {visible.map((row) => (
+              {visibleGroups.map((group) => (
+                <Fragment key={group.key}>
+                  <tr className={`slip-table-group is-${group.lotteryType.toLowerCase()}`}>
+                    <th colSpan={8}><LotteryBadge type={group.lotteryType} label={group.label} /><span>{groupSummary(group)}</span></th>
+                  </tr>
+                  {group.rows.map((row) => (
                 <tr key={row.id}>
                   <td>{row.order}</td>
                   <td><strong className="slip-table-number">{row.number}</strong></td>
                   <td><LotteryBadge type={row.lotteryType} label={row.lotteryLabel} /></td>
-                  <td><span className="slip-prize-type">{row.prizeTypeName}{row.packageLabel && <small>{row.packageLabel}</small>}</span></td>
+                  <td><span className="slip-prize-type">{row.prizeTypeName}{row.packageLabel && <small>{row.packageLabel} × {row.quantity} ชุด</small>}</span></td>
                   <td className="num">{baht(row.stake)}</td>
                   <td className="num">{row.rateText}</td>
                   <td>
@@ -105,6 +159,8 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
                   </td>
                   <td className={`num ${row.prize !== null && row.prize > 0 ? "is-plus" : ""}`}>{row.prize === null ? "รอผล" : baht(row.prize)}</td>
                 </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
             {!query && filtered.length <= limit && (
@@ -121,20 +177,37 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
         </div>
       ) : (
         <ol className="slip-items">
-          {visible.map((row) => (
+          {visibleGroups.map((group) => (
+            <Fragment key={group.key}>
+              <li className={`slip-item-group is-${group.lotteryType.toLowerCase()}`}>
+                <LotteryBadge type={group.lotteryType} label={group.label} />
+                <span>{groupSummary(group)}</span>
+              </li>
+          {group.rows.map((row) => (
             <li key={row.id} className={`slip-item is-${row.status.toLowerCase()}`}>
               <header className="slip-item-head">
                 <span className="slip-item-head-left">
                   <strong>ลำดับ {row.order}</strong>
                   <LotteryBadge type={row.lotteryType} label={row.lotteryLabel} />
                 </span>
-                <span className={`slip-status slip-status-${row.status.toLowerCase()}`}>{row.statusLabel}</span>
+                <span className="slip-item-head-side">
+                  <span className={`slip-status slip-status-${row.status.toLowerCase()}`}>{row.statusLabel}</span>
+                  {row.canManage && (
+                    <span className="slip-card-actions">
+                      <button type="button" className="slip-card-action is-edit" onClick={() => setEditingId((current) => current === row.id ? null : row.id)} aria-expanded={editingId === row.id}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                        แก้ไข
+                      </button>
+                      <DeleteBillItemButton billId={row.billId} itemId={row.id} label={`${row.number} ${row.prizeTypeName}`} />
+                    </span>
+                  )}
+                </span>
               </header>
               <div className="slip-item-body">
                 <div className="slip-item-number">
                   <small className="slip-number-label">เลขที่กรอก</small>
                   <strong>{row.number}</strong>
-                  <span>{row.prizeTypeName}{row.packageLabel && <small className="slip-package-label">{row.packageLabel}</small>}</span>
+                  <span>{row.prizeTypeName}{row.packageLabel && <small className="slip-package-label">{row.packageLabel} × {row.quantity} ชุด</small>}</span>
                 </div>
                 <dl>
                   <div><dt>อัตราจ่าย</dt><dd>{row.rateText}</dd></div>
@@ -142,10 +215,18 @@ export function SlipItems({ rows, totalStake, prizeTotal, heading = "ราย�
                 </dl>
               </div>
               <footer className="slip-item-foot">
-                <span>{row.packageLabel ? "ประเภทชุด" : "ราคาแทง"} <strong>{row.packageLabel ?? `${baht(row.stake)} บาท`}</strong></span>
+                <span>{row.packageLabel ? "ราคา × จำนวน" : "ราคาแทง"} <strong>{row.packageLabel ? `${row.packageLabel} × ${row.quantity} = ${baht(row.stake)} บาท` : `${baht(row.stake)} บาท`}</strong></span>
                 <span>ผลได้เสีย <strong className={row.prize !== null && row.prize > 0 ? "is-plus" : ""}>{row.prize === null ? "รอผล" : `${baht(row.prize)} บาท`}</strong></span>
               </footer>
+              {editingId === row.id && (
+                <InlineEditBillItemForm
+                  item={{ billId: row.billId, itemId: row.id, number: row.number, unitStake: row.unitStake, quantity: row.quantity, digits: row.digits, packageLabel: row.packageLabel }}
+                  onClose={() => setEditingId(null)}
+                />
+              )}
             </li>
+          ))}
+            </Fragment>
           ))}
         </ol>
       )}

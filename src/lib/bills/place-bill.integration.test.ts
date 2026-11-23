@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
-import { listBetBills, placeBill, recentCustomerNames, softDeleteBillBeforeCutoff, updateBillBeforeCutoff } from "./service";
+import { deleteBillItemBeforeCutoff, listBetBills, placeBill, recentCustomerNames, softDeleteBillBeforeCutoff, updateBillBeforeCutoff, updateBillItemBeforeCutoff } from "./service";
 import { addRestriction, removeRestriction } from "@/lib/draws/restrictions";
 import { BillItemsRejectedError } from "@/lib/errors";
 import { lockDrawManually } from "@/lib/draws/service";
@@ -146,6 +146,25 @@ describe("กันบิลซ้ำและเลขที่ถูกปฏ�
 });
 
 describe("แก้ไขและลบบิลก่อนปิดรับ", () => {
+  test("แก้และลบเฉพาะรายการจากการ์ด พร้อมคำนวณยอดบิลใหม่", async () => {
+    const placed = await placeBill(f.actors.AGENT1, {
+      drawId: f.draw.id,
+      title: "จัดการทีละการ์ด",
+      items: [
+        { prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" },
+        { prizeTypeId: f.prizeTypes.threeTop.id, number: "456", stake: "20" },
+      ],
+    });
+    const original = await prisma.bill.findUniqueOrThrow({ where: { id: placed.billId }, include: { items: { orderBy: { createdAt: "asc" } } } });
+    await updateBillItemBeforeCutoff(f.actors.AGENT1, placed.billId, original.items[0]!.id, { number: "789", stake: "15" });
+    const afterEdit = await prisma.bill.findUniqueOrThrow({ where: { id: placed.billId }, include: { items: true } });
+    await deleteBillItemBeforeCutoff(f.actors.AGENT1, placed.billId, afterEdit.items.find((item) => item.number === "456")!.id);
+    const updated = await prisma.bill.findUniqueOrThrow({ where: { id: placed.billId }, include: { items: true } });
+    expect(updated.items.map((item) => [item.number, Number(item.stake)])).toEqual([["789", 15]]);
+    expect(Number(updated.totalStake)).toBe(15);
+    await expect(deleteBillItemBeforeCutoff(f.actors.AGENT1, placed.billId, updated.items[0]!.id)).rejects.toThrow(/รายการสุดท้าย/);
+  });
+
   test("Agent แก้เลขและยอดเดิมพันของบิลตนเองได้ทันที พร้อม Audit ก่อนและหลัง", async () => {
     const placed = await placeBill(f.actors.AGENT1, {
       drawId: f.draw.id,

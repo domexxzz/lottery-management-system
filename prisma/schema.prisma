@@ -263,12 +263,14 @@ model Agent {
   code String
   name String
 
-  /// อัตราคอมมิชชันเป็นเปอร์เซ็นต์ของยอดขาย เช่น 30.0000 = 30%
-  commissionRate Decimal  @db.Decimal(7, 4)
+  /// อัตราคอมมิชชันหวยรัฐบาล เป็นเปอร์เซ็นต์ของยอดขาย เช่น 30.0000 = 30%
+  commissionRate    Decimal  @db.Decimal(7, 4)
+  /// อัตราคอมมิชชันหวยลาวและหวยลาวชุด เช่น 28.0000 = 28%
+  laoCommissionRate Decimal  @default(28.0000) @db.Decimal(7, 4)
   /// วงเงินรวมต่อรอบ null = ไม่จำกัด
-  creditLimit    Decimal? @db.Decimal(18, 2)
+  creditLimit       Decimal? @db.Decimal(18, 2)
   /// วงเงินสูงสุดต่อเลขหนึ่งรายการ null = ไม่จำกัด
-  perNumberLimit Decimal? @db.Decimal(18, 2)
+  perNumberLimit    Decimal? @db.Decimal(18, 2)
 
   status AgentStatus @default(ACTIVE)
 
@@ -542,8 +544,13 @@ model BillItem {
   prizeType   PrizeType @relation(fields: [prizeTypeId], references: [id])
 
   /// เลขที่แทง เก็บเป็น string เพื่อรักษาเลขศูนย์นำหน้า
-  number String
-  stake  Decimal @db.Decimal(18, 2)
+  number       String
+  /// ยอดเดิมพันรวมของรายการ สำหรับหวยลาวชุด = packagePrice × quantity
+  stake        Decimal  @db.Decimal(18, 2)
+  /// ราคาต่อชุด 30/60/120 บาท ใช้เฉพาะหวยลาวชุด; หวยประเภทอื่นเป็น null
+  packagePrice Decimal? @db.Decimal(18, 2)
+  /// จำนวนชุด หวยทั่วไปเป็น 1 เสมอ
+  quantity     Int      @default(1)
 
   /// อัตราจ่ายที่ใช้คำนวณ — เริ่มจากเรต ณ เวลายืนยัน และอาจถูกปรับย้อนหลัง
   /// เมื่อประกาศ/ยกเลิกเลขอั้นก่อนคำนวณผล บิลที่ SETTLED แล้วจะไม่ถูกแก้

@@ -138,12 +138,13 @@ async function main() {
 
     await prisma.agent.upsert({
       where: { organizationId_code: { organizationId: org.id, code: a.code } },
-      update: { commissionRate: a.commissionRate },
+      update: { commissionRate: a.commissionRate, laoCommissionRate: "28.0000" },
       create: {
         organizationId: org.id,
         code: a.code,
         name: a.name,
         commissionRate: a.commissionRate,
+        laoCommissionRate: "28.0000",
         creditLimit: a.creditLimit,
         userId: user.id,
       },

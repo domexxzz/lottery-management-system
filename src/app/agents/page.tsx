@@ -8,6 +8,9 @@ import { drawDay, inRange, monthShortcuts, parseDay, recentMonths, thaiDayLabel 
 import { pickCurrentDraw } from "@/lib/bills/draw-scope";
 import { DashboardIcon } from "../DashboardIcon";
 import { AgentTable, type AgentTableRow } from "./AgentTable";
+import { DashboardLotteryDrawFilter } from "../DashboardLotteryDrawFilter";
+import { dashboardDrawLabel, resolveDashboardDrawScope, drawMatchesDashboardCategory } from "@/lib/dashboard/lottery-draw-filter";
+import { reportCategoryLabel } from "@/lib/reports/draw-groups";
 import "./agents.css";
 
 export const dynamic = "force-dynamic";
@@ -23,25 +26,29 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
   const query = await searchParams;
   const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
   const drawId = first(query.drawId);
+  const lottery = first(query.lottery);
   // ช่วงวันที่ (วันออกรางวัลของงวด) มาก่อนการเลือกงวดเดียว
   const from = parseDay(first(query.from));
   const to = parseDay(first(query.to));
   const byRange = Boolean(from || to);
-  const selectedAllDraws = !drawId || drawId === "all";
-  const drawOptions = await prisma.draw.findMany({
+  const physicalDraws = await prisma.draw.findMany({
     where: orgScope(actor),
     orderBy: { cutoffAt: "desc" },
-    select: { id: true, name: true, status: true, drawDate: true, cutoffAt: true, lotteryType: true },
+    select: { id: true, name: true, status: true, drawDate: true, cutoffAt: true, lotteryType: true, laoFamilyId: true },
   });
+  const drawScope = resolveDashboardDrawScope(physicalDraws, lottery, drawId);
   const organization = await prisma.organization.findUnique({
     where: { id: actor.organizationId },
     select: { name: true },
   });
-  const defaultDraw = drawOptions.find((draw) => ["OPEN", "LOCKED", "RESULT_PENDING", "SETTLED"].includes(draw.status)) ?? drawOptions[0] ?? null;
-  const currentDraw = byRange || selectedAllDraws ? null : (drawOptions.find((draw) => draw.id === drawId) ?? defaultDraw);
-  const rangeDraws = byRange ? drawOptions.filter((draw) => inRange(drawDay(draw), from, to)) : [];
+  const currentDraw = byRange ? null : drawScope.selectedDraw;
+  const rangeDraws = byRange
+    ? physicalDraws.filter((draw) => drawMatchesDashboardCategory(draw, drawScope.category) && inRange(drawDay(draw), from, to))
+    : [];
+  const rangeLogicalDraws = resolveDashboardDrawScope(rangeDraws, lottery, undefined).logicalDraws;
+  const filteredDrawIds = byRange ? rangeDraws.map((draw) => draw.id) : drawScope.drawIds;
 
-  const mapData = await getOrganizationMapData(actor, byRange ? rangeDraws.map((draw) => draw.id) : currentDraw?.id);
+  const mapData = await getOrganizationMapData(actor, filteredDrawIds);
   const performance = new Map(mapData.stats.map((row) => [row.agentId, row]));
   const customerRows = new Map<string, typeof mapData.topCustomers>();
   const customerCounts = new Map<string, number>();
@@ -64,6 +71,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         name: agent.name,
         status: agent.status,
         commissionRate: Number(agent.commissionRate),
+        laoCommissionRate: Number(agent.laoCommissionRate),
         customerCount: customerCounts.get(agent.id) ?? 0,
         sales: stats.sales,
         billCount: stats.billCount,
@@ -87,12 +95,16 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
   const totalCustomers = nodes.reduce((sum, agent) => sum + agent.customerCount, 0);
   const activeAgents = nodes.filter((agent) => agent.status === "ACTIVE").length;
   const rangeLabel = byRange
-    ? `${from ? thaiDayLabel(from) : "เริ่มต้น"} – ${to ? thaiDayLabel(to) : "ล่าสุด"} (${rangeDraws.length} งวด)`
+    ? `${from ? thaiDayLabel(from) : "เริ่มต้น"} – ${to ? thaiDayLabel(to) : "ล่าสุด"} (${rangeLogicalDraws.length} งวด)`
     : null;
-  const selectedDrawLabel = rangeLabel ?? currentDraw?.name ?? "ทุกงวด";
-  const csvQuery = byRange
-    ? `?${new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}) })}`
-    : currentDraw ? `?draw=${currentDraw.id}` : "";
+  const selectedDrawLabel = rangeLabel ?? (currentDraw ? `${reportCategoryLabel(currentDraw.category)} · ${dashboardDrawLabel(currentDraw)}` : drawScope.category === "ALL" ? "ทุกประเภท · ทุกงวด" : `${reportCategoryLabel(drawScope.category)} · ทุกงวด`);
+  const exportParams = new URLSearchParams({
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+    ...(currentDraw ? { draw: currentDraw.id } : {}),
+    ...(drawScope.category === "ALL" ? {} : { lottery: drawScope.category }),
+  });
+  const csvQuery = exportParams.size ? `?${exportParams}` : "";
   const organizationName = organization?.name ?? "ภาพรวมองค์กร";
 
   // คีย์ลัด: คำนวณฝั่ง server ตามเวลาไทย ไม่พึ่งนาฬิกาเครื่องผู้ใช้
@@ -100,7 +112,8 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
   const today = new Date(now.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const thisMonth = recentMonths(now, 1)[0]!;
   // งวดนี้ใช้กติกาเดียวกับหน้ารายการบิล: งวดที่เปิดรับอยู่ หรือออกรางวัลมาไม่เกิน 2 วัน
-  const thisDraw = pickCurrentDraw(drawOptions, now) ?? defaultDraw;
+  const thisPhysicalDraw = pickCurrentDraw(physicalDraws, now) ?? physicalDraws[0] ?? null;
+  const thisDraw = thisPhysicalDraw ? drawScope.logicalDraws.find((draw) => draw.memberIds.includes(thisPhysicalDraw.id)) ?? null : null;
 
   return <main className="agents-page agents-table-page">
     <header className="agents-map-header">
@@ -113,13 +126,20 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
       </section>
     </header>
 
+    <DashboardLotteryDrawFilter
+      className="agent-overview-lottery-filter"
+      draws={drawScope.logicalDraws.map((draw) => ({ id: draw.id, label: `${reportCategoryLabel(draw.category)} · ${dashboardDrawLabel(draw)}`, lotteryType: draw.lotteryType, category: draw.category, status: draw.status }))}
+      category={drawScope.category}
+      selectedDrawId={currentDraw?.id}
+      clearDateRangeOnDraw
+    />
+
     <AgentTable
-      draws={drawOptions.map((draw) => ({ id: draw.id, name: draw.name, lotteryType: draw.lotteryType }))}
       selectedDrawId={currentDraw?.id ?? ""}
       from={from ?? ""}
       to={to ?? ""}
-      months={monthShortcuts(drawOptions.map(drawDay))}
-      rangeDraws={rangeDraws.map((draw) => draw.name)}
+      months={monthShortcuts(physicalDraws.map(drawDay))}
+      rangeDraws={rangeLogicalDraws.map((draw) => `${reportCategoryLabel(draw.category)} · ${dashboardDrawLabel(draw)}`)}
       shortcuts={{ today, monthFrom: thisMonth.from, monthTo: thisMonth.to, drawId: thisDraw?.id ?? "" }}
       csvHref={`/api/agents/export${csvQuery}`}
       agents={nodes}

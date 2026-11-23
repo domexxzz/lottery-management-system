@@ -38,6 +38,9 @@ describe("Owner จัดการบัญชี", () => {
     const user = await prisma.user.findFirstOrThrow({ where: { organizationId: f.org.id, login: second.login } });
     expect(user.mustChangePassword).toBe(false);
     expect(await verifyPassword(user.passwordHash, "ab")).toBe(true);
+    const agent = await prisma.agent.findUniqueOrThrow({ where: { userId: user.id } });
+    expect(agent.commissionRate.toString()).toBe("30");
+    expect(agent.laoCommissionRate.toString()).toBe("28");
   });
 
   test("Owner ตั้งรหัสผ่านใหม่ให้บัญชีอื่นได้ และใช้รหัสใหม่ได้ทันที", async () => {
@@ -65,6 +68,7 @@ describe("Owner จัดการบัญชี", () => {
       agentCode: "ZX9",
       agentName: "สาขาใหม่",
       commissionRate: "25.5",
+      laoCommissionRate: "27.25",
       creditLimit: "5000",
       perNumberLimit: "250",
     };
@@ -79,6 +83,7 @@ describe("Owner จัดการบัญชี", () => {
     expect(await verifyPassword(updated.passwordHash, "new-password")).toBe(true);
     expect(updated.agent).toMatchObject({ code: "ZX9", name: "สาขาใหม่", status: "SUSPENDED" });
     expect(updated.agent?.commissionRate.toString()).toBe("25.5");
+    expect(updated.agent?.laoCommissionRate.toString()).toBe("27.25");
     expect(updated.agent?.creditLimit?.toString()).toBe("5000");
     expect(updated.agent?.perNumberLimit?.toString()).toBe("250");
 

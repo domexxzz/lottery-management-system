@@ -6,20 +6,14 @@ import { AppDropdown } from "./AppDropdown";
 import { DashboardIcon as Icon } from "./DashboardIcon";
 import { DateRangePicker, type DateRangeValue } from "@/components/calendar";
 import { recentMonths } from "@/lib/draws/range";
+import { DashboardLotteryDrawFilter, type DashboardDrawOption } from "./DashboardLotteryDrawFilter";
+import type { DashboardLotteryCategory } from "@/lib/dashboard/lottery-draw-filter";
 
-type Option = { id: string; label: string; lotteryType?: string };
-
-export function DashboardFilters({ draws }: { draws: Option[] }) {
+export function DashboardFilters({ draws, category, selectedDrawId }: { draws: DashboardDrawOption[]; category: DashboardLotteryCategory; selectedDrawId?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
-
-  function update(key: string, value: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value) params.set(key, value); else params.delete(key);
-    startTransition(() => router.replace(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false }));
-  }
 
   function updateRange(value: DateRangeValue) {
     const params = new URLSearchParams(searchParams.toString());
@@ -40,7 +34,9 @@ export function DashboardFilters({ draws }: { draws: Option[] }) {
     updateRange({ startDate: month?.from ?? "", endDate: month?.to ?? "" });
   }
 
-  return <section className="dashboard-filters" aria-label="ตัวกรองภาพรวม" aria-busy={pending}>
+  return <>
+    <DashboardLotteryDrawFilter draws={draws} category={category} selectedDrawId={selectedDrawId} />
+    <section className="dashboard-filters" aria-label="ตัวกรองภาพรวม" aria-busy={pending}>
     <div className="filter-heading">
       <h2><Icon name="filter" /> กำหนดข้อมูล</h2>
       <button className="filter-reset" type="button" onClick={() => startTransition(() => router.replace(pathname, { scroll: false }))}>
@@ -48,10 +44,10 @@ export function DashboardFilters({ draws }: { draws: Option[] }) {
       </button>
     </div>
     <div className="filter-fields">
-      <label>งวด<span className="filter-control"><Icon name="calendar" /><AppDropdown value={searchParams.get("drawId") ?? ""} onValueChange={(value) => update("drawId", value)} options={[{ value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.label, lotteryType: draw.lotteryType }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" ariaLabel="เลือกงวด" /></span></label>
       <label>เลือกเดือน<span className="filter-control"><Icon name="calendar" /><AppDropdown value={selectedMonth} onValueChange={selectMonth} options={[{ value: "", label: customRange ? "ช่วงที่เลือกเอง" : "ทุกเดือน" }, ...months.map((month) => ({ value: month.key, label: month.name }))]} ariaLabel="เลือกทั้งเดือน" /></span></label>
       <DateRangePicker startDate={dateFrom} endDate={dateTo} onChange={updateRange} />
     </div>
     {pending && <span className="filter-loading" role="status">กำลังอัปเดตข้อมูล…</span>}
-  </section>;
+    </section>
+  </>;
 }

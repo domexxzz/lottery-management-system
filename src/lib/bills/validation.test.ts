@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { Prisma } from "@prisma/client";
-import { dedupeKey, totalStake, validateBill, type PrizeTypeRule } from "./validation";
+import { dedupeKey, totalStake, validateBill, type DraftItem, type PrizeTypeRule } from "./validation";
 
 const d = (v: string | number) => new Prisma.Decimal(v);
 
@@ -43,7 +43,7 @@ const NOW = new Date("2026-11-03T10:00:00Z");
 const OPEN_DRAW = { status: "OPEN", cutoffAt: new Date("2026-11-10T10:00:00Z") };
 
 function run(overrides: {
-  items?: { prizeTypeId: string; number: string; stake: Prisma.Decimal }[];
+  items?: DraftItem[];
   creditLimit?: Prisma.Decimal | null;
   perNumberLimit?: Prisma.Decimal | null;
   draw?: { status: string; cutoffAt: Date };
@@ -110,6 +110,13 @@ describe("ยอดเดิมพัน", () => {
     expect(codes(issues)).toContain("STAKE_NOT_ALLOWED");
   });
 
+  test("หวยลาวชุดตรวจราคาต่อชุดและยอมรับยอดรวมตามจำนวนชุด", () => {
+    const rules = new Map([[LAO_SET_EXACT.id, LAO_SET_EXACT]]);
+    expect(run({ rules, items: [{ prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(150), packagePrice: d(30), quantity: 5 }] })).toEqual([]);
+    expect(codes(run({ rules, items: [{ prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(150), packagePrice: d(50), quantity: 3 }] }))).toContain("STAKE_NOT_ALLOWED");
+    expect(codes(run({ rules, items: [{ prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(30), packagePrice: d(30), quantity: 0 }] }))).toContain("STAKE_NOT_POSITIVE");
+  });
+
   test("ปฏิเสธยอดเป็นศูนย์", () => {
     const issues = run({ items: [{ prizeTypeId: THREE_TOP.id, number: "123", stake: d("0") }] });
     expect(codes(issues)).toContain("STAKE_NOT_POSITIVE");
@@ -147,7 +154,7 @@ describe("ยอดเดิมพัน", () => {
 });
 
 describe("รายการซ้ำ", () => {
-  test("หวยลาวชุดเลขเดียวกันเล่นชุด 30/60/120 พร้อมกันได้ แต่ชุดราคาเดิมซ้ำไม่ได้", () => {
+  test("หวยลาวชุดเลขและราคาชุดเดิมซื้อซ้ำได้และยังเป็นคนละรายการ", () => {
     const rules = new Map([[LAO_SET_EXACT.id, LAO_SET_EXACT]]);
     expect(run({ rules, items: [
       { prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(30) },
@@ -158,7 +165,7 @@ describe("รายการซ้ำ", () => {
       { prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(30) },
       { prizeTypeId: LAO_SET_EXACT.id, number: "1234", stake: d(30) },
     ] });
-    expect(codes(duplicate)).toContain("DUPLICATE_ITEM");
+    expect(duplicate).toEqual([]);
   });
 
   test("ตรวจพบเลขซ้ำในประเภทรางวัลเดียวกัน", () => {

@@ -268,6 +268,7 @@ export function BetSlip({
 
   // หวยลาวชุดเป็นราคาเหมา 30/60/120 ส่วนหวยอื่นเริ่มที่ยอดขั้นต่ำและพิมพ์เองได้
   const [amount, setAmount] = useState<number>(() => initialLottery === "LAO_SET" ? LAO_SET_PACKAGE_PRICES[0] : MIN_STAKE_PER_ITEM);
+  const [packageQuantity, setPackageQuantity] = useState(1);
   const [digits, setDigits] = useState("");
   const [entries, setEntries] = useState<SlipEntry[]>([]);
   const [editing, setEditing] = useState<number | null>(null);
@@ -458,7 +459,7 @@ export function BetSlip({
     return rule ? restrictionsByDraw.get(entryDrawId)?.get(entryKey(entry.prizeTypeId, entry.number, rule.matchRule)) : undefined;
   }, [rules, restrictionsByDraw]);
 
-  const total = entries.reduce((sum, entry) => sum + entry.stake, 0);
+  const total = entries.reduce((sum, entry) => sum + entry.stake * (entry.quantity ?? 1), 0);
   const groupDigits = group?.digits ?? 3;
 
   const commitNumber = useCallback((numberValue: string) => {
@@ -476,25 +477,23 @@ export function BetSlip({
       setNotice({ tone: "error", text: `หวยลาวชุดเลือกราคาได้เฉพาะ ${LAO_SET_PACKAGE_PRICES.join(" / ")} บาท` });
       return;
     }
+    if (isLaoSet && (!Number.isInteger(packageQuantity) || packageQuantity < 1 || packageQuantity > 999)) {
+      setNotice({ tone: "error", text: "จำนวนชุดต้องเป็นจำนวนเต็ม 1–999 ชุด" });
+      return;
+    }
     if (!draw) return;
     const targetDraw = draw.id;
     const built = buildEntries({ numberValue, stake: amount, selected, reverse });
     const blocked = built.filter((entry) => restrictionOf(entry, targetDraw)?.kind === "CLOSED");
-    const accepted = built.filter((entry) => restrictionOf(entry, targetDraw)?.kind !== "CLOSED");
-    // รวมยอดเลขซ้ำเฉพาะในงวดเดียวกัน รายการของประเภทหวยอื่นในบิลไม่ถูกแตะ
+    const accepted = built
+      .filter((entry) => restrictionOf(entry, targetDraw)?.kind !== "CLOSED")
+      .map((entry) => ({ ...entry, quantity: isLaoSet ? packageQuantity : 1 }));
+    // หวยทั่วไปยังรวมยอดเลขซ้ำตามพฤติกรรมเดิม แต่หวยลาวชุดเก็บทุกครั้งที่กด
+    // เป็นคนละ Bet Record แม้เลขและราคาชุดจะเหมือนกัน เพื่อให้ Audit ย้อนกลับได้
     setEntries((current) => {
       const sameDraw = current.filter((entry) => entry.drawId === targetDraw);
-      // ราคาหวยลาวชุดเป็นแพ็กเกจ: กดเลขเดิมซ้ำให้เปลี่ยนแพ็กเกจ ไม่บวกจนเกิดราคาที่ไม่อนุญาต
       const merged = isLaoSet
-        ? [
-            ...sameDraw.filter((existing) => !accepted.some((next) => {
-              const rule = rules.get(next.prizeTypeId);
-              return rule
-                && existing.stake === next.stake
-                && entryKey(existing.prizeTypeId, existing.number, rules.get(existing.prizeTypeId)?.matchRule ?? "EXACT") === entryKey(next.prizeTypeId, next.number, rule.matchRule);
-            })),
-            ...accepted,
-          ].map((entry) => ({ ...entry, drawId: targetDraw }))
+        ? [...sameDraw, ...accepted].map((entry) => ({ ...entry, drawId: targetDraw }))
         : addEntries(sameDraw, accepted, rules).map((entry) => ({ ...entry, drawId: targetDraw }));
       return [...current.filter((entry) => entry.drawId !== targetDraw), ...merged];
     });
@@ -507,10 +506,12 @@ export function BetSlip({
         tone: "info",
         text: reduced.length > 0
           ? `เพิ่ม ${accepted.length} รายการ · เลขอั้น ${reduced.length} รายการจ่ายตามอัตราที่ลดลง`
-          : `เพิ่มเลข ${numberValue} แล้ว ${accepted.length} รายการ`,
+          : isLaoSet
+            ? `เพิ่มเลข ${numberValue} ชุด ${amount} บาท × ${packageQuantity} ชุด รวม ${money(amount * packageQuantity)} บาท`
+            : `เพิ่มเลข ${numberValue} แล้ว ${accepted.length} รายการ`,
       });
     }
-  }, [group, selectedIds, amount, reverse, restrictionOf, rules, draw, isLaoSet]);
+  }, [group, selectedIds, amount, packageQuantity, reverse, restrictionOf, rules, draw, isLaoSet]);
 
   // เก็บค่าล่าสุดใน ref ด้วย เพราะการกดเลขครบหลักต้องเพิ่มรายการทันทีครั้งเดียว
   // ห้ามทำ side effect ใน state updater ซึ่ง React อาจเรียกซ้ำใน Strict Mode
@@ -614,7 +615,7 @@ export function BetSlip({
       .map(([id, rows]) => {
         const rowDraw = drawById.get(id);
         const owner = lotteries.find((item) => item.draws.some((row) => row.id === id));
-        return { drawId: id, draw: rowDraw, lottery: owner, rows, total: rows.reduce((sum, row) => sum + row.entry.stake, 0) };
+        return { drawId: id, draw: rowDraw, lottery: owner, rows, total: rows.reduce((sum, row) => sum + row.entry.stake * (row.entry.quantity ?? 1), 0) };
       });
   }, [entries, lotteries, drawById]);
   const countByType = useMemo(() => {
@@ -680,6 +681,7 @@ export function BetSlip({
         const owner = lotteryByPrize.get(entry.prizeTypeId);
         return owner?.type === "LAO_SET"
           ? LAO_SET_PACKAGE_PRICES.some((price) => price === entry.stake)
+            && Number.isInteger(entry.quantity) && (entry.quantity ?? 0) >= 1 && (entry.quantity ?? 0) <= 999
           : entry.stake >= MIN_STAKE_PER_ITEM;
       }),
       label: "ตรวจจำนวนเงินของแต่ละรายการ",
@@ -705,7 +707,7 @@ export function BetSlip({
         name="parts"
         value={JSON.stringify(entryGroups.map((row) => ({
           drawId: row.drawId,
-          items: row.rows.map(({ entry }) => ({ prizeTypeId: entry.prizeTypeId, number: entry.number, stake: entry.stake })),
+          items: row.rows.map(({ entry }) => ({ prizeTypeId: entry.prizeTypeId, number: entry.number, stake: entry.stake, quantity: entry.quantity ?? 1 })),
         })))}
       />
       {representatives !== null && <input type="hidden" name="representativeUserId" value={representativeId} />}
@@ -871,10 +873,10 @@ export function BetSlip({
               const restriction = restrictionOf(entry, entry.drawId);
               const rejectedReason = rejectedReasons.get(`${entry.prizeTypeId}:${entry.number}`);
               return (
-                <li key={`${entry.drawId}:${entry.prizeTypeId}:${entry.number}:${entry.stake}`} className={`bs-entry is-${section.lottery?.type.toLowerCase() ?? "x"} ${restriction?.kind === "REDUCED_RATE" ? "is-restricted" : ""} ${rejectedReason ? "is-rejected" : ""}`}>
+                <li key={`${entry.drawId}:${entry.prizeTypeId}:${entry.number}:${entry.stake}:${entry.quantity ?? 1}:${index}`} className={`bs-entry is-${section.lottery?.type.toLowerCase() ?? "x"} ${restriction?.kind === "REDUCED_RATE" ? "is-restricted" : ""} ${rejectedReason ? "is-rejected" : ""}`}>
                   <span className="bs-entry-main">
                     <span className={`bs-badge bs-badge-${badgeKey(rule)}`}>{rule?.name ?? "-"}</span>
-                    {section.lottery?.type === "LAO_SET" && <em className="bs-entry-package">{laoSetPackageLabel(entry.stake)}</em>}
+                    {section.lottery?.type === "LAO_SET" && <em className="bs-entry-package">{laoSetPackageLabel(entry.stake)} × {entry.quantity ?? 1} ชุด</em>}
                     <span className="bs-entry-number">{entry.number}</span>
                     {restriction?.kind === "REDUCED_RATE" && <em className="bs-entry-reduced">อั้น {compactRate(restriction.payoutRate ?? "0")}</em>}
                     {rejectedReason && <small className="bs-entry-rejected">รับไม่ได้: {rejectedReason}</small>}
@@ -893,7 +895,7 @@ export function BetSlip({
                       onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); finishEdit(index); } }}
                     />
                   ) : (
-                    <span className="bs-entry-stake">{money(entry.stake)}</span>
+                    <span className="bs-entry-stake">{money(entry.stake * (entry.quantity ?? 1))}</span>
                   )}
                   <span className="bs-entry-actions">
                     {section.lottery?.type !== "LAO_SET" && (
@@ -938,10 +940,34 @@ export function BetSlip({
                       <strong>{item.price} บาท</strong>
                       <span className="bs-lao-package-rates">
                         <span>ลุ้น 8 รางวัล <b>สูงสุด {item.exact.toLocaleString("th-TH")}</b></span>
-                        <span>ถูกรางวัลใด รับครบทุกเงื่อนไข</span>
+                        <span>ตรวจครบทุกรางวัล · จ่ายรางวัลสูงสุด</span>
                       </span>
                     </button>
                   ))}
+                </div>
+                <div className="bs-lao-quantity" aria-label="เลือกจำนวนชุด">
+                  <div>
+                    <strong>จำนวนชุด</strong>
+                    <small>ราคาต่อชุด {amount} บาท</small>
+                  </div>
+                  <div className="bs-stepper">
+                    <button type="button" className="bs-minus" onClick={() => setPackageQuantity((value) => Math.max(1, value - 1))} disabled={!isOpen} aria-label="ลดจำนวนชุด">−</button>
+                    <input aria-label="จำนวนชุดหวยลาวชุด" inputMode="numeric" min={1} max={999} value={packageQuantity} disabled={!isOpen} onChange={(event) => setPackageQuantity(Math.min(Number(event.target.value.replace(/\D/g, "")) || 0, 999))} onBlur={() => setPackageQuantity((value) => Math.max(1, value))} />
+                    <button type="button" className="bs-plus" onClick={() => setPackageQuantity((value) => Math.min(999, value + 1))} disabled={!isOpen} aria-label="เพิ่มจำนวนชุด">+</button>
+                  </div>
+                  <div className="bs-lao-quantity-presets" role="group" aria-label="เลือกจำนวนชุดด่วน">
+                    {[1, 2, 3, 4, 5].map((quantity) => (
+                      <button
+                        key={quantity}
+                        type="button"
+                        className={packageQuantity === quantity ? "is-active" : ""}
+                        aria-pressed={packageQuantity === quantity}
+                        onClick={() => setPackageQuantity(quantity)}
+                        disabled={!isOpen}
+                      >{quantity}</button>
+                    ))}
+                  </div>
+                  <strong className="bs-lao-quantity-total">รวม {money(amount * packageQuantity)} บาท</strong>
                 </div>
               </>
             ) : (
@@ -977,7 +1003,7 @@ export function BetSlip({
             <h3 className="bs-step-title"><span>2</span>{isLaoSet ? "เลือกประเภท" : "กำหนดจำนวนเงิน"}</h3>
             {isLaoSet ? (
               <>
-                <p className="bs-step-help">เลือก 4 ตัวตรงเพียงรายการเดียว ระบบตรวจครบ 8 รางวัล แล้วเลือกจ่ายรางวัลที่มีมูลค่าสูงที่สุด 1 รางวัลต่อชุดราคา</p>
+                <p className="bs-step-help">เลือก 4 ตัวตรงเพียงรายการเดียว ระบบตรวจครบ 8 รางวัล เลือกจ่ายรางวัลสูงสุด 1 รางวัลต่อชุดราคา แล้วคูณจำนวนชุด</p>
                 <PrizeTypeOptions
                   group={group}
                   selectedIds={selectedIds}

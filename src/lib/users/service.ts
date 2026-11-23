@@ -18,6 +18,7 @@ export type CreateManagedUserInput = {
   role: ManagedRole;
   agentCode?: string;
   commissionRate?: string;
+  laoCommissionRate?: string;
   creditLimit?: string;
   perNumberLimit?: string;
 };
@@ -30,18 +31,20 @@ export type UpdateManagedUserInput = {
   agentCode?: string;
   agentName?: string;
   commissionRate?: string;
+  laoCommissionRate?: string;
   creditLimit?: string;
   perNumberLimit?: string;
 };
 
 const AGENT_COMMISSION_RATE = new Prisma.Decimal(30);
+const AGENT_LAO_COMMISSION_RATE = new Prisma.Decimal(28);
 
 function decimal(raw: string | undefined, label: string, optional = false): Prisma.Decimal | null {
   const value = raw?.trim() ?? "";
   if (optional && value === "") return null;
   try {
     const parsed = new Prisma.Decimal(value);
-    if (parsed.lessThan(0) || (!optional && label === "อัตราคอมมิชชัน" && parsed.greaterThan(100))) {
+    if (parsed.lessThan(0) || (!optional && parsed.greaterThan(100))) {
       throw new Error();
     }
     if (optional && parsed.lessThanOrEqualTo(0)) throw new Error();
@@ -126,6 +129,7 @@ export async function createManagedUser(
   const passwordHash = await hashPassword(input.password);
   // อัตราธุรกิจคงที่ 30% จากยอดเดิมพันรวม ไม่เชื่อค่าที่แก้จากฝั่ง client
   const commissionRate = input.role === "AGENT" ? AGENT_COMMISSION_RATE : null;
+  const laoCommissionRate = input.role === "AGENT" ? AGENT_LAO_COMMISSION_RATE : null;
   const creditLimit = input.role === "AGENT" ? decimal(input.creditLimit, "วงเงินรวมต่องวด", true) : null;
   const perNumberLimit = input.role === "AGENT" ? decimal(input.perNumberLimit, "วงเงินต่อเลข", true) : null;
 
@@ -165,6 +169,7 @@ export async function createManagedUser(
               code: identity.code,
               name: displayName,
               commissionRate: commissionRate!,
+              laoCommissionRate: laoCommissionRate!,
               creditLimit,
               perNumberLimit,
               userId: user.id,
@@ -210,6 +215,7 @@ async function findManageableUser(actor: Actor, userId: string) {
           name: true,
           status: true,
           commissionRate: true,
+          laoCommissionRate: true,
           creditLimit: true,
           perNumberLimit: true,
         },
@@ -255,7 +261,10 @@ export async function updateManagedUser(actor: Actor, userId: string, input: Upd
   }
   const agentName = input.agentName?.trim() || displayName;
   const commissionRate = input.role === "AGENT"
-    ? decimal(input.commissionRate?.trim() || AGENT_COMMISSION_RATE.toString(), "อัตราคอมมิชชัน")!
+    ? decimal(input.commissionRate?.trim() || AGENT_COMMISSION_RATE.toString(), "ค่าคอมหวยรัฐบาล")!
+    : null;
+  const laoCommissionRate = input.role === "AGENT"
+    ? decimal(input.laoCommissionRate?.trim() || AGENT_LAO_COMMISSION_RATE.toString(), "ค่าคอมหวยลาวและหวยลาวชุด")!
     : null;
   const creditLimit = input.role === "AGENT" ? decimal(input.creditLimit, "วงเงินรวมต่องวด", true) : null;
   const perNumberLimit = input.role === "AGENT" ? decimal(input.perNumberLimit, "วงเงินต่อเลข", true) : null;
@@ -270,6 +279,7 @@ export async function updateManagedUser(actor: Actor, userId: string, input: Upd
       name: user.agent.name,
       status: user.agent.status,
       commissionRate: user.agent.commissionRate.toString(),
+      laoCommissionRate: user.agent.laoCommissionRate.toString(),
       creditLimit: user.agent.creditLimit?.toString() ?? null,
       perNumberLimit: user.agent.perNumberLimit?.toString() ?? null,
     } : null,
@@ -295,17 +305,18 @@ export async function updateManagedUser(actor: Actor, userId: string, input: Upd
           code,
           name: agentName,
           commissionRate: commissionRate!,
+          laoCommissionRate: laoCommissionRate!,
           creditLimit,
           perNumberLimit,
           status: input.status === "ACTIVE" ? "ACTIVE" as const : "SUSPENDED" as const,
           userId: user.id,
         };
         if (user.agent) {
-          const updatedAgent = await tx.agent.update({ where: { id: user.agent.id }, data: agentData, select: { id: true, code: true, name: true, status: true, commissionRate: true, creditLimit: true, perNumberLimit: true } });
-          agentAfter = { ...updatedAgent, commissionRate: updatedAgent.commissionRate.toString(), creditLimit: updatedAgent.creditLimit?.toString() ?? null, perNumberLimit: updatedAgent.perNumberLimit?.toString() ?? null };
+          const updatedAgent = await tx.agent.update({ where: { id: user.agent.id }, data: agentData, select: { id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true, creditLimit: true, perNumberLimit: true } });
+          agentAfter = { ...updatedAgent, commissionRate: updatedAgent.commissionRate.toString(), laoCommissionRate: updatedAgent.laoCommissionRate.toString(), creditLimit: updatedAgent.creditLimit?.toString() ?? null, perNumberLimit: updatedAgent.perNumberLimit?.toString() ?? null };
         } else {
-          const createdAgent = await tx.agent.create({ data: { organizationId: actor.organizationId, ...agentData }, select: { id: true, code: true, name: true, status: true, commissionRate: true, creditLimit: true, perNumberLimit: true } });
-          agentAfter = { ...createdAgent, commissionRate: createdAgent.commissionRate.toString(), creditLimit: createdAgent.creditLimit?.toString() ?? null, perNumberLimit: createdAgent.perNumberLimit?.toString() ?? null };
+          const createdAgent = await tx.agent.create({ data: { organizationId: actor.organizationId, ...agentData }, select: { id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true, creditLimit: true, perNumberLimit: true } });
+          agentAfter = { ...createdAgent, commissionRate: createdAgent.commissionRate.toString(), laoCommissionRate: createdAgent.laoCommissionRate.toString(), creditLimit: createdAgent.creditLimit?.toString() ?? null, perNumberLimit: createdAgent.perNumberLimit?.toString() ?? null };
         }
       } else if (user.agent) {
         const closedAgent = await tx.agent.update({

@@ -94,10 +94,10 @@ export default async function PrintBillPage({
         </thead>
         <tbody>
           {bill.items.map((item) => {
-            const packageLabel = bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.stake) : null;
+            const packageLabel = bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.packagePrice ?? item.stake) : null;
             return <tr key={item.id}>
               <td>
-                {item.prizeType.code}. {item.prizeType.name}{packageLabel ? ` · ${packageLabel}` : ""}
+                {item.prizeType.code}. {item.prizeType.name}{packageLabel ? ` · ${packageLabel} × ${item.quantity} ชุด` : ""}
                 {item.winningPrizes.map((prize) => <small key={prize.id} className="sheet-winning-label">{prize.isPaid ? "เลือกจ่าย" : "ตรวจพบแต่ไม่จ่าย"} · {prize.prizeLabelSnapshot}: {prize.payout.toNumber().toLocaleString("th-TH")} บาท</small>)}
               </td>
               <td className="number-cell">{item.number}</td>

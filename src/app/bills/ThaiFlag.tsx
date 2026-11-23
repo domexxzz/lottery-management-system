@@ -22,5 +22,5 @@ export function LaoFlag({ className = "thai-flag" }: { className?: string }) {
 
 /** ธงตามประเภทหวย: หวยลาว/หวยลาวชุด = ธงลาว นอกนั้นธงไทย */
 export function LotteryFlag({ lotteryType, className }: { lotteryType: string; className?: string }) {
-  return lotteryType === "LAO" || lotteryType === "LAO_SET" ? <LaoFlag className={className} /> : <ThaiFlag className={className} />;
+  return lotteryType === "LAO" || lotteryType === "LAO_SET" || lotteryType === "LAO_COMBINED" ? <LaoFlag className={className} /> : <ThaiFlag className={className} />;
 }

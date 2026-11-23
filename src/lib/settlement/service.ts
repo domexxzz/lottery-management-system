@@ -12,6 +12,7 @@ import {
   LAO_SET_PRIZE_TYPE_CODES,
   type LaoSetPrizeKey,
 } from "@/lib/lao/rules";
+import { commissionRateForLottery } from "@/lib/agents/commission";
 
 /**
  * คำนวณผู้ถูกรางวัลและสรุปการเงินต่อ Agent (LOT-15, LOT-18, LOT-20)
@@ -79,7 +80,7 @@ export async function previewSettlement(
   const results = await approvedResults(tx, drawId);
   const bills = await loadSettlementBills(tx, drawId);
   const laoSetRules = draw.lotteryType === "LAO_SET" ? await loadLaoSetPayoutRules(tx, draw.organizationId) : null;
-  return evaluateSettlement(bills, results, laoSetRules).previews;
+  return evaluateSettlement(bills, results, laoSetRules, draw.lotteryType).previews;
 }
 
 type LaoSetPayoutRule = { prizeTypeId: string; payoutRate: Prisma.Decimal };
@@ -108,7 +109,7 @@ function loadSettlementBills(tx: TxClient, drawId: string) {
     select: {
       id: true,
       agentId: true,
-      agent: { select: { code: true, name: true, commissionRate: true } },
+      agent: { select: { code: true, name: true, commissionRate: true, laoCommissionRate: true } },
       items: {
         select: {
           id: true,
@@ -116,6 +117,8 @@ function loadSettlementBills(tx: TxClient, drawId: string) {
           prizeTypeId: true,
           number: true,
           stake: true,
+          packagePrice: true,
+          quantity: true,
           payoutRateSnapshot: true,
           prizeType: { select: { code: true, matchRule: true } },
         },
@@ -135,6 +138,7 @@ function evaluateSettlement(
   bills: SettlementBill[],
   results: { byPrizeType: Map<string, string[]>; byPrizeCode: Map<number, string[]> },
   laoSetRules: Map<LaoSetPrizeKey, LaoSetPayoutRule> | null,
+  lotteryType: "THAI_GOVERNMENT" | "LAO" | "LAO_SET",
 ) {
   type Bucket = {
     agentCode: string;
@@ -167,13 +171,42 @@ function evaluateSettlement(
       bucket = {
         agentCode: bill.agent.code,
         agentName: bill.agent.name,
-        commissionRate: bill.agent.commissionRate,
+        commissionRate: commissionRateForLottery(bill.agent, lotteryType),
         stakes: [],
         payouts: [],
         winningItems: 0,
         totalItems: 0,
       };
       byAgent.set(bill.agentId, bucket);
+    }
+
+    // หวยลาวชุด: รวม quantity เฉพาะตอนเลือกรางวัลสูงสุดตาม Bill + เลข + ราคาชุด
+    // แต่ไม่รวม BillItem ในฐานข้อมูล แต่ละรายการจึงยังเป็น Bet ID ต้นทางที่ Audit ได้ครบ
+    const laoSetSelectedPrizeByItem = new Map<string, LaoSetPrizeKey>();
+    if (laoSetRules) {
+      const groups = new Map<string, { unitPrice: Prisma.Decimal; quantity: number; items: typeof bill.items }>();
+      for (const item of bill.items) {
+        if (item.prizeType.code !== 201) continue;
+        const quantity = Math.max(1, item.quantity);
+        const unitPrice = item.packagePrice ?? item.stake.dividedBy(quantity);
+        const key = `${item.number}:${unitPrice.toFixed(2)}`;
+        const group = groups.get(key) ?? { unitPrice, quantity: 0, items: [] };
+        group.quantity += quantity;
+        group.items.push(item);
+        groups.set(key, group);
+      }
+      for (const group of groups.values()) {
+        const first = group.items[0];
+        const resultValue = first ? results.byPrizeCode.get(201)?.[0] : undefined;
+        const matchedKeys = first && resultValue ? laoSetMatchedPrizeKeys(first.number, resultValue) : [];
+        const selected = matchedKeys.reduce<{ key: LaoSetPrizeKey; payout: Prisma.Decimal } | null>((highest, key) => {
+          const rule = laoSetRules.get(key);
+          if (!rule) throw new ConflictError(`Rulebook หวยลาวชุดไม่ครบ: ไม่พบ ${LAO_SET_PRIZE_LABELS[key]}`);
+          const payout = toMoney(itemPayout(group.unitPrice, rule.payoutRate).times(group.quantity));
+          return !highest || payout.greaterThan(highest.payout) ? { key, payout } : highest;
+        }, null);
+        if (selected) for (const item of group.items) laoSetSelectedPrizeByItem.set(item.id, selected.key);
+      }
     }
 
     const payoutsOfBill: Prisma.Decimal[] = [];
@@ -189,14 +222,17 @@ function evaluateSettlement(
         const candidates = matchedKeys.map((key) => {
           const rule = laoSetRules.get(key);
           if (!rule) throw new ConflictError(`Rulebook หวยลาวชุดไม่ครบ: ไม่พบ ${LAO_SET_PRIZE_LABELS[key]}`);
-          const payout = itemPayout(item.stake, rule.payoutRate);
+          // หวยชุดคิดยอดต่อ 1 ชุดให้เป็นเงินก่อน แล้วจึงคูณจำนวนชุด
+          // ป้องกันเรตทศนิยม เช่น 11.6667 ทำให้ 120 บาท × 2 ชุดกลายเป็น 2,800.01
+          // และยังคงอ่านอัตราจ่ายจริงจาก Rulebook ในฐานข้อมูล ไม่ hardcode ยอดรางวัล
+          const quantity = Math.max(1, item.quantity);
+          const unitPrice = item.packagePrice ?? item.stake.dividedBy(quantity);
+          const payout = toMoney(itemPayout(unitPrice, rule.payoutRate).times(quantity));
           return { key, rule, payout };
         });
-        // เมื่อยอดเท่ากัน เลือกตัวแรกตามลำดับกติกาที่ laoSetMatchedPrizeKeys คืนมาเพื่อให้คำนวณซ้ำได้ผลเดิม
-        const selected = candidates.reduce<(typeof candidates)[number] | null>(
-          (highest, candidate) => !highest || candidate.payout.greaterThan(highest.payout) ? candidate : highest,
-          null,
-        );
+        // รางวัลที่เลือกมาจากกลุ่ม Bill + เลข + ราคาชุดเดียวกัน จำนวนชุดต่างรายการจึงรวมกัน
+        const selectedKey = laoSetSelectedPrizeByItem.get(item.id);
+        const selected = candidates.find((candidate) => candidate.key === selectedKey) ?? null;
         for (const candidate of candidates) {
           const isPaid = candidate.key === selected?.key;
           winningPrizeRows.push({
@@ -320,7 +356,7 @@ async function calculateSettlementSingle(
     // ซึ่งเป็นหลักร้อยถึงหลักพันคำสั่งต่องวด และเสี่ยงชน timeout ของ transaction เมื่อข้อมูลโต
     const bills = await loadSettlementBills(tx, draw.id);
     const laoSetRules = draw.lotteryType === "LAO_SET" ? await loadLaoSetPayoutRules(tx, draw.organizationId) : null;
-    const { previews, winningItems, winningPrizeRows, billPayouts } = evaluateSettlement(bills, results, laoSetRules);
+    const { previews, winningItems, winningPrizeRows, billPayouts } = evaluateSettlement(bills, results, laoSetRules, draw.lotteryType);
     const billIds = bills.map((bill) => bill.id);
 
     if (billIds.length > 0) {

@@ -22,6 +22,7 @@ export type AgentTableRow = {
   name: string;
   status: "ACTIVE" | "SUSPENDED" | "CLOSED";
   commissionRate: number;
+  laoCommissionRate: number;
   customerCount: number;
   sales: number;
   billCount: number;
@@ -38,11 +39,9 @@ const STATUS_LABEL = { ACTIVE: "ใช้งาน", SUSPENDED: "ระงับ
 const STATUS_TONE = { ACTIVE: "success", SUSPENDED: "warning", CLOSED: "muted" } as const;
 
 /** ตาราง Agent แบบอ่านง่าย: หนึ่งแถวต่อ Agent กดขยายดูลูกค้าอันดับแรกได้ */
-const RANGE_VALUE = "__range";
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 export function AgentTable({
-  draws,
   selectedDrawId,
   from,
   to,
@@ -54,7 +53,6 @@ export function AgentTable({
 }: {
   /** คีย์ลัด วันนี้ / งวดนี้ / เดือนนี้ (YYYY-MM-DD เวลาไทย) */
   shortcuts: { today: string; monthFrom: string; monthTo: string; drawId: string };
-  draws: { id: string; name: string; lotteryType?: string }[];
   selectedDrawId: string;
   /** ช่วงวันที่ออกรางวัล YYYY-MM-DD ว่าง = ไม่กรองตามวันที่ */
   from: string;
@@ -131,7 +129,6 @@ export function AgentTable({
 
   /** เลือกงวดเดียว ล้างช่วงวันที่ */
   function changeDraw(value: string) {
-    if (value === RANGE_VALUE) return;
     setRange({ startDate: "", endDate: "" });
     navigate((params) => {
       params.delete("from");
@@ -163,7 +160,6 @@ export function AgentTable({
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         <input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="ค้นหา Agent หรือลูกค้า" aria-label="ค้นหา Agent หรือลูกค้า" />
       </label>
-      <AppDropdown ariaLabel="เลือกงวด" value={byRange ? RANGE_VALUE : selectedDrawId} onValueChange={changeDraw} options={[...(byRange ? [{ value: RANGE_VALUE, label: "ตามช่วงวันที่" }] : []), { value: "", label: "ทุกงวด" }, ...draws.map((draw) => ({ value: draw.id, label: draw.name, lotteryType: draw.lotteryType }))]} searchable={draws.length > 6} searchPlaceholder="ค้นหางวด" />
       <AppDropdown ariaLabel="เลือกสถานะ Agent" value={status} onValueChange={(value) => { setStatus(value); setPage(1); }} options={[{ value: "", label: "ทุกสถานะ" }, { value: "ACTIVE", label: "ใช้งาน" }, { value: "SUSPENDED", label: "ระงับ" }, { value: "CLOSED", label: "ปิด" }]} />
       <AppDropdown ariaLabel="เรียงข้อมูล" value={sort} onValueChange={(value) => { setSort(value); setPage(1); }} options={[{ value: "sales_desc", label: "ยอดขาย มาก→น้อย" }, { value: "sales_asc", label: "ยอดขาย น้อย→มาก" }, { value: "payout_desc", label: "จ่ายรางวัล มาก→น้อย" }, { value: "name_asc", label: "รหัส Agent A→Z" }]} />
       <AppDropdown ariaLabel="จำนวนรายการต่อหน้า" value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(1); }} options={PAGE_SIZE_OPTIONS.map((value) => ({ value: String(value), label: `${value} รายการ/หน้า` }))} />
@@ -217,7 +213,7 @@ export function AgentTable({
           <div className="agent-grid-sales"><span>ยอดขาย</span><strong>{MONEY.format(agent.sales)}<small> บาท</small></strong></div>
           <dl>
             <div><dt>จ่ายรางวัล</dt><dd>{MONEY.format(agent.payout)}</dd></div>
-            <div><dt>คอม ({agent.commissionRate.toFixed(0)}%)</dt><dd>{MONEY.format(agent.commission)}</dd></div>
+            <div><dt>คอม (รัฐ {agent.commissionRate.toFixed(0)}% · ลาว {agent.laoCommissionRate.toFixed(0)}%)</dt><dd>{MONEY.format(agent.commission)}</dd></div>
             <div><dt>ลูกค้า</dt><dd>{agent.customerCount.toLocaleString("th-TH")} คน</dd></div>
             <div><dt>บิล</dt><dd>{agent.billCount.toLocaleString("th-TH")} บิล</dd></div>
           </dl>
@@ -262,7 +258,7 @@ export function AgentTable({
                 <td className="num">{agent.billCount}</td>
                 <td className="num"><strong>{MONEY.format(agent.sales)}</strong></td>
                 <td className="num">{MONEY.format(agent.payout)}</td>
-                <td className="num">{MONEY.format(agent.commission)}<small> ({agent.commissionRate.toFixed(0)}%)</small></td>
+                <td className="num">{MONEY.format(agent.commission)}<small> (รัฐ {agent.commissionRate.toFixed(0)}% · ลาว {agent.laoCommissionRate.toFixed(0)}%)</small></td>
                 <td className="agent-table-link"><Link href={agent.profileHref}>ดูรายละเอียด</Link></td>
               </tr>
               {open && <tr className="agent-table-customers">

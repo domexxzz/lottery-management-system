@@ -18,10 +18,12 @@ type SlipItem = {
   id: string;
   number: string;
   stake: Prisma.Decimal;
+  packagePrice: Prisma.Decimal | null;
+  quantity: number;
   payout: Prisma.Decimal;
   isWinner: boolean;
   payoutRateSnapshot: Prisma.Decimal;
-  prizeType: { name: string };
+  prizeType: { name: string; digits: number };
   winningPrizes: Array<{ id: string; prizeLabelSnapshot: string; payoutRateSnapshot: Prisma.Decimal; payout: Prisma.Decimal; isPaid: boolean }>;
 };
 
@@ -68,7 +70,7 @@ function profitOf(status: BetStatus, item: SlipItem): number | null {
   return null;
 }
 
-export function SlipDetail({ bill, settledAt, showDrawLink, beforeItems }: { bill: SlipBill; settledAt: Date | null; showDrawLink: boolean; beforeItems?: ReactNode }) {
+export function SlipDetail({ bill, settledAt, showDrawLink, canManageItems = false, beforeItems }: { bill: SlipBill; settledAt: Date | null; showDrawLink: boolean; canManageItems?: boolean; beforeItems?: ReactNode }) {
   const rows: SlipItemRow[] = bill.items.map((item, index) => {
     const status = itemBetStatus(bill.status, item.isWinner);
     const winningPrizes = item.winningPrizes.map((prize) => ({
@@ -80,12 +82,17 @@ export function SlipDetail({ bill, settledAt, showDrawLink, beforeItems }: { bil
     }));
     return {
       id: item.id,
+      billId: bill.id,
       order: index + 1,
       number: item.number,
       lotteryType: bill.draw.lotteryType,
       lotteryLabel: bill.draw.lotteryType === "THAI_GOVERNMENT" ? "หวยไทย" : lotteryLabel(bill.draw.lotteryType),
       prizeTypeName: item.prizeType.name,
-      packageLabel: bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.stake) : null,
+      packageLabel: bill.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.packagePrice ?? item.stake) : null,
+      quantity: item.quantity,
+      unitStake: Number(item.packagePrice ?? item.stake),
+      digits: item.prizeType.digits,
+      canManage: canManageItems,
       stake: Number(item.stake),
       rate: bill.status === "DRAFT" ? null : compactRate(item.payoutRateSnapshot),
       rateText: bill.draw.lotteryType === "LAO_SET"

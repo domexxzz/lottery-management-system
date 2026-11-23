@@ -42,6 +42,7 @@ const UpdateUserSchema = z.object({
   agentCode: z.string().trim().max(32).optional(),
   agentName: z.string().trim().max(120).optional(),
   commissionRate: z.string().max(20).optional(),
+  laoCommissionRate: z.string().max(20).optional(),
   creditLimit: z.string().max(20).optional(),
   perNumberLimit: z.string().max(20).optional(),
 });
@@ -67,6 +68,7 @@ export async function updateUserAction(_previous: UserActionState, formData: For
     agentCode: formData.get("agentCode") ?? "",
     agentName: formData.get("agentName") ?? "",
     commissionRate: formData.get("commissionRate") ?? "",
+    laoCommissionRate: formData.get("laoCommissionRate") ?? "",
     creditLimit: formData.get("creditLimit") ?? "",
     perNumberLimit: formData.get("perNumberLimit") ?? "",
   });

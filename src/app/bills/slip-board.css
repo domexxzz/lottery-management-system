@@ -295,7 +295,15 @@
 .slip-item-number span:has(.slip-package-label) { display: grid; justify-items: center; gap: .2rem; }
 .slip-items-table tfoot th, .slip-items-table tfoot td { padding: .85rem .9rem; border-top: 2px solid var(--sb-border); background: #f8fbff; text-align: left; }
 .slip-items-table tfoot .num { text-align: right; }
+.slip-table-group th { padding: .65rem .8rem; border-top: 2px solid #c9ddf3; background: #eef6ff; text-align: left; }
+.slip-table-group th, .slip-item-group { --lottery-group: #0b6cf0; }
+.slip-table-group.is-lao th, .slip-item-group.is-lao { --lottery-group: #c2185b; }
+.slip-table-group.is-lao_set th, .slip-item-group.is-lao_set { --lottery-group: #7b3fc4; }
+.slip-table-group th { box-shadow: inset 4px 0 0 var(--lottery-group); }
+.slip-table-group th > span:last-child { margin-left: .65rem; color: #385574; font-size: .8rem; font-weight: 800; }
 .slip-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin: 0; padding: 1rem 1.15rem; list-style: none; }
+.slip-item-group { display: flex; grid-column: 1 / -1; min-height: 48px; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem .8rem; border: 1px solid #c9ddf3; border-left: 4px solid var(--lottery-group); border-radius: 12px; background: #eef6ff; }
+.slip-item-group > span:last-child { color: #294968; font-size: .86rem; font-weight: 800; text-align: right; }
 .slip-item { --item-accent: #a9bdd3; overflow: hidden; border: 1px solid var(--sb-border); border-radius: 13px; background: #fff; box-shadow: 0 6px 16px rgb(26 77 132 / 7%); }
 .slip-item.is-won { --item-accent: var(--sb-green); }
 .slip-item.is-lost { --item-accent: var(--sb-red); }
@@ -307,6 +315,15 @@
 .slip-item-head-left { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .45rem; padding: .45rem .75rem; }
 .slip-item-head-left > strong { color: var(--sb-text); font-size: .86rem; }
 .slip-item-head .slip-status { display: flex; min-width: 118px; justify-content: center; padding: .55rem .75rem; border-left: 1px solid var(--sb-border); border-radius: 0; }
+.slip-item-head-side { display: flex; align-items: stretch; }
+.slip-card-actions { display: flex; align-items: center; gap: .38rem; padding: .34rem .5rem; border-left: 1px solid var(--sb-border); }
+.slip-card-delete-form { position: relative; margin: 0; }
+.app-page .slip-card-action { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: .3rem; padding: 0 .65rem; border: 1px solid currentColor; border-radius: 999px; background: #fff; box-shadow: none; font-size: .78rem; font-weight: 800; }
+.slip-card-action svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.app-page .slip-card-action.is-edit { color: #075de0; }
+.app-page .slip-card-action.is-delete { color: #e3344f; }
+.app-page .slip-card-action:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 10px rgb(20 72 130 / 12%); }
+.slip-card-action-error { display: block; margin: .3rem 0 0; color: #c41f3a; font-size: .72rem; font-weight: 700; }
 .slip-item-body { display: grid; grid-template-columns: minmax(150px, .9fr) minmax(180px, 1.1fr); min-height: 78px; padding: .4rem; background: linear-gradient(135deg,#f7fbff,#fff); }
 .slip-item-number { display: grid; align-content: center; justify-items: center; gap: .08rem; border-radius: 9px; background: #edf4fb; text-align: center; }
 .slip-item-number strong { color: var(--sb-blue); font-size: 1.72rem; font-weight: 800; letter-spacing: .04em; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -324,6 +341,15 @@
 .slip-item-foot { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: .75rem; padding: .45rem .7rem; border-top: 1px solid var(--sb-border); color: var(--sb-muted); font-size: .78rem; }
 .slip-item-foot strong { color: var(--sb-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .slip-item-foot strong.is-plus { color: var(--sb-green); }
+.slip-card-inline-edit { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: end; gap: .65rem; padding: .75rem; border-top: 1px solid #bdd7f4; background: #f3f8ff; }
+.slip-card-inline-edit label { display: grid; gap: .28rem; color: #294765; font-size: .77rem; font-weight: 800; }
+.slip-card-inline-edit input { width: 100%; min-height: 40px; padding: .45rem .65rem; border: 1px solid #bcd2eb; border-radius: 9px; color: var(--sb-text); background: #fff; font: inherit; font-weight: 750; }
+.slip-card-inline-edit input:disabled { color: #5f7084; background: #edf2f7; }
+.slip-card-inline-edit-actions { display: flex; gap: .4rem; }
+.app-page .slip-card-inline-edit-actions button { min-height: 40px; padding: 0 .8rem; border: 1px solid #bfd1e6; border-radius: 9px; box-shadow: none; font-weight: 800; }
+.app-page .slip-card-inline-edit-actions .is-cancel { color: #49637d; background: #fff; }
+.app-page .slip-card-inline-edit-actions .is-save { border-color: #075de0; color: #fff; background: #075de0; }
+.slip-card-inline-edit > .slip-card-action-error { grid-column: 1 / -1; margin: 0; }
 .slip-items-more { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem; padding: .8rem 1.15rem; border-top: 1px solid var(--sb-line); color: var(--sb-muted); font-size: .88rem; }
 .app-page .slip-items-more button { min-height: 38px; border: 1px solid #c8dbef; border-radius: 10px; color: #1f5fae; background: #fff; box-shadow: none; }
 
@@ -409,6 +435,15 @@
   .slip-items-tools { width: 100%; }
   .slip-item-search, .slip-item-search input { flex: 1; width: 100%; }
   .slip-items { grid-template-columns: minmax(0, 1fr); padding: .65rem; }
+  .slip-item-group { align-items: flex-start; flex-direction: column; gap: .4rem; }
+  .slip-item-group > span:last-child { text-align: left; }
+  .slip-item-head { flex-wrap: wrap; }
+  .slip-item-head-side { width: 100%; border-top: 1px solid var(--sb-line); }
+  .slip-item-head .slip-status { min-width: 0; flex: 1; border-left: 0; }
+  .slip-card-actions { margin-left: auto; border-left: 1px solid var(--sb-border); }
+  .app-page .slip-card-action { min-height: 40px; }
+  .slip-card-inline-edit { grid-template-columns: 1fr; }
+  .slip-card-inline-edit-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .slip-item-foot { align-items: flex-start; flex-direction: column; gap: .2rem; }
 }
 

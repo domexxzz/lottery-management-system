@@ -78,4 +78,11 @@ describe("ขอบเขตงวดของหน้าบิล", () => {
     expect(historyHref("/bills", parseHistoryFilter({}))).toBe("/bills");
     expect(historyHref("/bills", parseHistoryFilter({ scope: "all", agent: "a1" }))).toBe("/bills?agent=a1&scope=all");
   });
+
+  test("ลิงก์เจาะรายละเอียดคงงวดลาวที่จับคู่และประเภทลาวรวม", () => {
+    const filter = parseHistoryFilter({ lottery: "LAO_COMBINED", draws: "drawLao01,drawSet01,drawLao01", scope: "all" });
+    expect(filter.lotteryType).toBe("LAO_COMBINED");
+    expect(filter.drawIds).toEqual(["drawLao01", "drawSet01"]);
+    expect(historyHref("/bills", filter)).toBe("/bills?lottery=LAO_COMBINED&draws=drawLao01%2CdrawSet01&scope=all");
+  });
 });

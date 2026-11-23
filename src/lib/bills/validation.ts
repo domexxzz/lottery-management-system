@@ -26,7 +26,11 @@ export type PrizeTypeRule = {
 export type DraftItem = {
   prizeTypeId: string;
   number: string;
+  /** ยอดเดิมพันรวมของรายการ */
   stake: Prisma.Decimal;
+  /** ราคาต่อชุดสำหรับหวยลาวชุด; null/ไม่ส่ง = หวยทั่วไป */
+  packagePrice?: Prisma.Decimal | null;
+  quantity?: number;
 };
 
 export type AgentLimits = {
@@ -190,7 +194,19 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
       continue;
     }
 
-    if (item.stake.greaterThan(MAX_STAKE_PER_ITEM)) {
+    const isLaoSet = LAO_SET_ACTIVE_CODES.some((code) => code === rule.code);
+    const packagePrice = item.packagePrice ?? (isLaoSet ? item.stake : null);
+    const quantity = item.quantity ?? 1;
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
+      issues.push({
+        itemIndex: index,
+        code: "STAKE_NOT_POSITIVE",
+        message: `รายการที่ ${index + 1}: จำนวนชุดต้องเป็นจำนวนเต็ม 1–999 ชุด`,
+      });
+      continue;
+    }
+
+    if (!isLaoSet && item.stake.greaterThan(MAX_STAKE_PER_ITEM)) {
       issues.push({
         itemIndex: index,
         code: "STAKE_OVER_ITEM_LIMIT",
@@ -200,8 +216,8 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
     }
 
     if (
-      LAO_SET_ACTIVE_CODES.some((code) => code === rule.code)
-      && !LAO_SET_PACKAGE_PRICES.some((price) => item.stake.equals(price))
+      isLaoSet
+      && (packagePrice === null || !LAO_SET_PACKAGE_PRICES.some((price) => packagePrice.equals(price)))
     ) {
       issues.push({
         itemIndex: index,
@@ -245,16 +261,16 @@ export function validateBill(input: ValidateInput): ValidationIssue[] {
         });
       }
     }
-    // หวยลาวชุดราคา 30/60/120 เป็นคนละประเภทย่อย จึงแทงเลขและประเภทตรง/โต๊ด
-    // เดียวกันได้พร้อมกันทุกชุด แต่แพ็กเกจราคาเดิมซ้ำยังถือว่าเป็นรายการซ้ำ
-    const duplicateKey = LAO_SET_ACTIVE_CODES.some((code) => code === rule.code)
-      ? `${key}:package-${item.stake.toFixed(2)}`
+    // หวยลาวชุดเก็บทุกครั้งที่กดซื้อเป็นคนละ BillItem แม้เลขและราคาชุดจะเหมือนกัน
+    // Settlement จะรวม quantity ชั่วคราวตาม Bill + เลข + ราคาชุดตอนคำนวณเท่านั้น
+    const duplicateKey = isLaoSet
+      ? `${key}:package-${packagePrice?.toFixed(2) ?? "invalid"}`
       : key;
-    if (seen.has(duplicateKey)) {
+    if (!isLaoSet && seen.has(duplicateKey)) {
       issues.push({
         itemIndex: index,
         code: "DUPLICATE_ITEM",
-        message: `รายการที่ ${index + 1}: ซ้ำกับรายการก่อนหน้า (${rule.name} ${item.number}${duplicateKey === key ? "" : ` ชุด ${item.stake.toFixed(0)} บาท`})`,
+        message: `รายการที่ ${index + 1}: ซ้ำกับรายการก่อนหน้า (${rule.name} ${item.number}${duplicateKey === key ? "" : ` ชุด ${packagePrice?.toFixed(0) ?? "-"} บาท`})`,
       });
     }
     seen.add(duplicateKey);

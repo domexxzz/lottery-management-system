@@ -1,0 +1,2 @@
+ALTER TABLE "agents"
+ADD COLUMN "laoCommissionRate" DECIMAL(7,4) NOT NULL DEFAULT 28.0000;

@@ -17,10 +17,12 @@ type SlipPart = {
     id: string;
     number: string;
     stake: Prisma.Decimal;
+    packagePrice: Prisma.Decimal | null;
+    quantity: number;
     payout: Prisma.Decimal;
     isWinner: boolean;
     payoutRateSnapshot: Prisma.Decimal;
-    prizeType: { name: string };
+    prizeType: { name: string; digits: number };
     winningPrizes: Array<{ id: string; prizeLabelSnapshot: string; payoutRateSnapshot: Prisma.Decimal; payout: Prisma.Decimal; isPaid: boolean }>;
   }>;
 };
@@ -30,7 +32,7 @@ function baht(value: number): string {
 }
 
 /** มุมมองเริ่มต้นของบิลหลายหวย: รวมรายการทุกส่วนไว้หน้าเดียว แต่ยังคงชื่อหวยกำกับทุกรายการ */
-export function SlipAllDetail({ parts }: { parts: SlipPart[] }) {
+export function SlipAllDetail({ parts, manageableBillIds = [] }: { parts: SlipPart[]; manageableBillIds?: string[] }) {
   let order = 0;
   const rows: SlipItemRow[] = parts.flatMap((part) => part.items.map((item) => {
     order += 1;
@@ -44,12 +46,17 @@ export function SlipAllDetail({ parts }: { parts: SlipPart[] }) {
     }));
     return {
       id: item.id,
+      billId: part.id,
       order,
       number: item.number,
       lotteryType: part.draw.lotteryType,
       lotteryLabel: part.draw.lotteryType === "THAI_GOVERNMENT" ? "หวยไทย" : lotteryLabel(part.draw.lotteryType),
       prizeTypeName: item.prizeType.name,
-      packageLabel: part.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.stake) : null,
+      packageLabel: part.draw.lotteryType === "LAO_SET" ? laoSetPackageLabel(item.packagePrice ?? item.stake) : null,
+      quantity: item.quantity,
+      unitStake: Number(item.packagePrice ?? item.stake),
+      digits: item.prizeType.digits,
+      canManage: manageableBillIds.includes(part.id),
       stake: Number(item.stake),
       rate: part.status === "DRAFT" ? null : compactRate(item.payoutRateSnapshot),
       rateText: part.draw.lotteryType === "LAO_SET"

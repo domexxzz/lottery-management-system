@@ -36,8 +36,9 @@ const TAB_ICON: Record<BetTab, string> = {
 /** สถานะรองที่มือถือรวมไว้ในปุ่ม "เพิ่มเติม" */
 const MORE_TABS: readonly BetTab[] = ["LOST", "CANCELLED"];
 
-type LotteryFilter ="ALL" | "THAI_GOVERNMENT" | "LAO" | "LAO_SET";
-const LOTTERY_FILTERS: readonly LotteryFilter[] = ["ALL", "THAI_GOVERNMENT", "LAO", "LAO_SET"];
+type LotteryFilter ="ALL" | "THAI_GOVERNMENT" | "LAO_COMBINED" | "LAO" | "LAO_SET";
+const LOTTERY_FILTERS: readonly LotteryFilter[] = ["ALL", "THAI_GOVERNMENT", "LAO_COMBINED", "LAO", "LAO_SET"];
+const lotteryFilterLabel = (value: Exclude<LotteryFilter, "ALL">) => value === "LAO_COMBINED" ? "หวยลาวและหวยลาวชุด" : lotteryLabel(value);
 
 const SCOPE_LABEL: Record<DrawScope, string> = {
   current: "งวดปัจจุบัน",
@@ -116,7 +117,8 @@ export async function AgentBillBoard({
 }) {
   const result = await listBetBills(actor, {
     tab: filter.tab,
-    lotteryType: filter.lotteryType,
+    lotteryType: filter.lotteryType === "LAO_COMBINED" ? undefined : filter.lotteryType,
+    lotteryTypes: filter.lotteryType === "LAO_COMBINED" ? ["LAO", "LAO_SET"] : undefined,
     query: filter.query,
     dateFrom: filter.dateFrom,
     dateTo: filter.dateTo,
@@ -147,9 +149,9 @@ export async function AgentBillBoard({
   // ขอบเขตงวดปัจจุบันแต่ไม่มีงวดที่ค้างอยู่เลย
   const noCurrentDraw = scope.noCurrentDraw;
   // เปลี่ยนขอบเขตแล้วล้างงวดที่เลือกไว้ ให้ขอบเขตใหม่เลือกงวดของตัวเอง
-  const scopeHref = (value: DrawScope) => historyHref("/bills", { ...filter, scope: value, drawId: "", page: 1 });
+  const scopeHref = (value: DrawScope) => historyHref("/bills", { ...filter, scope: value, drawId: "", drawIds: [], page: 1 });
   // เปลี่ยนประเภทหวยแล้วล้างงวดที่เลือกไว้ ช่องงวดจะแสดงเฉพาะงวดของประเภทนั้น
-  const lotteryHref = (value: LotteryFilter) => historyHref("/bills", { ...filter, lotteryType: value === "ALL" ? undefined : value, drawId: "", page: 1 });
+  const lotteryHref = (value: LotteryFilter) => historyHref("/bills", { ...filter, lotteryType: value === "ALL" ? undefined : value, drawId: "", drawIds: [], page: 1 });
 
   return (
     <section className="slip-board" aria-labelledby="slip-board-heading">
@@ -175,7 +177,7 @@ export async function AgentBillBoard({
           {LOTTERY_FILTERS.map((value) => (
             <Link key={value} href={lotteryHref(value)} aria-current={(filter.lotteryType ?? "ALL") === value ? "page" : undefined}>
               {value !== "ALL" && <LotteryFlag lotteryType={value} />}
-              {value === "ALL" ? "ทั้งหมด" : lotteryLabel(value)}
+              {value === "ALL" ? "ทั้งหมด" : lotteryFilterLabel(value)}
             </Link>
           ))}
         </nav>
@@ -312,6 +314,7 @@ export async function AgentBillBoard({
         from={filter.from}
         to={filter.to}
         drawId={filter.drawId}
+        drawIds={filter.drawIds.join(",")}
         defaultDrawId={scope.drawId}
         scope={scope.scope}
         lottery={filter.lotteryType ?? ""}
