@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { AppDropdown } from "../AppDropdown";
@@ -39,6 +40,12 @@ export function ReportViewPicker({ lotteries, selectedId, draws }: {
     params.set("draw", draw);
     return `/reports?${params}`;
   };
+  const commissionHref = (() => {
+    const params = new URLSearchParams();
+    if (activeCategory !== "ALL") params.set("lottery", activeCategory);
+    if (selectedId !== "all") params.set("drawId", selectedId);
+    return `/reports/commissions${params.size ? `?${params}` : ""}`;
+  })();
 
   const rows: { category: "ALL" | PickerDraw["category"]; label: string; flag?: string }[] = [
     { category: "ALL", label: "ทุกประเภท" },
@@ -83,6 +90,20 @@ export function ReportViewPicker({ lotteries, selectedId, draws }: {
           </div>
         );
       })}
+      <div className="or-view-actions">
+        <Link className="or-view-commission" href={commissionHref}>
+          <i aria-hidden="true">฿</i>
+          <span>จ่ายค่าคอม</span>
+          <small>ดูยอดที่ต้องจ่ายแต่ละ Agent</small>
+          <b aria-hidden="true">→</b>
+        </Link>
+        <Link className="or-view-accounting" href="/reports/accounting" aria-label="สรุปบัญชี รายงวด / รายเดือน / รายปี">
+          <i aria-hidden="true">▦</i>
+          <span>ดูสรุปบัญชี</span>
+          <small>รายงวด · รายเดือน · รายปี</small>
+          <b aria-hidden="true">→</b>
+        </Link>
+      </div>
       {pending && <span className="or-view-loading" role="status">กำลังโหลด…</span>}
     </section>
   );

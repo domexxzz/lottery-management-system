@@ -178,6 +178,18 @@
 .or-view-loading { margin: 0; color: #1769e0; font-size: .82rem; font-weight: 750; }
 .or-view-rows { position: relative; gap: .55rem; }
 .or-view-row { display: grid; grid-template-columns: minmax(190px, 260px) minmax(260px, 520px); gap: .65rem; align-items: center; }
+.or-view-actions { display:grid; position:absolute; right:.9rem; top:.75rem; bottom:.75rem; width:min(300px,calc(100% - 820px)); min-width:240px; grid-template-rows:1fr 1fr; gap:.55rem; }
+.or-view-accounting,.or-view-commission { display:grid; min-height:58px; grid-template-columns:42px minmax(0,1fr) 30px; grid-template-areas:"icon title arrow" "icon detail arrow"; align-content:center; align-items:center; column-gap:.65rem; padding:.55rem .75rem; border:2px solid #1769e0; border-radius:13px; color:#123b62; background:#f7fbff; box-shadow:0 8px 18px rgb(23 105 224 / 10%); text-decoration:none; }
+.or-view-accounting:hover,.or-view-accounting:focus-visible,.or-view-commission:hover,.or-view-commission:focus-visible { color:#123b62; background:#edf6ff; transform:translateY(-1px); }
+.or-view-accounting>i,.or-view-commission>i { display:grid; grid-area:icon; width:42px; height:42px; place-items:center; border-radius:11px; color:#fff; background:#1769e0; font-size:1.1rem; font-style:normal; font-weight:900; }
+.or-view-accounting>span,.or-view-commission>span { grid-area:title; color:#123b62; font-size:.9rem; font-weight:900; }
+.or-view-accounting>small,.or-view-commission>small { grid-area:detail; color:#526f8b!important; font-size:.66rem; font-weight:700; }
+.or-view-accounting>b,.or-view-commission>b { display:grid; grid-area:arrow; width:28px; height:28px; place-items:center; border-radius:50%; color:#1769e0; background:#e3efff; font-size:1.05rem; }
+.or-view-commission { border-color:#11908f; background:#f2fbfa; box-shadow:0 8px 18px rgb(17 144 143 / 10%); }
+.or-view-commission:hover,.or-view-commission:focus-visible { color:#124e58; background:#e8f8f6; }
+.or-view-commission>i { background:#11908f; }
+.or-view-commission>span { color:#124e58; }
+.or-view-commission>b { color:#0b7776; background:#d9f3ef; }
 .owner-report .or-type-button { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: .5rem; padding: .55rem .85rem; border: 1px solid #c8dbef; border-radius: 11px; color: #244a70; background: #fff; box-shadow: none; font-weight: 800; cursor: pointer; }
 .owner-report .or-type-button[aria-pressed="true"] { border-color: #1769e0; color: #fff; background: #1769e0; }
 .owner-report .or-type-button svg { flex: none; }
@@ -212,11 +224,16 @@
   .or-view-row { grid-template-columns: minmax(0, 42%) minmax(0, 58%); gap: .4rem; }
   .owner-report .or-type-button { min-height: 48px; padding: .4rem .45rem; font-size: .78rem; line-height: 1.2; }
   .or-view-row .or-draw-select .app-dropdown-trigger { min-height: 48px; padding-inline: .55rem; font-size: .78rem; }
+  .or-view-actions { position:static; width:100%; min-width:0; grid-template-rows:none; }
+  .or-view-accounting,.or-view-commission { width:100%; min-width:0; min-height:54px; }
   /* กราฟกว้างต้องเลื่อนข้างบนมือถือ ใช้รายการแนวตั้งแทน */
   .or-chart-scroll { display: none; }
   .or-trend-list { display: grid; }
   /* ตาราง 30 วันบนมือถือ: เหลือยอดขาย · รอผล · กำไร ตัวเลขเต็มดูในสรุปบัญชี */
   .or-breakdown-table .or-col-detail { display: none !important; }
+}
+@media (min-width:641px) and (max-width:1080px) {
+  .or-view-actions { position:static; width:100%; min-width:0; grid-template-columns:1fr 1fr; grid-template-rows:none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .or-view { transition: none; }

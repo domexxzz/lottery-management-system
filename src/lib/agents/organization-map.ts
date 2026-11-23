@@ -7,7 +7,7 @@ const CUSTOMER_PREVIEW_LIMIT = 6;
 
 type MoneyValue = Prisma.Decimal | string | number | null;
 
-function table(name: "agents" | "bills" | "settlements") {
+function table(name: "agents" | "bills" | "draws" | "settlements") {
   const schema = databaseSchema().replaceAll('"', '""');
   return Prisma.raw(`"${schema}"."${name}"`);
 }
@@ -36,6 +36,8 @@ type StatRow = {
   sales: MoneyValue;
   billCount: number;
   payout: MoneyValue;
+  thaiCommission: MoneyValue;
+  laoCommission: MoneyValue;
   commission: MoneyValue;
   net: MoneyValue;
 };
@@ -69,9 +71,13 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
       ), settlement_agg AS (
         SELECT s."agentId",
                COALESCE(SUM(s.payout), 0) AS payout,
+               COALESCE(SUM(CASE WHEN d."lotteryType" = 'THAI_GOVERNMENT' THEN s.commission ELSE 0 END), 0) AS "thaiCommission",
+               COALESCE(SUM(CASE WHEN d."lotteryType" IN ('LAO', 'LAO_SET') THEN s.commission ELSE 0 END), 0) AS "laoCommission",
                COALESCE(SUM(s.commission), 0) AS commission,
                COALESCE(SUM(s.net), 0) AS net
         FROM ${table("settlements")} s
+        INNER JOIN ${table("draws")} d
+          ON d.id = s."drawId" AND d."organizationId" = s."organizationId"
         WHERE ${settlementWhere(actor, draws)}
         GROUP BY s."agentId"
       )
@@ -79,6 +85,8 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
              COALESCE(ba.sales, 0) AS sales,
              COALESCE(ba."billCount", 0)::int AS "billCount",
              COALESCE(sa.payout, 0) AS payout,
+             COALESCE(sa."thaiCommission", 0) AS "thaiCommission",
+             COALESCE(sa."laoCommission", 0) AS "laoCommission",
              COALESCE(sa.commission, 0) AS commission,
              COALESCE(sa.net, 0) AS net
       FROM ${table("agents")} a
@@ -120,6 +128,8 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
       sales: number(row.sales),
       billCount: row.billCount,
       payout: number(row.payout),
+      thaiCommission: number(row.thaiCommission),
+      laoCommission: number(row.laoCommission),
       commission: number(row.commission),
       net: number(row.net),
     })),

@@ -537,8 +537,15 @@
 .agent-grid-sales small{color:#8a979f;font-size:.6rem;font-weight:600}
 .agent-grid-card dl{display:grid;grid-template-columns:1fr 1fr;gap:.45rem .7rem;margin:0}
 .agent-grid-card dl>div{display:grid;gap:.05rem;min-width:0}
+.agent-grid-card dl>.agent-grid-commission{grid-column:1/-1;padding:.5rem .55rem;border:1px solid #dce9ed;border-radius:8px;background:#f6fafb}
 .agent-grid-card dt{color:#6d818d;font-size:.58rem;font-weight:700}
 .agent-grid-card dd{margin:0;color:#17384f;font-size:.74rem;font-weight:750;font-variant-numeric:tabular-nums}
+.agent-grid-commission dd{display:grid;grid-template-columns:1fr auto;gap:.18rem .55rem}
+.agent-grid-commission dd span{display:contents;color:#5e7480;font-size:.6rem;font-weight:650}
+.agent-grid-commission dd span b{text-align:right;color:#17384f;font-size:.68rem}
+.agent-grid-commission dd span.total{font-weight:800}
+.agent-grid-commission dd span.total b{color:#0e7e89;font-size:.74rem}
+.agent-grid-commission dd small{grid-column:1/-1;padding-top:.18rem;border-top:1px solid #e2ecef;color:#7c8d96;font-size:.55rem;font-weight:600}
 .agent-grid-top-customer{margin:0;padding-top:.45rem;border-top:1px solid #e5ecef;color:#6d818d;font-size:.6rem}
 .agent-grid-top-customer a{color:#168b99;font-weight:700}
 .agent-grid-profile{justify-self:stretch;padding:.5rem;border-radius:8px;color:#fff;background:#127f8c;font-size:.66rem;font-weight:750;text-align:center;text-decoration:none}

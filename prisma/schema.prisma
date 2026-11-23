@@ -176,6 +176,7 @@ model Organization {
   ownerChatConversations OwnerChatConversation[]
   restrictedNumbers      RestrictedNumber[]
   agentBillCounters      AgentBillCounter[]
+  commissionPayments     AgentCommissionPayment[]
 
   @@map("organizations")
 }
@@ -217,19 +218,21 @@ model User {
   agent    Agent?    @relation("AgentUser")
   sessions Session[]
 
-  createdBills           Bill[]                  @relation("BillCreatedBy")
-  cancelledBills         Bill[]                  @relation("BillCancelledBy")
-  cancelRequestBills     Bill[]                  @relation("BillCancelRequestedBy")
-  madeResults            Result[]                @relation("ResultMaker")
-  checkedResults         Result[]                @relation("ResultChecker")
-  approvedSettle         Settlement[]            @relation("SettlementApprover")
-  reconciledSettle       Settlement[]            @relation("SettlementReconciler")
-  auditEvents            AuditEvent[]
-  uploadedAttachments    BillAttachment[]        @relation("AttachmentUploader")
-  verifiedAttachments    BillAttachment[]        @relation("AttachmentVerifier")
-  verifiedPayments       BillPayment[]           @relation("PaymentVerifier")
-  ownerChatConversations OwnerChatConversation[] @relation("OwnerChatConversationOwner")
-  restrictedNumbers      RestrictedNumber[]      @relation("RestrictedNumberCreatedBy")
+  createdBills             Bill[]                   @relation("BillCreatedBy")
+  cancelledBills           Bill[]                   @relation("BillCancelledBy")
+  cancelRequestBills       Bill[]                   @relation("BillCancelRequestedBy")
+  madeResults              Result[]                 @relation("ResultMaker")
+  checkedResults           Result[]                 @relation("ResultChecker")
+  approvedSettle           Settlement[]             @relation("SettlementApprover")
+  reconciledSettle         Settlement[]             @relation("SettlementReconciler")
+  auditEvents              AuditEvent[]
+  uploadedAttachments      BillAttachment[]         @relation("AttachmentUploader")
+  verifiedAttachments      BillAttachment[]         @relation("AttachmentVerifier")
+  verifiedPayments         BillPayment[]            @relation("PaymentVerifier")
+  ownerChatConversations   OwnerChatConversation[]  @relation("OwnerChatConversationOwner")
+  restrictedNumbers        RestrictedNumber[]       @relation("RestrictedNumberCreatedBy")
+  commissionPaymentsMade   AgentCommissionPayment[] @relation("CommissionPaymentPaidBy")
+  commissionPaymentsVoided AgentCommissionPayment[] @relation("CommissionPaymentVoidedBy")
 
   @@unique([organizationId, login])
   @@index([organizationId, role])
@@ -281,9 +284,10 @@ model Agent {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bills        Bill[]
-  settlements  Settlement[]
-  billCounters AgentBillCounter[]
+  bills              Bill[]
+  settlements        Settlement[]
+  billCounters       AgentBillCounter[]
+  commissionPayments AgentCommissionPayment[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -755,6 +759,42 @@ model Settlement {
   @@index([organizationId, drawId])
   @@index([organizationId, agentId, drawId])
   @@map("settlements")
+}
+
+/// เช็กลิสต์การจ่ายค่าคอมรายเดือน เก็บยอด snapshot เพื่อให้ตรวจสอบย้อนหลังได้
+model AgentCommissionPayment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  /// ใช้วันที่ 1 ของเดือนเป็นคีย์ เช่น 2026-11-01
+  periodMonth DateTime @db.Date
+
+  thaiCommissionSnapshot  Decimal @db.Decimal(18, 2)
+  laoCommissionSnapshot   Decimal @db.Decimal(18, 2)
+  totalCommissionSnapshot Decimal @db.Decimal(18, 2)
+  settlementCountSnapshot Int
+
+  paidAt   DateTime
+  paidById String?
+  paidBy   User?    @relation("CommissionPaymentPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  note     String?
+
+  /// การยกเลิกเครื่องหมายไม่ลบข้อมูลเดิม เพื่อรักษาประวัติ Audit
+  voidedAt   DateTime?
+  voidedById String?
+  voidedBy   User?     @relation("CommissionPaymentVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, agentId, periodMonth])
+  @@index([organizationId, periodMonth, voidedAt])
+  @@index([agentId, periodMonth])
+  @@map("agent_commission_payments")
 }
 
 // ---------------------------------------------------------------- audit

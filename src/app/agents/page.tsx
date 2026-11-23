@@ -61,7 +61,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
 
   const nodes: AgentTableRow[] = mapData.agents
     .map((agent) => {
-      const stats = performance.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, commission: 0, net: 0 };
+      const stats = performance.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, thaiCommission: 0, laoCommission: 0, commission: 0, net: 0 };
       const customers = customerRows.get(agent.id) ?? [];
       const drawQuery = currentDraw ? `?drawId=${currentDraw.id}` : "";
       const csvQuery = currentDraw ? `?draw=${currentDraw.id}` : "";
@@ -76,6 +76,8 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         sales: stats.sales,
         billCount: stats.billCount,
         payout: stats.payout,
+        thaiCommission: stats.thaiCommission,
+        laoCommission: stats.laoCommission,
         commission: stats.commission,
         net: stats.net,
         profileHref: `/agents/${agent.id}${drawQuery}`,

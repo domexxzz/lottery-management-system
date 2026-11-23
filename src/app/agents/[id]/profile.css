@@ -14,3 +14,11 @@
 .agent-profile-buttons>a{flex:1;justify-content:center}
 .agent-profile-page .agent-profile-edit{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:.7rem 1.05rem;border:1px solid #9fd3d4;border-radius:11px;color:#087c8e;background:#fff;font-size:.7rem;font-weight:800;white-space:nowrap;text-decoration:none}
 .agent-profile-page .agent-profile-edit:hover{background:#eef8f8}
+.agent-profile-commission-card>div{flex:1}
+.agent-profile-commission-card>div>strong>small{color:#71818b;font-size:.58rem;font-weight:650}
+.agent-profile-commission-breakdown{display:grid;gap:.24rem;margin-top:.38rem;padding-top:.38rem;border-top:1px solid #e5ecef}
+.agent-profile-commission-breakdown>span{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:.4rem;color:#657782;font-size:.65rem}
+.agent-profile-commission-breakdown b{color:#17384f;font-size:.75rem;font-variant-numeric:tabular-nums}
+.agent-profile-commission-breakdown small{padding:.08rem .35rem;border-radius:99px;color:#8b620a;background:#fff1c9;font-size:.54rem;font-weight:800}
+.agent-profile-commission-breakdown .total{padding-top:.24rem;border-top:1px dashed #d8e4e8;color:#17384f;font-weight:800}
+.agent-profile-commission-breakdown .total b{color:#0d7d89;font-size:.82rem}

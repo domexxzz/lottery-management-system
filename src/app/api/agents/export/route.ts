@@ -45,7 +45,7 @@ export async function GET(request: Request) {
       customerCounts.set(customer.agentId, customer.customerCount);
     }
     const rows = mapData.agents.map((agent) => {
-      const value = stats.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, commission: 0, net: 0 };
+      const value = stats.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, thaiCommission: 0, laoCommission: 0, commission: 0, net: 0 };
       return { ...agent, ...value, customerCount: customerCounts.get(agent.id) ?? 0, customers: customers.get(agent.id) ?? [] };
     }).filter((agent) => {
       if (status && agent.status !== status) return false;
@@ -79,6 +79,8 @@ export async function GET(request: Request) {
         { label: "จำนวนบิล", value: rows.reduce((sum, row) => sum + row.billCount, 0), type: "integer", unit: "บิล" },
         { label: "ยอดขายรวม", value: rows.reduce((sum, row) => sum + row.sales, 0), type: "money", unit: "บาท" },
         { label: "จ่ายรางวัลรวม", value: rows.reduce((sum, row) => sum + row.payout, 0), type: "money", unit: "บาท" },
+        { label: "ค่าคอมหวยไทย", value: rows.reduce((sum, row) => sum + row.thaiCommission, 0), type: "money", unit: "บาท" },
+        { label: "ค่าคอมหวยลาวและหวยลาวชุด", value: rows.reduce((sum, row) => sum + row.laoCommission, 0), type: "money", unit: "บาท" },
         { label: "ค่าคอมมิชชันรวม", value: rows.reduce((sum, row) => sum + row.commission, 0), type: "money", unit: "บาท" },
         { label: "ยอดสุทธิรวม", value: rows.reduce((sum, row) => sum + row.net, 0), type: "money", unit: "บาท" },
       ],
@@ -88,9 +90,10 @@ export async function GET(request: Request) {
         { header: "ค่าคอมหวยลาวและหวยลาวชุด", type: "percentage", width: 25 },
         { header: "จำนวนลูกค้า", type: "integer", width: 16 }, { header: "จำนวนบิล", type: "integer", width: 14 },
         { header: "ยอดขาย", type: "money", width: 18 }, { header: "จ่ายรางวัล", type: "money", width: 18 },
-        { header: "ค่าคอมมิชชัน", type: "money", width: 18 }, { header: "ยอดสุทธิ", type: "money", width: 18 },
+        { header: "ค่าคอมหวยไทย", type: "money", width: 18 }, { header: "ค่าคอมหวยลาวและหวยลาวชุด", type: "money", width: 25 },
+        { header: "ค่าคอมมิชชันรวม", type: "money", width: 18 }, { header: "ยอดสุทธิ", type: "money", width: 18 },
       ],
-      rows: rows.map((row) => [row.code, row.name, row.status, Number(row.commissionRate) / 100, Number(row.laoCommissionRate) / 100, row.customerCount, row.billCount, row.sales, row.payout, row.commission, row.net]),
+      rows: rows.map((row) => [row.code, row.name, row.status, Number(row.commissionRate) / 100, Number(row.laoCommissionRate) / 100, row.customerCount, row.billCount, row.sales, row.payout, row.thaiCommission, row.laoCommission, row.commission, row.net]),
     };
     const output = createReportDownload(report, params.get("format") === "xlsx" ? "xlsx" : "csv");
     return new NextResponse(output.body, { headers: output.headers });

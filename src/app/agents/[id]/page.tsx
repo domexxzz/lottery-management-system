@@ -106,7 +106,12 @@ export default async function AgentProfilePage({
   };
   const performanceRows = billsByDraw.map((row) => ({ draw: drawById.get(row.drawId), bills: row._count._all, gross: Number(row._sum.totalStake ?? 0), payout: Number(row._sum.totalPayout ?? 0), settlement: settlementByDraw.get(row.drawId), money: moneyOf(row.drawId, Number(row._sum.totalStake ?? 0), Number(row._sum.totalPayout ?? 0)) })).filter((row) => row.draw).sort((a, b) => b.draw!.cutoffAt.getTime() - a.draw!.cutoffAt.getTime());
   // ยอดรวมของทุกงวดในขอบเขตที่เลือก: ยอดสุทธิ = ยอดขาย − ค่าคอม · กำไร/ขาดทุน = ยอดสุทธิ − จ่ายรางวัล
-  const commission = performanceRows.reduce((sum, row) => sum + row.money.commission, 0);
+  const commissionByLottery = performanceRows.reduce((sum, row) => {
+    if (row.draw!.lotteryType === "THAI_GOVERNMENT") sum.thai += row.money.commission;
+    else sum.lao += row.money.commission;
+    return sum;
+  }, { thai: 0, lao: 0 });
+  const commission = commissionByLottery.thai + commissionByLottery.lao;
   const hasEstimatedCommission = performanceRows.some((row) => row.money.estimated);
   const hasUnsettled = performanceRows.some((row) => !row.settlement);
   const net = gross - commission;
@@ -153,7 +158,7 @@ export default async function AgentProfilePage({
 
     <section className="agent-profile-kpis" aria-label={`ตัวเลขสรุป ${selectedLabel}`}>
       <article><span><Icon name="bill" /></span><div><small>{selectedDraw ? "ยอดขายงวดนี้" : "ยอดขายรวม"}</small><strong>{MONEY.format(gross)}</strong><em>เงินที่ลูกค้าแทงทั้งหมด · {billCount} บิล · เฉลี่ย {MONEY.format(averageBill)} บาท/บิล</em></div></article>
-      <article><span><Icon name="agent" /></span><div><small>ค่าคอม Agent</small><strong>{MONEY.format(commission)}</strong><em>รัฐบาล {commissionRate.toFixed(0)}% · ลาวและลาวชุด {laoCommissionRate.toFixed(0)}%{hasEstimatedCommission ? " · งวดที่ยังไม่ออกผลคิดตามประเภทหวย" : ""}</em></div></article>
+      <article className="agent-profile-commission-card"><span><Icon name="agent" /></span><div><small>ค่าคอม Agent</small><strong>{MONEY.format(commission)} <small>บาท</small></strong><div className="agent-profile-commission-breakdown"><span>หวยไทย <b>{MONEY.format(commissionByLottery.thai)}</b><small>{commissionRate.toFixed(0)}%</small></span><span>หวยลาวและหวยลาวชุด <b>{MONEY.format(commissionByLottery.lao)}</b><small>{laoCommissionRate.toFixed(0)}%</small></span><span className="total">ค่าคอมรวม <b>{MONEY.format(commission)}</b></span></div>{hasEstimatedCommission && <em>งวดที่ยังไม่ออกผลเป็นยอดประมาณตามประเภทหวย</em>}</div></article>
       <article><span><Icon name="report" /></span><div><small>ยอดสุทธิ</small><strong>{MONEY.format(net)}</strong><em>ยอดขาย − ค่าคอม (ยังไม่หักค่ารางวัล)</em></div></article>
       <article><span><Icon name="draw" /></span><div><small>จ่ายรางวัล</small><strong>{MONEY.format(payout)}</strong><em>เงินที่ต้องจ่ายลูกค้าที่ถูกรางวัล{hasUnsettled ? " · งวดที่ยังไม่ออกผลยังเป็น 0" : ""}</em></div></article>
       <article><span><Icon name="winner" /></span><div><small>ลูกค้าถูกรางวัล</small><strong>{winnerCount} คน</strong><em>{winningItems} รายการที่ถูก · {winnerRate.toFixed(1)}% ของบิล</em></div></article>

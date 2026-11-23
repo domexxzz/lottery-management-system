@@ -361,7 +361,6 @@ export function OwnerReport({ report }: { report: Report }) {
 
       <footer className="or-footer">
         <span>อยากเจาะลึกกว่านี้?</span>
-        <Link href="/reports/accounting">สรุปบัญชี รายงวด / รายเดือน / รายปี →</Link>
         <Link href={draw ? `/reports/charts?draw=${draw.id}` : "/reports/charts"}>สร้างกราฟเอง (สำหรับนักบัญชี) →</Link>
       </footer>
     </main>

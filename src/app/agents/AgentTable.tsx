@@ -27,6 +27,8 @@ export type AgentTableRow = {
   sales: number;
   billCount: number;
   payout: number;
+  thaiCommission: number;
+  laoCommission: number;
   commission: number;
   net: number;
   profileHref: string;
@@ -105,9 +107,11 @@ export function AgentTable({
       bills: sum.bills + agent.billCount,
       sales: sum.sales + agent.sales,
       payout: sum.payout + agent.payout,
+      thaiCommission: sum.thaiCommission + agent.thaiCommission,
+      laoCommission: sum.laoCommission + agent.laoCommission,
       commission: sum.commission + agent.commission,
     }),
-    { customers: 0, bills: 0, sales: 0, payout: 0, commission: 0 },
+    { customers: 0, bills: 0, sales: 0, payout: 0, thaiCommission: 0, laoCommission: 0, commission: 0 },
   );
 
   // แสดงทีละ 10 Agent ที่เหลือกดหน้าถัดไป · ยอดรวมท้ายตารางยังคิดจากทุก Agent ที่ตรงตัวกรอง
@@ -213,7 +217,7 @@ export function AgentTable({
           <div className="agent-grid-sales"><span>ยอดขาย</span><strong>{MONEY.format(agent.sales)}<small> บาท</small></strong></div>
           <dl>
             <div><dt>จ่ายรางวัล</dt><dd>{MONEY.format(agent.payout)}</dd></div>
-            <div><dt>คอม (รัฐ {agent.commissionRate.toFixed(0)}% · ลาว {agent.laoCommissionRate.toFixed(0)}%)</dt><dd>{MONEY.format(agent.commission)}</dd></div>
+            <div className="agent-grid-commission"><dt>ค่าคอม Agent</dt><dd><span>หวยไทย <b>{MONEY.format(agent.thaiCommission)}</b></span><span>หวยลาวและหวยลาวชุด <b>{MONEY.format(agent.laoCommission)}</b></span><span className="total">รวม <b>{MONEY.format(agent.commission)}</b></span><small>ไทย {agent.commissionRate.toFixed(0)}% · ลาว {agent.laoCommissionRate.toFixed(0)}%</small></dd></div>
             <div><dt>ลูกค้า</dt><dd>{agent.customerCount.toLocaleString("th-TH")} คน</dd></div>
             <div><dt>บิล</dt><dd>{agent.billCount.toLocaleString("th-TH")} บิล</dd></div>
           </dl>
@@ -227,7 +231,9 @@ export function AgentTable({
         <span>บิล <b>{totals.bills.toLocaleString("th-TH")}</b></span>
         <span>ยอดขาย <b>{MONEY.format(totals.sales)}</b></span>
         <span>จ่ายรางวัล <b>{MONEY.format(totals.payout)}</b></span>
-        <span>คอม <b>{MONEY.format(totals.commission)}</b></span>
+        <span>คอมหวยไทย <b>{MONEY.format(totals.thaiCommission)}</b></span>
+        <span>คอมหวยลาวและชุด <b>{MONEY.format(totals.laoCommission)}</b></span>
+        <span>ค่าคอมรวม <b>{MONEY.format(totals.commission)}</b></span>
       </div>}
     </> : <div className="table-wrap agent-table-wrap">
       <table className="agent-table">
@@ -239,12 +245,14 @@ export function AgentTable({
             <th scope="col" className="num">บิล</th>
             <th scope="col" className="num">ยอดขาย</th>
             <th scope="col" className="num">จ่ายรางวัล</th>
-            <th scope="col" className="num">คอม</th>
+            <th scope="col" className="num">คอมหวยไทย</th>
+            <th scope="col" className="num">คอมหวยลาวและชุด</th>
+            <th scope="col" className="num">ค่าคอมรวม</th>
             <th scope="col"><span className="sr-only">จัดการ</span></th>
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 && <tr><td colSpan={8} className="agent-table-empty">ไม่พบ Agent ที่ค้นหา</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={10} className="agent-table-empty">ไม่พบ Agent ที่ค้นหา</td></tr>}
           {pageRows.map((agent) => {
             const open = openId === agent.id;
             return <Fragment key={agent.id}>
@@ -258,11 +266,13 @@ export function AgentTable({
                 <td className="num">{agent.billCount}</td>
                 <td className="num"><strong>{MONEY.format(agent.sales)}</strong></td>
                 <td className="num">{MONEY.format(agent.payout)}</td>
-                <td className="num">{MONEY.format(agent.commission)}<small> (รัฐ {agent.commissionRate.toFixed(0)}% · ลาว {agent.laoCommissionRate.toFixed(0)}%)</small></td>
+                <td className="num">{MONEY.format(agent.thaiCommission)}<small> ({agent.commissionRate.toFixed(0)}%)</small></td>
+                <td className="num">{MONEY.format(agent.laoCommission)}<small> ({agent.laoCommissionRate.toFixed(0)}%)</small></td>
+                <td className="num"><strong>{MONEY.format(agent.commission)}</strong></td>
                 <td className="agent-table-link"><Link href={agent.profileHref}>ดูรายละเอียด</Link></td>
               </tr>
               {open && <tr className="agent-table-customers">
-                <td colSpan={8}>
+                <td colSpan={10}>
                   <div>
                     <span>ลูกค้าอันดับแรกตามยอดซื้อ</span>
                     <ol>
@@ -286,7 +296,9 @@ export function AgentTable({
             <td className="num">{totals.bills}</td>
             <td className="num"><strong>{MONEY.format(totals.sales)}</strong></td>
             <td className="num">{MONEY.format(totals.payout)}</td>
-            <td className="num">{MONEY.format(totals.commission)}</td>
+            <td className="num">{MONEY.format(totals.thaiCommission)}</td>
+            <td className="num">{MONEY.format(totals.laoCommission)}</td>
+            <td className="num"><strong>{MONEY.format(totals.commission)}</strong></td>
             <td />
           </tr>
         </tfoot>}
