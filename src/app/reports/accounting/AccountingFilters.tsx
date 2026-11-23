@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
+import { DateRangePicker } from "@/components/calendar";
 import { AppDropdown } from "../../AppDropdown";
 import { LotteryFlag } from "../../bills/ThaiFlag";
 import {
@@ -114,8 +115,15 @@ export function AccountingFilters({ query, agents, comparison, days, months, wee
 
       {query.period === "custom" && !customMode && (
         <div className="acc-custom-range">
-          <label>ตั้งแต่<input type="date" value={query.from} onChange={(event) => go({ from: event.target.value })} /></label>
-          <label>ถึง<input type="date" value={query.to} onChange={(event) => go({ to: event.target.value })} /></label>
+          <DateRangePicker
+            startLabel="ตั้งแต่วันที่"
+            endLabel="ถึงวันที่"
+            startPlaceholder="เลือกวันเริ่มต้น"
+            endPlaceholder="เลือกวันสิ้นสุด"
+            startDate={query.from}
+            endDate={query.to}
+            onChange={({ startDate, endDate }) => go({ from: startDate, to: endDate })}
+          />
         </div>
       )}
 

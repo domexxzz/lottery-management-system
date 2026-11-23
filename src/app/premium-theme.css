@@ -326,6 +326,23 @@ body { background: var(--premium-bg); color: var(--premium-text); }
 .account-popover strong { font-size: .9rem; }
 .account-popover small { margin-bottom: .65rem; color: #53697d; }
 .account-popover button { width: 100%; }
+.account-password-link {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .45rem;
+  padding: .45rem .7rem;
+  border: 1px solid #c9dde3;
+  border-radius: 9px;
+  color: var(--premium-action);
+  background: #f4fafb;
+  font-size: .78rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+.account-password-link:hover { border-color: #8fc4cc; background: #eaf6f7; }
+.account-password-link .dash-icon { width: 17px; height: 17px; }
 .sidebar-logout { position: relative; z-index: 1; margin-top: .5rem; }
 .sidebar-logout button {
   width: 100%;
@@ -455,6 +472,29 @@ body:has(.mobile-drawer[open]) { overflow: hidden; }
 .auth-brand .dash-icon { width: 29px; height: 29px; }
 .auth-card input { min-height: 44px; border-radius: var(--premium-radius-sm); }
 .auth-card button { min-height: 44px; border-radius: var(--premium-radius-sm); background: var(--premium-action); }
+.password-settings-page {
+  display: grid;
+  min-height: calc(100dvh - 77px);
+  max-width: none;
+  place-items: start center;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: radial-gradient(circle at 82% 5%,rgb(28 164 167 / 10%),transparent 32%),#f3f7fa;
+}
+.password-settings-card { width: min(590px,100%); padding: clamp(1rem,3vw,1.65rem); }
+.password-settings-page .password-settings-card { border-color: #d7e4ea; border-radius: 18px; box-shadow: var(--premium-shadow-sm); }
+.password-settings-card form { display: grid; gap: .1rem; }
+.password-settings-card label { color: #344f63; font-size: .76rem; }
+.password-settings-card input { color: #17384f; background: #fbfdfe; }
+.password-settings-card .password-rule { margin: -.45rem 0 .85rem; color: #71838f; font-size: .68rem; }
+.password-message { margin: 0 0 .8rem; padding: .65rem .75rem; border-radius: 9px; background: #fff0f1; font-size: .72rem; }
+.password-actions { display: grid; grid-template-columns:minmax(0,.65fr) minmax(0,1.35fr); gap: .6rem; align-items:center; }
+.password-actions a,.password-actions button { display:flex; min-height:44px; align-items:center; justify-content:center; margin:0; border-radius:10px; font-size:.76rem; font-weight:800; text-decoration:none; }
+.password-actions a { border:1px solid #cadbe3; color:#536b79; background:#fff; }
+.password-page.is-forced .password-actions { grid-template-columns:1fr; }
+@media (max-width:600px) {
+  .password-settings-page { min-height:calc(100dvh - 66px); padding:.75rem; }
+  .password-actions { grid-template-columns:1fr; }
+}
 .route-state { padding: 1.5rem var(--page-gutter, 1rem); }
 .route-state > .card { max-width: 62rem; margin-inline: auto; padding: 1.4rem; border-radius: var(--premium-radius-lg); box-shadow: var(--premium-shadow-sm); }
 .route-skeleton { display: grid; gap: .85rem; margin-top: 1rem; }

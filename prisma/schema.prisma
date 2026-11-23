@@ -270,6 +270,13 @@ model Agent {
   commissionRate    Decimal  @db.Decimal(7, 4)
   /// อัตราคอมมิชชันหวยลาวและหวยลาวชุด เช่น 28.0000 = 28%
   laoCommissionRate Decimal  @default(28.0000) @db.Decimal(7, 4)
+  /// โปรโมชั่นค่าคอมราย Agent ใช้เฉพาะงวดที่วันออกรางวัลอยู่ในช่วงนี้และยอดขายของงวดถึงเกณฑ์
+  /// ทุกช่องเป็น null = ไม่ใช้โปรโมชั่น และกลับไปใช้อัตราปกติด้านบน
+  commissionPromotionStartsOn DateTime? @db.Date
+  commissionPromotionEndsOn   DateTime? @db.Date
+  commissionPromotionMinGross Decimal?  @db.Decimal(18, 2)
+  commissionPromotionThaiRate Decimal?  @db.Decimal(7, 4)
+  commissionPromotionLaoRate  Decimal?  @db.Decimal(7, 4)
   /// วงเงินรวมต่อรอบ null = ไม่จำกัด
   creditLimit       Decimal? @db.Decimal(18, 2)
   /// วงเงินสูงสุดต่อเลขหนึ่งรายการ null = ไม่จำกัด

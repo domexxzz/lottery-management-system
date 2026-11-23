@@ -1,10 +1,6 @@
-"use client";
-
-import { useActionState } from "react";
-import { changePasswordAction, type ChangePasswordState } from "./actions";
-import { DashboardIcon } from "../DashboardIcon";
-
-const INITIAL: ChangePasswordState = { error: null };
+import { redirect } from "next/navigation";
+import { getActor } from "@/lib/auth/context";
+import { ChangePasswordForm } from "./ChangePasswordForm";
 
 /*
  * ทุกหน้าในแอปนี้ผูกกับ session ของผู้ใช้ จึงต้องไม่ถูกทำเป็น static
@@ -14,67 +10,8 @@ const INITIAL: ChangePasswordState = { error: null };
  */
 export const dynamic = "force-dynamic";
 
-export default function ChangePasswordPage() {
-  const [state, formAction, pending] = useActionState(changePasswordAction, INITIAL);
-
-  return (
-    <main className="auth-page">
-      <section className="card auth-card" aria-labelledby="cp-heading">
-        <div className="auth-brand"><span><DashboardIcon name="brand" /></span><div><strong>ระบบจัดการหวย</strong><small>SECURITY</small></div></div>
-        <h1 id="cp-heading">เปลี่ยนรหัสผ่าน</h1>
-        <p className="muted">
-          ต้องเปลี่ยนรหัสผ่านก่อนใช้งานครั้งแรก เมื่อเปลี่ยนแล้วระบบจะให้เข้าสู่ระบบใหม่
-        </p>
-
-        <form action={formAction}>
-          <label htmlFor="currentPassword">
-            รหัสผ่านปัจจุบัน
-            <input
-              id="currentPassword"
-              name="currentPassword"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          </label>
-
-          <label htmlFor="newPassword">
-            รหัสผ่านใหม่
-            <input
-              id="newPassword"
-              name="newPassword"
-              type="password"
-              autoComplete="new-password"
-              required
-              aria-describedby="password-rule"
-            />
-          </label>
-          <p id="password-rule" className="muted">
-            อย่างน้อย 10 ตัวอักษร และต้องมีทั้งตัวอักษรและตัวเลข
-          </p>
-
-          <label htmlFor="confirmPassword">
-            ยืนยันรหัสผ่านใหม่
-            <input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              autoComplete="new-password"
-              required
-            />
-          </label>
-
-          {state.error !== null && (
-            <p className="error" role="alert">
-              {state.error}
-            </p>
-          )}
-
-          <button type="submit" disabled={pending}>
-            {pending ? "กำลังบันทึก..." : "บันทึกรหัสผ่านใหม่"}
-          </button>
-        </form>
-      </section>
-    </main>
-  );
+export default async function ChangePasswordPage() {
+  const actor = await getActor();
+  if (!actor) redirect("/login");
+  return <ChangePasswordForm forced={actor.mustChangePassword} />;
 }

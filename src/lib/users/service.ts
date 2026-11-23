@@ -6,6 +6,7 @@ import { requirePermission, type Actor } from "@/lib/auth/context";
 import { hashPassword } from "@/lib/auth/password";
 import { revokeAllSessionsForUser } from "@/lib/auth/session";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import { parseDay } from "@/lib/draws/range";
 import { agentIdentityAfter, validateOwnerSetPassword } from "./identity";
 
 export type ManagedRole = Extract<Role, "ADMIN" | "AGENT">;
@@ -32,6 +33,11 @@ export type UpdateManagedUserInput = {
   agentName?: string;
   commissionRate?: string;
   laoCommissionRate?: string;
+  commissionPromotionStartsOn?: string;
+  commissionPromotionEndsOn?: string;
+  commissionPromotionMinGross?: string;
+  commissionPromotionThaiRate?: string;
+  commissionPromotionLaoRate?: string;
   creditLimit?: string;
   perNumberLimit?: string;
 };
@@ -52,6 +58,37 @@ function decimal(raw: string | undefined, label: string, optional = false): Pris
   } catch {
     throw new ValidationError(optional ? `${label}ต้องมากกว่า 0 หรือเว้นว่าง` : `${label}ต้องอยู่ระหว่าง 0 ถึง 100`);
   }
+}
+
+function commissionPromotion(input: UpdateManagedUserInput) {
+  const raw = {
+    startsOn: input.commissionPromotionStartsOn?.trim() ?? "",
+    endsOn: input.commissionPromotionEndsOn?.trim() ?? "",
+    minGross: input.commissionPromotionMinGross?.trim() ?? "",
+    thaiRate: input.commissionPromotionThaiRate?.trim() ?? "",
+    laoRate: input.commissionPromotionLaoRate?.trim() ?? "",
+  };
+  const values = Object.values(raw);
+  if (values.every((value) => value === "")) {
+    return { startsOn: null, endsOn: null, minGross: null, thaiRate: null, laoRate: null };
+  }
+  if (values.some((value) => value === "")) {
+    throw new ValidationError("กรุณากรอกข้อมูลโปรโมชั่นให้ครบทั้งช่วงวัน ยอดขั้นต่ำ และค่าคอมทั้ง 2 ประเภท หรือเว้นว่างทั้งหมด");
+  }
+  const startsOn = parseDay(raw.startsOn);
+  const endsOn = parseDay(raw.endsOn);
+  if (!startsOn || !endsOn) throw new ValidationError("วันที่โปรโมชั่นไม่ถูกต้อง");
+  if (endsOn < startsOn) throw new ValidationError("วันสิ้นสุดโปรโมชั่นต้องไม่ก่อนวันเริ่มต้น");
+  const minGross = decimal(raw.minGross, "ยอดขายขั้นต่ำโปรโมชั่น", true)!;
+  const thaiRate = decimal(raw.thaiRate, "ค่าคอมโปรโมชั่นหวยรัฐบาล")!;
+  const laoRate = decimal(raw.laoRate, "ค่าคอมโปรโมชั่นหวยลาว Family")!;
+  return {
+    startsOn: new Date(`${startsOn}T00:00:00.000Z`),
+    endsOn: new Date(`${endsOn}T00:00:00.000Z`),
+    minGross,
+    thaiRate,
+    laoRate,
+  };
 }
 
 export async function listManagedUsers(actor: Actor) {
@@ -216,6 +253,11 @@ async function findManageableUser(actor: Actor, userId: string) {
           status: true,
           commissionRate: true,
           laoCommissionRate: true,
+          commissionPromotionStartsOn: true,
+          commissionPromotionEndsOn: true,
+          commissionPromotionMinGross: true,
+          commissionPromotionThaiRate: true,
+          commissionPromotionLaoRate: true,
           creditLimit: true,
           perNumberLimit: true,
         },
@@ -266,6 +308,7 @@ export async function updateManagedUser(actor: Actor, userId: string, input: Upd
   const laoCommissionRate = input.role === "AGENT"
     ? decimal(input.laoCommissionRate?.trim() || AGENT_LAO_COMMISSION_RATE.toString(), "ค่าคอมหวยลาวและหวยลาวชุด")!
     : null;
+  const promotion = input.role === "AGENT" ? commissionPromotion(input) : null;
   const creditLimit = input.role === "AGENT" ? decimal(input.creditLimit, "วงเงินรวมต่องวด", true) : null;
   const perNumberLimit = input.role === "AGENT" ? decimal(input.perNumberLimit, "วงเงินต่อเลข", true) : null;
   const before = {
@@ -280,6 +323,11 @@ export async function updateManagedUser(actor: Actor, userId: string, input: Upd
       status: user.agent.status,
       commissionRate: user.agent.commissionRate.toString(),
       laoCommissionRate: user.agent.laoCommissionRate.toString(),
+      commissionPromotionStartsOn: user.agent.commissionPromotionStartsOn?.toISOString().slice(0, 10) ?? null,
+      commissionPromotionEndsOn: user.agent.commissionPromotionEndsOn?.toISOString().slice(0, 10) ?? null,
+      commissionPromotionMinGross: user.agent.commissionPromotionMinGross?.toString() ?? null,
+      commissionPromotionThaiRate: user.agent.commissionPromotionThaiRate?.toString() ?? null,
+      commissionPromotionLaoRate: user.agent.commissionPromotionLaoRate?.toString() ?? null,
       creditLimit: user.agent.creditLimit?.toString() ?? null,
       perNumberLimit: user.agent.perNumberLimit?.toString() ?? null,
     } : null,
@@ -306,17 +354,22 @@ export async function updateManagedUser(actor: Actor, userId: string, input: Upd
           name: agentName,
           commissionRate: commissionRate!,
           laoCommissionRate: laoCommissionRate!,
+          commissionPromotionStartsOn: promotion!.startsOn,
+          commissionPromotionEndsOn: promotion!.endsOn,
+          commissionPromotionMinGross: promotion!.minGross,
+          commissionPromotionThaiRate: promotion!.thaiRate,
+          commissionPromotionLaoRate: promotion!.laoRate,
           creditLimit,
           perNumberLimit,
           status: input.status === "ACTIVE" ? "ACTIVE" as const : "SUSPENDED" as const,
           userId: user.id,
         };
         if (user.agent) {
-          const updatedAgent = await tx.agent.update({ where: { id: user.agent.id }, data: agentData, select: { id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true, creditLimit: true, perNumberLimit: true } });
-          agentAfter = { ...updatedAgent, commissionRate: updatedAgent.commissionRate.toString(), laoCommissionRate: updatedAgent.laoCommissionRate.toString(), creditLimit: updatedAgent.creditLimit?.toString() ?? null, perNumberLimit: updatedAgent.perNumberLimit?.toString() ?? null };
+          const updatedAgent = await tx.agent.update({ where: { id: user.agent.id }, data: agentData, select: { id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true, commissionPromotionStartsOn: true, commissionPromotionEndsOn: true, commissionPromotionMinGross: true, commissionPromotionThaiRate: true, commissionPromotionLaoRate: true, creditLimit: true, perNumberLimit: true } });
+          agentAfter = { ...updatedAgent, commissionRate: updatedAgent.commissionRate.toString(), laoCommissionRate: updatedAgent.laoCommissionRate.toString(), commissionPromotionStartsOn: updatedAgent.commissionPromotionStartsOn?.toISOString().slice(0, 10) ?? null, commissionPromotionEndsOn: updatedAgent.commissionPromotionEndsOn?.toISOString().slice(0, 10) ?? null, commissionPromotionMinGross: updatedAgent.commissionPromotionMinGross?.toString() ?? null, commissionPromotionThaiRate: updatedAgent.commissionPromotionThaiRate?.toString() ?? null, commissionPromotionLaoRate: updatedAgent.commissionPromotionLaoRate?.toString() ?? null, creditLimit: updatedAgent.creditLimit?.toString() ?? null, perNumberLimit: updatedAgent.perNumberLimit?.toString() ?? null };
         } else {
-          const createdAgent = await tx.agent.create({ data: { organizationId: actor.organizationId, ...agentData }, select: { id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true, creditLimit: true, perNumberLimit: true } });
-          agentAfter = { ...createdAgent, commissionRate: createdAgent.commissionRate.toString(), laoCommissionRate: createdAgent.laoCommissionRate.toString(), creditLimit: createdAgent.creditLimit?.toString() ?? null, perNumberLimit: createdAgent.perNumberLimit?.toString() ?? null };
+          const createdAgent = await tx.agent.create({ data: { organizationId: actor.organizationId, ...agentData }, select: { id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true, commissionPromotionStartsOn: true, commissionPromotionEndsOn: true, commissionPromotionMinGross: true, commissionPromotionThaiRate: true, commissionPromotionLaoRate: true, creditLimit: true, perNumberLimit: true } });
+          agentAfter = { ...createdAgent, commissionRate: createdAgent.commissionRate.toString(), laoCommissionRate: createdAgent.laoCommissionRate.toString(), commissionPromotionStartsOn: createdAgent.commissionPromotionStartsOn?.toISOString().slice(0, 10) ?? null, commissionPromotionEndsOn: createdAgent.commissionPromotionEndsOn?.toISOString().slice(0, 10) ?? null, commissionPromotionMinGross: createdAgent.commissionPromotionMinGross?.toString() ?? null, commissionPromotionThaiRate: createdAgent.commissionPromotionThaiRate?.toString() ?? null, commissionPromotionLaoRate: createdAgent.commissionPromotionLaoRate?.toString() ?? null, creditLimit: createdAgent.creditLimit?.toString() ?? null, perNumberLimit: createdAgent.perNumberLimit?.toString() ?? null };
         }
       } else if (user.agent) {
         const closedAgent = await tx.agent.update({

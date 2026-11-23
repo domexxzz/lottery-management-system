@@ -32,8 +32,11 @@ export default async function CommissionPayoutPage({ searchParams }: {
   if (actor.mustChangePassword) redirect("/change-password");
   if (!can(actor.role, "report.viewAllAgents")) redirect("/reports");
   const query = await searchParams;
-  const selectedMonth = /^\d{4}-\d{2}$/.test(query.date ?? "") ? query.date! : currentCommissionMonth();
-  const effectiveQuery = { ...query, period: "month", date: selectedMonth };
+  const selectedDay = query.period === "day" && /^\d{4}-\d{2}-\d{2}$/.test(query.date ?? "") ? query.date : undefined;
+  const selectedMonth = query.period === "month" && /^\d{4}-\d{2}$/.test(query.date ?? "") ? query.date! : currentCommissionMonth();
+  const effectiveQuery = selectedDay
+    ? { ...query, period: "day", date: selectedDay }
+    : { ...query, period: "month", date: selectedMonth };
   const report = await loadCommissionPayoutReport(actor, effectiveQuery);
 
   return <main className="commission-page">
@@ -53,7 +56,7 @@ export default async function CommissionPayoutPage({ searchParams }: {
       selectedDrawId={report.scope.selectedDraw?.id}
     />
 
-    <CommissionPeriodFilter value={report.period.value ?? selectedMonth} />
+    <CommissionPeriodFilter mode={report.period.mode === "day" ? "day" : "month"} value={report.period.value ?? selectedMonth} />
 
     {report.checklist && <section className="commission-check-summary" aria-label="ความคืบหน้าการจ่ายค่าคอมรายเดือน">
       <div><small>จ่ายแล้ว</small><strong>{COUNT.format(report.checklist.paidAgents)} / {COUNT.format(report.rows.length)} Agent</strong></div>

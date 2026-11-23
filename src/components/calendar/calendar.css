@@ -108,6 +108,13 @@
 .global-calendar .calendar-footer button:last-child { color: #fff; background: linear-gradient(135deg,var(--calendar-deep),var(--calendar-blue)); box-shadow: 0 5px 12px rgb(7 85 217 / 20%); }
 .global-calendar .calendar-footer button:disabled { opacity: .42; }
 
+.month-calendar .calendar-header>strong { min-width: 0; color: #fff; font-size: .95rem; font-weight: 850; }
+.month-calendar-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: .45rem; padding: .85rem; }
+.global-calendar .month-calendar-grid button { position: relative; min-height: 48px; padding: .45rem; border: 1px solid #d8e6f8; border-radius: 11px; color: #254465; background: #fff; box-shadow: 0 3px 10px rgb(30 91 160 / 6%); font-size: .7rem; font-weight: 780; }
+.global-calendar .month-calendar-grid button:hover { transform: translateY(-1px); border-color: #87b7f4; color: var(--calendar-deep); background: #eef6ff; }
+.global-calendar .month-calendar-grid button.today:not(.selected)::after { position: absolute; right: 7px; bottom: 6px; width: 5px; height: 5px; border-radius: 50%; content: ""; background: var(--calendar-blue); }
+.global-calendar .month-calendar-grid button.selected { color: #fff; border-color: #4fa7ff; background: linear-gradient(145deg,#0755d9,#168bff 70%,#25b9ff); box-shadow: 0 7px 14px rgb(7 85 217 / 24%),inset 0 1px rgb(255 255 255 / 25%); }
+
 @keyframes calendar-pop-in { from { opacity: 0; transform: translateY(-5px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes calendar-reveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .calendar-popover,.calendar-jump { animation: none; }.global-calendar * { transition-duration: .01ms!important; } }

@@ -12,7 +12,8 @@ import {
   LAO_SET_PRIZE_TYPE_CODES,
   type LaoSetPrizeKey,
 } from "@/lib/lao/rules";
-import { commissionRateForLottery } from "@/lib/agents/commission";
+import { effectiveCommissionRate, type AgentCommissionPromotion } from "@/lib/agents/commission";
+import { drawDay as resolveDrawDay } from "@/lib/draws/range";
 
 /**
  * คำนวณผู้ถูกรางวัลและสรุปการเงินต่อ Agent (LOT-15, LOT-18, LOT-20)
@@ -75,12 +76,12 @@ export async function previewSettlement(
   tx: TxClient,
   drawId: string,
 ): Promise<SettlementPreview[]> {
-  const draw = await tx.draw.findUnique({ where: { id: drawId }, select: { organizationId: true, lotteryType: true } });
+  const draw = await tx.draw.findUnique({ where: { id: drawId }, select: { organizationId: true, lotteryType: true, drawDate: true, cutoffAt: true } });
   if (!draw) throw new NotFoundError("ไม่พบรอบ");
   const results = await approvedResults(tx, drawId);
   const bills = await loadSettlementBills(tx, drawId);
   const laoSetRules = draw.lotteryType === "LAO_SET" ? await loadLaoSetPayoutRules(tx, draw.organizationId) : null;
-  return evaluateSettlement(bills, results, laoSetRules, draw.lotteryType).previews;
+  return evaluateSettlement(bills, results, laoSetRules, draw.lotteryType, resolveDrawDay(draw)).previews;
 }
 
 type LaoSetPayoutRule = { prizeTypeId: string; payoutRate: Prisma.Decimal };
@@ -109,7 +110,19 @@ function loadSettlementBills(tx: TxClient, drawId: string) {
     select: {
       id: true,
       agentId: true,
-      agent: { select: { code: true, name: true, commissionRate: true, laoCommissionRate: true } },
+      agent: {
+        select: {
+          code: true,
+          name: true,
+          commissionRate: true,
+          laoCommissionRate: true,
+          commissionPromotionStartsOn: true,
+          commissionPromotionEndsOn: true,
+          commissionPromotionMinGross: true,
+          commissionPromotionThaiRate: true,
+          commissionPromotionLaoRate: true,
+        },
+      },
       items: {
         select: {
           id: true,
@@ -139,11 +152,12 @@ function evaluateSettlement(
   results: { byPrizeType: Map<string, string[]>; byPrizeCode: Map<number, string[]> },
   laoSetRules: Map<LaoSetPrizeKey, LaoSetPayoutRule> | null,
   lotteryType: "THAI_GOVERNMENT" | "LAO" | "LAO_SET",
+  drawDay: string,
 ) {
   type Bucket = {
     agentCode: string;
     agentName: string;
-    commissionRate: Prisma.Decimal;
+    commissionPolicy: AgentCommissionPromotion;
     stakes: Prisma.Decimal[];
     payouts: Prisma.Decimal[];
     winningItems: number;
@@ -171,7 +185,7 @@ function evaluateSettlement(
       bucket = {
         agentCode: bill.agent.code,
         agentName: bill.agent.name,
-        commissionRate: commissionRateForLottery(bill.agent, lotteryType),
+        commissionPolicy: bill.agent,
         stakes: [],
         payouts: [],
         winningItems: 0,
@@ -285,10 +299,16 @@ function evaluateSettlement(
     .map(([agentId, b]) => {
       const gross = sumMoney(b.stakes);
       const payout = sumMoney(b.payouts);
+      const commissionRate = effectiveCommissionRate({
+        agent: b.commissionPolicy,
+        lotteryType,
+        drawDay,
+        gross,
+      });
       const commission = commissionOf({
         gross,
         payout,
-        commissionRatePercent: b.commissionRate,
+        commissionRatePercent: commissionRate,
       });
       return {
         agentId,
@@ -298,7 +318,7 @@ function evaluateSettlement(
         payout,
         commission,
         net: netOf({ gross, payout, commission }),
-        commissionRateSnapshot: b.commissionRate,
+        commissionRateSnapshot: commissionRate,
         winningItems: b.winningItems,
         totalItems: b.totalItems,
       };
@@ -336,7 +356,7 @@ async function calculateSettlementSingle(
   return prisma.$transaction(async (tx) => {
     const draw = await tx.draw.findFirst({
       where: { id: drawId, ...orgScope(actor) },
-      select: { id: true, organizationId: true, lotteryType: true, status: true, name: true },
+      select: { id: true, organizationId: true, lotteryType: true, status: true, name: true, drawDate: true, cutoffAt: true },
     });
     if (!draw) throw new NotFoundError("ไม่พบรอบ");
     if (draw.status === "CLOSED") {
@@ -356,7 +376,13 @@ async function calculateSettlementSingle(
     // ซึ่งเป็นหลักร้อยถึงหลักพันคำสั่งต่องวด และเสี่ยงชน timeout ของ transaction เมื่อข้อมูลโต
     const bills = await loadSettlementBills(tx, draw.id);
     const laoSetRules = draw.lotteryType === "LAO_SET" ? await loadLaoSetPayoutRules(tx, draw.organizationId) : null;
-    const { previews, winningItems, winningPrizeRows, billPayouts } = evaluateSettlement(bills, results, laoSetRules, draw.lotteryType);
+    const { previews, winningItems, winningPrizeRows, billPayouts } = evaluateSettlement(
+      bills,
+      results,
+      laoSetRules,
+      draw.lotteryType,
+      resolveDrawDay(draw),
+    );
     const billIds = bills.map((bill) => bill.id);
 
     if (billIds.length > 0) {

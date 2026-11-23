@@ -69,6 +69,11 @@ describe("Owner จัดการบัญชี", () => {
       agentName: "สาขาใหม่",
       commissionRate: "25.5",
       laoCommissionRate: "27.25",
+      commissionPromotionStartsOn: "2026-11-01",
+      commissionPromotionEndsOn: "2026-12-01",
+      commissionPromotionMinGross: "20000",
+      commissionPromotionThaiRate: "35",
+      commissionPromotionLaoRate: "30",
       creditLimit: "5000",
       perNumberLimit: "250",
     };
@@ -84,6 +89,11 @@ describe("Owner จัดการบัญชี", () => {
     expect(updated.agent).toMatchObject({ code: "ZX9", name: "สาขาใหม่", status: "SUSPENDED" });
     expect(updated.agent?.commissionRate.toString()).toBe("25.5");
     expect(updated.agent?.laoCommissionRate.toString()).toBe("27.25");
+    expect(updated.agent?.commissionPromotionStartsOn?.toISOString().slice(0, 10)).toBe("2026-11-01");
+    expect(updated.agent?.commissionPromotionEndsOn?.toISOString().slice(0, 10)).toBe("2026-12-01");
+    expect(updated.agent?.commissionPromotionMinGross?.toString()).toBe("20000");
+    expect(updated.agent?.commissionPromotionThaiRate?.toString()).toBe("35");
+    expect(updated.agent?.commissionPromotionLaoRate?.toString()).toBe("30");
     expect(updated.agent?.creditLimit?.toString()).toBe("5000");
     expect(updated.agent?.perNumberLimit?.toString()).toBe("250");
 
@@ -93,6 +103,40 @@ describe("Owner จัดการบัญชี", () => {
     });
     expect(audit.before).toMatchObject({ login: created.login });
     expect(audit.after).toMatchObject({ login: created.login, displayName: "ตัวแทนใหม่" });
+  });
+
+  test("โปรโมชั่นค่าคอมต้องกรอกครบ และล้างทั้งหมดเพื่อกลับไปใช้ค่าปกติได้", async () => {
+    const created = await newAgent("ตัวแทนโปรโมชัน");
+    const user = await prisma.user.findFirstOrThrow({ where: { organizationId: f.org.id, login: created.login } });
+    const base = {
+      displayName: "ตัวแทนโปรโมชัน",
+      role: "AGENT" as const,
+      status: "ACTIVE" as const,
+      commissionRate: "30",
+      laoCommissionRate: "28",
+    };
+
+    await expect(updateManagedUser(f.actors.OWNER, user.id, {
+      ...base,
+      commissionPromotionStartsOn: "2026-11-01",
+    })).rejects.toThrow("กรอกข้อมูลโปรโมชั่นให้ครบ");
+
+    await updateManagedUser(f.actors.OWNER, user.id, {
+      ...base,
+      commissionPromotionStartsOn: "2026-11-01",
+      commissionPromotionEndsOn: "2026-12-01",
+      commissionPromotionMinGross: "20000",
+      commissionPromotionThaiRate: "35",
+      commissionPromotionLaoRate: "30",
+    });
+    await updateManagedUser(f.actors.OWNER, user.id, base);
+
+    const agent = await prisma.agent.findUniqueOrThrow({ where: { userId: user.id } });
+    expect(agent.commissionPromotionStartsOn).toBeNull();
+    expect(agent.commissionPromotionEndsOn).toBeNull();
+    expect(agent.commissionPromotionMinGross).toBeNull();
+    expect(agent.commissionPromotionThaiRate).toBeNull();
+    expect(agent.commissionPromotionLaoRate).toBeNull();
   });
 
   test("ลบบัญชีที่ยังไม่ใช้งานได้จริง ส่วนบัญชีที่มีบิลถูกซ่อนและเลขไม่ถูกใช้ซ้ำ", async () => {

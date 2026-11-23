@@ -52,6 +52,36 @@ async function approveResults(values: { prizeTypeId: string; value: string }[]) 
 }
 
 describe("เส้นทางเงินเต็มเส้น", () => {
+  test("ใช้ค่าคอมโปรโมชั่นเมื่อยอดขายของงวดถึงเกณฑ์ และเก็บเรตโปรโมชั่นใน Settlement", async () => {
+    const day = f.draw.drawDate!.toISOString().slice(0, 10);
+    await prisma.agent.update({
+      where: { id: f.agents.agent1.id },
+      data: {
+        commissionPromotionStartsOn: new Date(`${day}T00:00:00.000Z`),
+        commissionPromotionEndsOn: new Date(`${day}T00:00:00.000Z`),
+        commissionPromotionMinGross: "1000",
+        commissionPromotionThaiRate: "35",
+        commissionPromotionLaoRate: "30",
+      },
+    });
+    await confirmedBill(f.actors.AGENT1, [
+      { prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "1000" },
+    ], "บิลถึงยอดโปรโมชั่น");
+    await lockDrawManually(f.actors.ADMIN, f.draw.id);
+    await approveResults([{ prizeTypeId: f.prizeTypes.threeTop.id, value: "999" }]);
+
+    const [preview] = await calculateSettlement(f.actors.ADMIN, f.draw.id);
+    expect(preview?.gross.toFixed(2)).toBe("1000.00");
+    expect(preview?.commissionRateSnapshot.toString()).toBe("35");
+    expect(preview?.commission.toFixed(2)).toBe("350.00");
+
+    const settlement = await prisma.settlement.findUniqueOrThrow({
+      where: { drawId_agentId: { drawId: f.draw.id, agentId: f.agents.agent1.id } },
+    });
+    expect(settlement.commissionRateSnapshot.toString()).toBe("35");
+    expect(settlement.commission.toFixed(2)).toBe("350.00");
+  });
+
   test("เลขวิ่งที่ออกซ้ำหลายหลักจ่ายเพียงครั้งเดียว", async () => {
     const { runTop } = f.prizeTypes;
     const { billId } = await confirmedBill(f.actors.AGENT1, [

@@ -29,7 +29,7 @@
 .acc-more-period.is-active .app-dropdown-trigger { border-color: #123b62; color: #fff; background: #123b62; }
 .acc-custom-range { display: flex; flex-wrap: wrap; gap: .6rem; padding-left: calc(76px + .7rem); }
 .acc-custom-range label { display: grid; gap: .2rem; margin: 0; color: #33414f; font-size: .82rem; font-weight: 750; }
-.acc-custom-range input { min-height: 42px; }
+.acc-custom-range .date-range-field { flex: 1; min-width: 220px; }
 .acc-agent-filter { display: flex; align-items: center; gap: .7rem; min-width: min(100%, 360px); margin: 0; }
 .acc-agent-filter .app-dropdown { flex: 1; min-width: 200px; margin-top: 0; }
 .acc-compare-switch { display: inline-flex; min-height: 40px; align-items: center; gap: .5rem; margin: 0; padding: 0 .85rem; border: 1px solid #c8dbef; border-radius: 999px; color: #123b62; background: #f7fbff; font-size: .88rem; font-weight: 750; cursor: pointer; }
@@ -228,11 +228,9 @@
 .acc-custom-compare { display: grid; gap: .6rem; }
 .acc-unit-line { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; }
 .acc-ab-line { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem .8rem; }
-.acc-span-picker input[type="date"] { min-height: 42px; min-width: 180px; }
 @media (max-width: 700px) {
   .acc-unit-line { flex-direction: column; align-items: stretch; }
   .acc-ab-line { display: grid; grid-template-columns: 1fr; }
-  .acc-span-picker input[type="date"] { width: 100%; min-width: 0; }
 }
 
 /* ระหว่างเลือกเอง: ช่วงเวลาหลักไม่ได้ใช้ ทำให้จางลงและบอกเหตุผล */

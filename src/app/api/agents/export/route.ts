@@ -8,6 +8,7 @@ import { createReportDownload, type ReportExportInput } from "@/lib/export/repor
 import { apiError } from "@/lib/http";
 import { dashboardDrawLabel, drawMatchesDashboardCategory, resolveDashboardDrawScope } from "@/lib/dashboard/lottery-draw-filter";
 import { reportCategoryLabel } from "@/lib/reports/draw-groups";
+import { AGENT_OVERVIEW_EXPORT_COLUMNS } from "@/lib/agents/export";
 
 export const dynamic = "force-dynamic";
 
@@ -84,15 +85,7 @@ export async function GET(request: Request) {
         { label: "ค่าคอมมิชชันรวม", value: rows.reduce((sum, row) => sum + row.commission, 0), type: "money", unit: "บาท" },
         { label: "ยอดสุทธิรวม", value: rows.reduce((sum, row) => sum + row.net, 0), type: "money", unit: "บาท" },
       ],
-      columns: [
-        { header: "รหัส Agent", type: "text", width: 14 }, { header: "ชื่อ Agent", type: "text", width: 25 },
-        { header: "สถานะ", type: "text", width: 14 }, { header: "ค่าคอมหวยรัฐบาล", type: "percentage", width: 19 },
-        { header: "ค่าคอมหวยลาวและหวยลาวชุด", type: "percentage", width: 25 },
-        { header: "จำนวนลูกค้า", type: "integer", width: 16 }, { header: "จำนวนบิล", type: "integer", width: 14 },
-        { header: "ยอดขาย", type: "money", width: 18 }, { header: "จ่ายรางวัล", type: "money", width: 18 },
-        { header: "ค่าคอมหวยไทย", type: "money", width: 18 }, { header: "ค่าคอมหวยลาวและหวยลาวชุด", type: "money", width: 25 },
-        { header: "ค่าคอมมิชชันรวม", type: "money", width: 18 }, { header: "ยอดสุทธิ", type: "money", width: 18 },
-      ],
+      columns: AGENT_OVERVIEW_EXPORT_COLUMNS,
       rows: rows.map((row) => [row.code, row.name, row.status, Number(row.commissionRate) / 100, Number(row.laoCommissionRate) / 100, row.customerCount, row.billCount, row.sales, row.payout, row.thaiCommission, row.laoCommission, row.commission, row.net]),
     };
     const output = createReportDownload(report, params.get("format") === "xlsx" ? "xlsx" : "csv");

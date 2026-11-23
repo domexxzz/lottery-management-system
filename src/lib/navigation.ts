@@ -31,6 +31,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
   { href: "/prize-types", label: "Rulebook รางวัล", icon: "book", roles: MANAGEMENT_ROLES },
   { href: "/agents", label: "ภาพรวม Agent", icon: "agent", roles: MANAGEMENT_ROLES },
   { href: "/users", label: "จัดการผู้ใช้งาน", icon: "lock", roles: OWNER_ROLES },
+  { href: "/change-password", label: "เปลี่ยนรหัสผ่าน", icon: "lock", roles: ALL_ROLES },
 ];
 
 export function menuFor(role: Role): MenuItem[] {

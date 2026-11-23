@@ -202,6 +202,9 @@ export function AccountMenu({ displayName, roleLabel }: { displayName: string; r
       <div className="account-popover">
         <strong>{displayName}</strong>
         <small>{roleLabel}</small>
+        <Link className="account-password-link" href="/change-password" onClick={() => { if (menu.current) menu.current.open = false; }}>
+          <DashboardIcon name="lock" />เปลี่ยนรหัสผ่าน
+        </Link>
         <form action={logoutAction}>
           <button className="logout-button" type="submit">ออกจากระบบ</button>
         </form>
