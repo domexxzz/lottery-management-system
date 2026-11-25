@@ -9,6 +9,7 @@ import { loadOwnerReport } from "@/lib/reports/owner-report";
 import { DashboardFilters } from "../DashboardFilters";
 import { DashboardIcon } from "../DashboardIcon";
 import { AgentReports } from "./AgentReports";
+import type { SimpleAgentBillFilter } from "@/lib/reports/agent-report";
 import { OwnerReport } from "./OwnerReport";
 
 export const dynamic = "force-dynamic";
@@ -19,13 +20,17 @@ export const dynamic = "force-dynamic";
  * - Agent: รายงานของตนเอง (AgentReports)
  * - Owner/Admin: ตอบ 3 คำถาม ได้หรือเสีย / ต้องทำอะไร / เงินมาจากไหน ทีละงวด
  */
-export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ draw?: string; drawId?: string; lottery?: string; dateFrom?: string; dateTo?: string }> }) {
+export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ draw?: string; drawId?: string; lottery?: string; dateFrom?: string; dateTo?: string; result?: string; page?: string }> }) {
   const actor = await getActor();
   if (!actor) redirect("/login");
   if (actor.mustChangePassword) redirect("/change-password");
-  if (actor.role === "AGENT") return <AgentReports actor={actor} />;
+  const params = await searchParams;
+  if (actor.role === "AGENT") {
+    const status: SimpleAgentBillFilter = params.result === "WON" || params.result === "LOST" || params.result === "PENDING" ? params.result : "ALL";
+    return <AgentReports actor={actor} selectedDrawId={params.drawId ?? params.draw} billStatus={status} page={Number(params.page) || 1} />;
+  }
 
-  const { draw, drawId, lottery, dateFrom, dateTo } = await searchParams;
+  const { draw, drawId, lottery, dateFrom, dateTo } = params;
   const physicalDraws = await prisma.draw.findMany({
     where: orgScope(actor),
     orderBy: { cutoffAt: "desc" },

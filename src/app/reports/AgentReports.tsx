@@ -2,83 +2,64 @@ import Link from "next/link";
 import "./reports.css";
 import type { Actor } from "@/lib/auth/context";
 import { visibleBillNumber } from "@/lib/bills/numbering";
-import { customerProfileKey } from "@/lib/customers/profile-key";
-import { getSimpleAgentReport, type SimpleAgentRound } from "@/lib/reports/agent-report";
-import { SimpleAgentChart, SimpleAgentDrawPicker } from "./SimpleAgentChart";
+import { betStatusOf } from "@/lib/bills/betting";
+import { getSimpleAgentReport, type SimpleAgentBillFilter } from "@/lib/reports/agent-report";
+import { AgentDrawPicker } from "./AgentDrawPicker";
 
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const DATE = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Bangkok" });
+const DATE = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeZone: "Asia/Bangkok" });
+const DATE_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
+const FILTERS: Array<{ value: SimpleAgentBillFilter; label: string; count: "all" | "won" | "pending" | "lost" }> = [
+  { value: "ALL", label: "ทุกบิล", count: "all" },
+  { value: "WON", label: "ถูกรางวัล", count: "won" },
+  { value: "PENDING", label: "รอผล", count: "pending" },
+  { value: "LOST", label: "ไม่ถูกรางวัล", count: "lost" },
+];
 
-function changePercent(current: number, previous: number) {
-  if (previous === 0) return null;
-  return (current - previous) / previous * 100;
-}
-
-function RoundCard({ round, period, current }: { round: SimpleAgentRound; period: string; current?: boolean }) {
-  return <article className={`agent-simple-round ${current ? "is-current" : ""}`}>
-    <header><span>{period}</span><div><h2>{round.drawName}</h2><p>ปิดรับ {DATE.format(round.cutoffAt)}</p></div></header>
-    <dl>
-      <div><dt>ยอดขาย</dt><dd>{MONEY.format(Number(round.gross))} <small>บาท</small></dd></div>
-      <div><dt>ค่าคอม</dt><dd>{MONEY.format(Number(round.commission))} <small>บาท</small></dd><em>{round.commissionFinal ? "ยอดคำนวณแล้ว" : "ประมาณการจากยอดขาย"}</em></div>
-      <div><dt>บิลทั้งหมด</dt><dd>{round.billCount.toLocaleString("th-TH")} <small>บิล</small></dd></div>
-      <div><dt>ถูกรางวัล</dt><dd className={round.winnerCount > 0 ? "winner" : undefined}>{round.winnerCount.toLocaleString("th-TH")} <small>รายการ</small></dd></div>
-    </dl>
-    {round.winnerCount > 0 && <a href="#winning-bills">ดูผู้ถูกรางวัลในงวดนี้ ↓</a>}
-  </article>;
-}
-
-export async function AgentReports({ actor, selectedDrawId }: { actor: Actor; selectedDrawId?: string }) {
-  const report = await getSimpleAgentReport(actor, selectedDrawId);
-  const current = report.rounds[0];
-  const previous = report.rounds[1];
+export async function AgentReports({ actor, selectedDrawId, billStatus = "ALL", page = 1 }: {
+  actor: Actor; selectedDrawId?: string; billStatus?: SimpleAgentBillFilter; page?: number;
+}) {
+  const report = await getSimpleAgentReport(actor, selectedDrawId, billStatus, page);
+  const round = report.rounds[0];
+  const history = report.billHistory;
   const customSelection = Boolean(selectedDrawId && selectedDrawId === report.selectedDrawId);
-  const currentLabel = customSelection ? "งวดที่เลือก" : "งวดนี้";
-  const previousLabel = customSelection ? "งวดก่อนหน้า" : "งวดที่แล้ว";
-  const salesChange = current && previous ? changePercent(Number(current.gross), Number(previous.gross)) : null;
-  const chartRows = [...report.rounds].reverse().map((round, index) => ({
-    id: round.drawId,
-    period: report.rounds.length === 1 || index === 1 ? currentLabel : previousLabel,
-    name: round.drawName,
-    gross: Number(round.gross),
-    commission: Number(round.commission),
-  }));
+  const href = (status: SimpleAgentBillFilter, targetPage = 1) => {
+    const params = new URLSearchParams();
+    if (customSelection) params.set("draw", report.selectedDrawId);
+    if (status !== "ALL") params.set("result", status);
+    if (targetPage > 1) params.set("page", String(targetPage));
+    return `/reports${params.size ? `?${params}` : ""}`;
+  };
 
   return <main className="agent-reports-page agent-simple-report">
     <header className="agent-simple-hero">
-      <div><p className="page-eyebrow">MY SALES REPORT</p><h1>รายงานของฉัน</h1><p>ดูยอดขาย ค่าคอม และผู้ถูกรางวัลของ 2 งวดล่าสุด</p></div>
+      <div><p className="page-eyebrow">รายงาน Agent</p><h1>บิลและผลรางวัลของฉัน</h1><p>เลือกงวด แล้วดูว่าบิลไหนถูกรางวัล รอผล หรือไม่ถูกรางวัล</p></div>
       <div className="agent-simple-identity"><span>Agent</span><strong>{report.agent.code}</strong><small>{report.agent.name}</small></div>
     </header>
-
-    <SimpleAgentDrawPicker
-      options={report.drawOptions.map((draw) => ({ id: draw.id, name: draw.name }))}
-      value={customSelection ? report.selectedDrawId : ""}
-      latestName={report.drawOptions[0]?.name ?? ""}
-    />
-
-    {current ? <>
-      <section className="agent-simple-kpis" aria-label="สรุปงวดล่าสุด">
-        <div><span>ยอดขาย{currentLabel}</span><strong>{MONEY.format(Number(current.gross))}</strong><small>บาท</small></div>
-        <div><span>ค่าคอม{currentLabel}</span><strong>{MONEY.format(Number(current.commission))}</strong><small>บาท {current.commissionFinal ? "· คำนวณแล้ว" : "· ประมาณการ"}</small></div>
-        <div><span>เทียบ{previousLabel}</span><strong className={salesChange !== null && salesChange < 0 ? "down" : "up"}>{salesChange === null ? "—" : `${salesChange >= 0 ? "+" : ""}${salesChange.toFixed(1)}%`}</strong><small>{salesChange === null ? "ยังไม่มีข้อมูลให้เทียบ" : "จากยอดขาย"}</small></div>
-        <div><span>ผู้ถูกรางวัล 2 งวด</span><strong>{report.winners.length.toLocaleString("th-TH")}</strong><small>บิล</small></div>
+    <AgentDrawPicker options={report.drawOptions.map((draw) => ({ id: draw.id, name: draw.name }))} value={customSelection ? report.selectedDrawId : ""} latestName={report.drawOptions[0]?.name ?? ""} />
+    {round ? <>
+      <section className="agent-bill-overview" aria-label="ภาพรวมบิลในงวด">
+        <div className="agent-bill-overview-heading"><span>งวดที่กำลังดู</span><h2>{round.drawName}</h2><p>ปิดรับ {DATE.format(round.cutoffAt)} · แสดงเฉพาะบิลที่ยืนยันแล้ว</p></div>
+        <div><span>บิลทั้งหมด</span><strong>{history.counts.all.toLocaleString("th-TH")}</strong><small>บิล</small></div>
+        <div className="is-won"><span>ถูกรางวัล</span><strong>{history.counts.won.toLocaleString("th-TH")}</strong><small>บิล</small></div>
+        <div><span>รอผล</span><strong>{history.counts.pending.toLocaleString("th-TH")}</strong><small>บิล</small></div>
+        <div><span>ค่าคอมของฉัน</span><strong>{MONEY.format(Number(round.commission))}</strong><small>บาท · {round.commissionFinal ? "คำนวณแล้ว" : "ประมาณการ"}</small></div>
       </section>
-
-      <section className="agent-simple-rounds">
-        <RoundCard round={current} period={currentLabel} current />
-        {previous ? <RoundCard round={previous} period={previousLabel} /> : <article className="agent-simple-round is-empty"><h2>{previousLabel}</h2><p>ยังไม่มีงวดก่อนหน้าให้เปรียบเทียบ</p></article>}
+      <section className="agent-bill-history" aria-labelledby="agent-bill-history-heading">
+        <header><div><h2 id="agent-bill-history-heading">รายการบิลในงวดนี้</h2><p>เลือกสถานะ แล้วกด “ดูบิล” เพื่อดูเลขและรายการแทง</p></div><Link href={`/bills?draw=${encodeURIComponent(round.drawId)}&scope=all&all=1`}>ไปหน้ารายการบิลทั้งหมด →</Link></header>
+        <nav className="agent-bill-status-tabs" aria-label="กรองผลรางวัลของบิล">{FILTERS.map((filter) => <Link key={filter.value} href={href(filter.value)} className={history.status === filter.value ? "is-active" : ""} aria-current={history.status === filter.value ? "page" : undefined}>{filter.label} <b>{history.counts[filter.count].toLocaleString("th-TH")}</b></Link>)}</nav>
+        {history.rows.length === 0 ? <div className="agent-simple-empty"><strong>ไม่มีบิลในสถานะนี้</strong><p>ลองเลือกสถานะอื่นหรืองวดอื่น</p></div> : <div className="agent-bill-list">{history.rows.map((bill) => {
+          const status = betStatusOf(bill);
+          const label = status === "WON" ? "ถูกรางวัล" : status === "LOST" ? "ไม่ถูกรางวัล" : "รอผล";
+          return <article key={bill.id} className={`agent-bill-row is-${status.toLowerCase()}`}>
+            <div className="agent-bill-main"><small>บิล {visibleBillNumber(bill.drawSequence)} · {DATE_TIME.format(bill.createdAt)}</small><strong>{bill.title || "ไม่ระบุชื่อลูกค้า"}</strong></div>
+            <span className="agent-bill-result">{label}</span>
+            <div className="agent-bill-money"><span>ยอดเดิมพัน <b>{MONEY.format(Number(bill.totalStake))} บาท</b></span>{status === "WON" && <span>เงินรางวัล <b>{MONEY.format(Number(bill.totalPayout))} บาท</b></span>}</div>
+            <Link className="agent-simple-detail" href={`/bills/${bill.id}`}>ดูบิล →</Link>
+          </article>;
+        })}</div>}
+        {history.pages > 1 && <nav className="agent-bill-pagination" aria-label="หน้ารายการบิล">{history.page > 1 ? <Link href={href(history.status, history.page - 1)}>← ก่อนหน้า</Link> : <span />}<span>หน้า {history.page.toLocaleString("th-TH")} / {history.pages.toLocaleString("th-TH")}</span>{history.page < history.pages ? <Link href={href(history.status, history.page + 1)}>ถัดไป →</Link> : <span />}</nav>}
       </section>
-
-      <SimpleAgentChart rows={chartRows} />
-
-      <section className="agent-simple-winners" id="winning-bills">
-        <header><div><p className="page-eyebrow">WINNING CUSTOMERS</p><h2>ใครถูกรางวัล</h2><p>แสดงบิลถูกรางวัลจากงวดนี้และงวดที่แล้ว</p></div><span>{report.winners.length.toLocaleString("th-TH")} บิล</span></header>
-        {report.winners.length === 0 ? <div className="agent-simple-empty"><span>✓</span><strong>ยังไม่มีบิลถูกรางวัล</strong><p>เมื่อมีการตรวจผล รายชื่อผู้ถูกรางวัลจะแสดงตรงนี้</p></div> : <div className="agent-simple-winner-list">{report.winners.map((bill) => <article key={bill.id}>
-          <div className="agent-simple-winner-rank">★</div>
-          <div><small>{bill.draw.name}</small><h3><Link href={`/customers/${customerProfileKey(bill.title)}`}>{bill.title}</Link></h3><p>บิล {visibleBillNumber(bill.drawSequence)} · เดิมพัน {MONEY.format(Number(bill.totalStake))} บาท</p></div>
-          <div className="agent-simple-prize"><span>เงินรางวัล</span><strong>{MONEY.format(Number(bill.totalPayout))}</strong><small>บาท</small></div>
-          <Link className="agent-simple-detail" href={`/bills/${bill.id}`}>ดูบิล →</Link>
-        </article>)}</div>}
-      </section>
-    </> : <section className="agent-simple-empty agent-simple-no-draw"><span>▥</span><strong>ยังไม่มีงวดสำหรับแสดงรายงาน</strong><p>เมื่อสร้างงวดและมีรายการบิลแล้ว ข้อมูลจะปรากฏที่นี่</p></section>}
+    </> : <section className="agent-simple-empty agent-simple-no-draw"><strong>ยังไม่มีงวดสำหรับแสดงรายงาน</strong><p>เมื่อมีงวดและบิลที่ยืนยันแล้ว ข้อมูลจะปรากฏที่นี่</p></section>}
   </main>;
 }

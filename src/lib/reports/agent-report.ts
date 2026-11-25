@@ -252,7 +252,9 @@ export async function getAgentReport(actor: Actor, filter: AgentReportFilter) {
  * หน้ารายงานแบบย่อสำหรับ Agent โหลดเฉพาะ 2 งวดล่าสุดและบิลที่ถูกรางวัล
  * เพื่อให้เห็นยอดขาย ค่าคอม และผู้ถูกรางวัลได้ทันทีโดยไม่สร้าง matrix รายงานขนาดใหญ่
  */
-export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string) {
+export type SimpleAgentBillFilter = "ALL" | "WON" | "LOST" | "PENDING";
+
+export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string, billStatus: SimpleAgentBillFilter = "ALL", requestedPage = 1) {
   requirePermission(actor, "bill.viewOwn");
   if (actor.role !== "AGENT" || !actor.agentId) throw new ForbiddenError("รายงานนี้สำหรับ Agent เท่านั้น");
 
@@ -276,7 +278,7 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
   const draws = drawOptions.slice(selectedIndex, selectedIndex + 2);
 
   const drawIds = draws.map((draw) => draw.id);
-  if (drawIds.length === 0) return { agent, rounds: [] as SimpleAgentRound[], winners: [], drawOptions, selectedDrawId: "" };
+  if (drawIds.length === 0) return { agent, rounds: [] as SimpleAgentRound[], winners: [], drawOptions, selectedDrawId: "", billHistory: { rows: [], counts: { all: 0, won: 0, lost: 0, pending: 0 }, page: 1, pages: 1, status: billStatus } };
 
   const billFilter = {
     ...scope,
@@ -344,5 +346,28 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
     };
   });
 
-  return { agent, rounds, winners, drawOptions, selectedDrawId: draws[0]?.id ?? "" };
+  const selectedDraw = draws[0]!;
+  const selectedBills = { ...scope, agentId: actor.agentId, drawId: selectedDraw.id } satisfies Prisma.BillWhereInput;
+  const won = { ...selectedBills, status: "SETTLED", totalPayout: { gt: 0 } } satisfies Prisma.BillWhereInput;
+  const lost = { ...selectedBills, status: "SETTLED", totalPayout: { lte: 0 } } satisfies Prisma.BillWhereInput;
+  const pending = { ...selectedBills, status: { in: ["CONFIRMED", "LOCKED"] } } satisfies Prisma.BillWhereInput;
+  const selectedFilter = billStatus === "WON" ? won : billStatus === "LOST" ? lost : billStatus === "PENDING" ? pending : { ...selectedBills, status: { in: COUNTED_STATUSES } };
+  const [allCount, wonCount, lostCount, pendingCount] = await Promise.all([
+    prisma.bill.count({ where: { ...selectedBills, status: { in: COUNTED_STATUSES } } }),
+    prisma.bill.count({ where: won }),
+    prisma.bill.count({ where: lost }),
+    prisma.bill.count({ where: pending }),
+  ]);
+  const selectedCount = billStatus === "WON" ? wonCount : billStatus === "LOST" ? lostCount : billStatus === "PENDING" ? pendingCount : allCount;
+  const pages = Math.max(1, Math.ceil(selectedCount / 20));
+  const page = Math.min(Math.max(Number.isFinite(requestedPage) ? Math.floor(requestedPage) : 1, 1), pages);
+  const historyRows = await prisma.bill.findMany({
+    where: selectedFilter,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip: (page - 1) * 20,
+    take: 20,
+    select: { id: true, drawSequence: true, title: true, status: true, totalStake: true, totalPayout: true, createdAt: true },
+  });
+
+  return { agent, rounds, winners, drawOptions, selectedDrawId: selectedDraw.id, billHistory: { rows: historyRows, counts: { all: allCount, won: wonCount, lost: lostCount, pending: pendingCount }, page, pages, status: billStatus } };
 }

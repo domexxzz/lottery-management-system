@@ -163,6 +163,13 @@ describe("รายงานตรงกับ Settlement", () => {
     expect(report.winners).toHaveLength(1);
     expect(report.winners[0]).toMatchObject({ title: "A1 บิลหนึ่ง" });
 
+    const won = await getSimpleAgentReport(f.actors.AGENT1, f.draw.id, "WON");
+    expect(won.billHistory.counts).toMatchObject({ all: 1, won: 1, lost: 0, pending: 0 });
+    expect(won.billHistory.rows).toHaveLength(1);
+    expect(won.billHistory.rows[0]).toMatchObject({ title: "A1 บิลหนึ่ง", status: "SETTLED" });
+    const lost = await getSimpleAgentReport(f.actors.AGENT1, f.draw.id, "LOST");
+    expect(lost.billHistory.rows).toHaveLength(0);
+
     const selected = await getSimpleAgentReport(f.actors.AGENT1, f.draw.id);
     expect(selected.selectedDrawId).toBe(f.draw.id);
     expect(selected.rounds[0]?.drawId).toBe(f.draw.id);
