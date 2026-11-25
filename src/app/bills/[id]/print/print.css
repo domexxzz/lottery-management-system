@@ -41,6 +41,7 @@
   font-size: 13pt;
   letter-spacing: 0.08em;
 }
+.sheet-code { margin: 0; font-size: 9pt; font-weight: 600; letter-spacing: .03em; }
 
 .sheet-meta {
   display: grid;

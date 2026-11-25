@@ -35,7 +35,7 @@ describe("หน้าแทงเลข: placeBill", () => {
     expect(audits.map((audit) => audit.action).sort()).toEqual(["CONFIRM", "CREATE"]);
   });
 
-  test("เลขบิลนับต่อราย Agent ในเดือนเดียวกันแม้เปลี่ยนงวด และ Agent อื่นเริ่มที่ 1", async () => {
+  test("เลขบิลนับต่อราย Agent และเริ่มที่ 1 ใหม่ทุกงวด", async () => {
     const item = [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }];
     const first = await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ลูกค้า 1", items: item });
     const second = await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ลูกค้า 2", items: item });
@@ -50,11 +50,11 @@ describe("หน้าแทงเลข: placeBill", () => {
     const continued = await placeBill(f.actors.AGENT1, { drawId: otherDraw.id, title: "ลูกค้า 3", items: item });
     const otherAgent = await placeBill(f.actors.AGENT2, { drawId: otherDraw.id, title: "ลูกค้า 4", items: item });
 
-    expect([first.drawSequence, second.drawSequence, continued.drawSequence, otherAgent.drawSequence]).toEqual([1, 2, 3, 1]);
-    expect(first.billNumber).toMatch(/^A00101\d{6}0001$/);
-    expect(second.billNumber).toMatch(/^A00101\d{6}0002$/);
-    expect(continued.billNumber).toMatch(/^A00101\d{6}0003$/);
-    expect(otherAgent.billNumber).toMatch(/^A00201\d{6}0001$/);
+    expect([first.drawSequence, second.drawSequence, continued.drawSequence, otherAgent.drawSequence]).toEqual([1, 2, 1, 1]);
+    expect(first.billNumber).toMatch(/^A00101\d{6}0001-/);
+    expect(second.billNumber).toMatch(/^A00101\d{6}0002-/);
+    expect(continued.billNumber).toMatch(/^A00101\d{6}0001-/);
+    expect(otherAgent.billNumber).toMatch(/^A00201\d{6}0001-/);
   });
 
   test("ข้อใดไม่ผ่าน rollback ทั้งหมด ไม่มีบิลร่างค้าง", async () => {

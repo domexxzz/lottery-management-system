@@ -108,7 +108,7 @@ describe("สร้างงวดหวยลาว", () => {
 describe("รับบิลหวยลาว", () => {
   test("หวยลาวแทงได้ทุกเลข แต่ใช้รางวัลหวยไทยในงวดหวยลาวไม่ได้ และเลขบิลมีรหัสหวยลาว", async () => {
     const placed = await placeBill(f.actors.AGENT1, { drawId: lao.id, title: "ก", items: [bet(101, "123", "10"), bet(104, "99", "5")] });
-    expect(placed.billNumber).toMatch(/^A00102\d{6}0001$/);
+    expect(placed.billNumber).toMatch(/^A00102\d{6}0001-/);
     await expect(placeBill(f.actors.AGENT1, { drawId: lao.id, title: "ข", items: [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake: "10" }] }))
       .rejects.toThrow(/ไม่พบประเภทรางวัล|ประเภทรางวัล/);
   });
@@ -121,7 +121,7 @@ describe("รับบิลหวยลาว", () => {
         bet(201, "1234", "30"), bet(201, "1234", "60"), bet(201, "1234", "120"),
       ],
     });
-    expect(placed.billNumber).toMatch(/^A00103\d{6}0001$/);
+    expect(placed.billNumber).toMatch(/^A00103\d{6}0001-/);
     const packageItems = await prisma.billItem.findMany({ where: { billId: placed.billId, prizeTypeId: pt[201] }, orderBy: { stake: "asc" } });
     expect(packageItems.map((item) => [item.packagePrice?.toFixed(0), item.quantity, item.stake.toFixed(0)])).toEqual([["30", 1, "30"], ["60", 1, "60"], ["120", 1, "120"]]);
     await expect(placeBill(f.actors.AGENT1, { drawId: laoSet.id, title: "ประเภทเดิม", items: [bet(202, "123", "5")] }))

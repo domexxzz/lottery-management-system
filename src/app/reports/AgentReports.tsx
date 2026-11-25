@@ -1,7 +1,7 @@
 import Link from "next/link";
 import "./reports.css";
 import type { Actor } from "@/lib/auth/context";
-import { visibleBillNumber } from "@/lib/bills/numbering";
+import { publicSlipCode, visibleBillNumber } from "@/lib/bills/numbering";
 import { betStatusOf, lotteryLabel } from "@/lib/bills/betting";
 import { getSimpleAgentReport, type SimpleAgentBillFilter } from "@/lib/reports/agent-report";
 import { DashboardFilters } from "../DashboardFilters";
@@ -61,7 +61,7 @@ export async function AgentReports({ actor, selectedDrawId, billStatus = "ALL", 
           const status = betStatusOf(bill);
           const label = status === "WON" ? "ถูกรางวัล" : status === "LOST" ? "ไม่ถูกรางวัล" : "รอผล";
           return <article key={bill.id} className={`agent-bill-row is-${status.toLowerCase()}`}>
-            <div className="agent-bill-main"><small>บิล {visibleBillNumber(bill.drawSequence)} · {DATE_TIME.format(bill.createdAt)}</small><strong>{bill.title || "ไม่ระบุชื่อลูกค้า"}</strong><small>{bill.parts.map((part) => `${lotteryLabel(part.draw.lotteryType)} · ${dashboardDrawLabel(part.draw)}`).join(" / ")}</small></div>
+            <div className="agent-bill-main"><small>{visibleBillNumber(bill.drawSequence)} · รหัส {publicSlipCode(bill.drawSequence, bill.parts) ?? "—"} · {DATE_TIME.format(bill.createdAt)}</small><strong>{bill.title || "ไม่ระบุชื่อลูกค้า"}</strong><small>{bill.parts.map((part) => `${lotteryLabel(part.draw.lotteryType)} · ${dashboardDrawLabel(part.draw)}`).join(" / ")}</small></div>
             <span className="agent-bill-result">{label}</span>
             <div className="agent-bill-money"><span>ยอดเดิมพัน{bill.parts.length > 1 ? "รวมทั้งบิล" : ""} <b>{MONEY.format(Number(bill.totalStake))} บาท</b></span>{status === "WON" && <span>เงินรางวัล <b>{MONEY.format(Number(bill.totalPayout))} บาท</b></span>}</div>
             <Link className="agent-simple-detail" href={`/bills/${bill.id}`}>ดูบิล →</Link>

@@ -62,8 +62,8 @@ export type SlipRepresentative = {
   agentCode: string | null;
   /** อัตราคอมมิชชันเป็นเปอร์เซ็นต์ null = ยังไม่มี Agent (ระบบจะสร้างให้และคอมเป็น 0) */
   commissionRate: string | null;
-  /** ตัวอย่างเลขถัดไปของ Agent ในเดือนปัจจุบัน เลขจริงถูกจองตอนยืนยัน */
-  nextBillSequence: number;
+  /** ตัวอย่างเลขถัดไปของ Agent แยกตามงวด เลขจริงถูกจองตอนยืนยัน */
+  nextBillSequenceByDraw: Record<string, number>;
 };
 
 type Notice = { tone: "info" | "error"; text: string } | null;
@@ -202,7 +202,7 @@ export function BetSlip({
   laoSetPayouts,
   restrictions,
   representatives,
-  ownNextBillSequence,
+  ownNextBillSequenceByDraw,
   serverNow,
   draftScope,
 }: {
@@ -217,7 +217,7 @@ export function BetSlip({
   /** null สำหรับ Agent ซึ่งสร้างบิลให้ตัวเองเท่านั้น */
   representatives: SlipRepresentative[] | null;
   ownCommissionRate: string | null;
-  ownNextBillSequence: number;
+  ownNextBillSequenceByDraw: Record<string, number>;
   /** เวลา Server ตอน render หน้า (ms) จุดตั้งต้นของการเทียบนาฬิกา */
   serverNow: number;
   /** แยกร่างในเครื่องตามผู้ใช้และประเภทหวย เครื่องที่ใช้ร่วมกันจะไม่เห็นร่างของคนอื่น */
@@ -251,9 +251,6 @@ export function BetSlip({
 
   const [representativeId, setRepresentativeId] = useState("");
   const representative = representatives?.find((item) => item.id === representativeId);
-  const previewBillSequence = representatives === null
-    ? ownNextBillSequence
-    : representative?.nextBillSequence ?? null;
 
   // หมวดเลขและตัวเลือกจำแยกตามประเภทหวย สลับแท็บไปมาแล้วค่ายังอยู่
   const [groupKeyByType, setGroupKeyByType] = useState<Record<string, string>>({});
@@ -271,6 +268,10 @@ export function BetSlip({
   const [packageQuantity, setPackageQuantity] = useState(1);
   const [digits, setDigits] = useState("");
   const [entries, setEntries] = useState<SlipEntry[]>([]);
+  const previewDrawIds = entries.length > 0 ? [...new Set(entries.map((entry) => entry.drawId))] : draw ? [draw.id] : [];
+  const previewByDraw = representatives === null ? ownNextBillSequenceByDraw : representative?.nextBillSequenceByDraw;
+  const previewBillSequence = previewByDraw && previewDrawIds.length > 0
+    ? Math.max(...previewDrawIds.map((id) => previewByDraw[id] ?? 1)) : null;
   const [editing, setEditing] = useState<number | null>(null);
   const [title, setTitle] = useState("");
   const [notice, setNotice] = useState<Notice>(null);

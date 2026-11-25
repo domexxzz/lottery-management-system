@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { getActor } from "@/lib/auth/context";
 import { getBill } from "@/lib/bills/service";
+import { prisma } from "@/lib/db";
+import { publicSlipCode } from "@/lib/bills/numbering";
 import { statusLabel } from "@/lib/bills/lifecycle";
 import { NotFoundError } from "@/lib/errors";
 import { laoSetPackageLabel } from "@/lib/lao/rules";
@@ -40,12 +42,19 @@ export default async function PrintBillPage({
     if (error instanceof NotFoundError) notFound();
     throw error;
   }
+  const primaryId = bill.slipId ?? bill.id;
+  const parts = await prisma.bill.findMany({
+    where: { organizationId: actor.organizationId, agentId: bill.agentId, OR: [{ id: primaryId }, { slipId: primaryId }] },
+    select: { draw: { select: { lotteryType: true, drawDate: true, cutoffAt: true } } },
+  });
+  const billCode = publicSlipCode(bill.drawSequence, parts);
 
   return (
     <div className={isSlip ? "sheet sheet-slip" : "sheet sheet-a4"}>
       <header className="sheet-header">
         <h1>บิลรับรายการ</h1>
         <p className="sheet-number">{bill.drawSequence === null ? "บิลร่าง" : `บิล ${bill.drawSequence}`}</p>
+        {billCode && <p className="sheet-code">รหัสบิล {billCode}</p>}
       </header>
 
       <dl className="sheet-meta">

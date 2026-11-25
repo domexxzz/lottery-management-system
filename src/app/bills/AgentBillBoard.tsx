@@ -16,6 +16,7 @@ import { can } from "@/lib/auth/permissions";
 import { AgentBillFilters } from "./AgentBillFilters";
 import { ReportExportButtons } from "@/components/ReportExportButtons";
 import { LotteryFlag, ThaiFlag } from "./ThaiFlag";
+import { publicSlipCode } from "@/lib/bills/numbering";
 
 const TAB_LABEL: Record<BetTab, string> = {
   ALL: "ทั้งหมด",
@@ -358,7 +359,7 @@ export async function AgentBillBoard({
                     <header className="slip-card-head">
                       <div>
                         <span className="slip-card-rank" aria-label={`ลำดับ ${firstRow + index}`}>{firstRow + index}</span>
-                        <p><small>เลขบิล</small><Link href={`/bills/${bill.id}`} className="slip-bill-number">{bill.drawSequence === null ? "บิลร่าง" : `บิล ${bill.drawSequence}`}</Link></p>
+                        <p><small>เลขบิล</small><Link href={`/bills/${bill.id}`} className="slip-bill-number">{bill.drawSequence === null ? "บิลร่าง" : `บิล ${bill.drawSequence}`}</Link><small className="slip-bill-code">รหัส {publicSlipCode(bill.drawSequence, bill.parts) ?? "—"}</small></p>
                       </div>
                       <span
                         className={`slip-status slip-status-${betStatus.toLowerCase()}`}

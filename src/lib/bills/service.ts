@@ -627,6 +627,36 @@ export async function loadRestrictions(
   return new Map(rows.map((row) => [`${row.prizeTypeId}:${row.number}`, { kind: row.kind, payoutRate: row.payoutRate }]));
 }
 
+/** จองเลขเดียวให้ทุกงวดในบิล ล็อกตัวนับตามลำดับ drawId เพื่อกันเลขชนเมื่อยืนยันพร้อมกัน */
+async function reserveDrawSequence(tx: Prisma.TransactionClient, organizationId: string, agentId: string, drawIds: readonly string[]): Promise<number> {
+  const counters: { period: string; lastSequence: number }[] = [];
+  let next = 1;
+  for (const drawId of [...new Set(drawIds)].sort()) {
+    const period = billSequencePeriod(drawId);
+    // บิลเก่าที่ออกเลขรายเดือนยังอยู่ จึงต่อจากเลขสูงสุดของงวดโดยไม่ใช้เลขซ้ำ
+    const historical = await tx.bill.aggregate({
+      where: { organizationId, agentId, drawId, drawSequence: { not: null } },
+      _max: { drawSequence: true },
+    });
+    const minimum = (historical._max.drawSequence ?? 0) + 1;
+    const counter = await tx.agentBillCounter.upsert({
+      where: { agentId_period: { agentId, period } },
+      create: { organizationId, agentId, period, lastSequence: minimum },
+      update: { lastSequence: { increment: 1 } },
+      select: { lastSequence: true },
+    });
+    counters.push({ period, lastSequence: counter.lastSequence });
+    next = Math.max(next, minimum, counter.lastSequence);
+  }
+  for (const counter of counters) {
+    if (counter.lastSequence < next) await tx.agentBillCounter.update({
+      where: { agentId_period: { agentId, period: counter.period } },
+      data: { lastSequence: next },
+    });
+  }
+  return next;
+}
+
 /**
  * ตรวจและยืนยันบิลภายใน transaction ที่ส่งเข้ามา
  *
@@ -639,8 +669,8 @@ async function confirmInTx(
   billId: string,
   options: {
     requireEvidence: boolean;
-    /** บิลหลายประเภทหวย: ส่วนที่ 2 เป็นต้นไปใช้เลขบิลของส่วนแรก ไม่ออกเลขใหม่ */
-    shareSequence?: { drawSequence: number; sequencePeriod: string };
+    /** บิลหลายประเภทหวยจองเลขเดียวในทุกงวดไว้ก่อนยืนยันแต่ละส่วน */
+    shareSequence?: { drawSequence: number };
   },
 ): Promise<{ billNumber: string; drawSequence: number; sequencePeriod: string; totalStake: string }> {
   const bill = await tx.bill.findFirst({
@@ -711,26 +741,14 @@ async function confirmInTx(
   }
 
   const confirmedAt = new Date();
-  // ตัวนับแยก Agent/เดือนและเพิ่มแบบ atomic ใน transaction เดียวกับการยืนยัน
-  // Agent แต่ละคนจึงเริ่มจากบิล 1 เมื่อขึ้นเดือนใหม่ และกดยืนยันพร้อมกันก็ไม่ชนกัน
-  // บิลหลายประเภทหวยออกเลขครั้งเดียวที่ส่วนแรก ส่วนที่เหลือใช้เลขเดียวกัน (แยกด้วยงวด)
-  const sequencePeriod = options.shareSequence?.sequencePeriod ?? billSequencePeriod(confirmedAt);
-  const drawSequence = options.shareSequence?.drawSequence ?? (await tx.agentBillCounter.upsert({
-    where: { agentId_period: { agentId: bill.agentId, period: sequencePeriod } },
-    create: {
-      organizationId: bill.organizationId,
-      agentId: bill.agentId,
-      period: sequencePeriod,
-      lastSequence: 1,
-    },
-    update: { lastSequence: { increment: 1 } },
-    select: { lastSequence: true },
-  })).lastSequence;
+  const sequencePeriod = billSequencePeriod(bill.drawId);
+  const drawSequence = options.shareSequence?.drawSequence ?? await reserveDrawSequence(tx, bill.organizationId, bill.agentId, [bill.drawId]);
   const billNumber = buildInternalBillNumber({
     agentCode: bill.agent.code,
     lotteryType: bill.draw.lotteryType,
     issuedAt: confirmedAt,
     drawSequence,
+    drawId: bill.drawId,
   });
 
   // เขียน payout snapshot ของจริง ณ วินาทีที่ยืนยัน เลขอั้นใช้อัตราที่ลดลง
@@ -904,7 +922,7 @@ async function placeSlipOnce(
   return prisma.$transaction(async (tx) => {
     const rules = await loadPrizeRules(tx, actor.organizationId);
     const bills: PlacedSlip["bills"] = [];
-    let shared: { drawSequence: number; sequencePeriod: string } | undefined;
+    const shared = { drawSequence: await reserveDrawSequence(tx, actor.organizationId, agentId, parts.map(([drawId]) => drawId)) };
 
     for (const [drawId, items] of parts) {
       const parsed = parseItems(items, rules);
@@ -948,13 +966,12 @@ async function placeSlipOnce(
         after: { ...created, itemCount: parsed.length, source: "BET_SLIP" },
       });
 
-      // ส่วนแรกออกเลขบิลใหม่ ส่วนถัดไปใช้เลขเดียวกัน ผู้ใช้จึงเห็นเป็นบิลเดียว
+      // ทุกส่วนใช้เลขที่จองไว้ร่วมกัน และตัวนับของแต่ละงวดขยับตามเลขนั้น
       const confirmed = await confirmInTx(tx, actor, created.id, { requireEvidence: false, shareSequence: shared });
-      shared ??= { drawSequence: confirmed.drawSequence, sequencePeriod: confirmed.sequencePeriod };
       bills.push({ billId: created.id, drawId, billNumber: confirmed.billNumber });
     }
 
-    return { slipId: bills.length > 1 ? bills[0]!.billId : null, drawSequence: shared!.drawSequence, bills };
+    return { slipId: bills.length > 1 ? bills[0]!.billId : null, drawSequence: shared.drawSequence, bills };
   });
 }
 
@@ -1066,7 +1083,7 @@ const BET_HISTORY_SELECT = {
   status: true, cancelReason: true, totalStake: true, totalPayout: true,
   createdAt: true, confirmedAt: true,
   agent: { select: { code: true, name: true } },
-  draw: { select: { name: true, drawDate: true, lotteryType: true, status: true } },
+  draw: { select: { name: true, drawDate: true, cutoffAt: true, lotteryType: true, status: true } },
   _count: { select: { items: true } },
 } satisfies Prisma.BillSelect;
 

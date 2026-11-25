@@ -156,7 +156,7 @@ model Organization {
   timezone String  @default("Asia/Bangkok")
   isActive Boolean @default(true)
 
-  /// ตัวนับเลขบิลเดิม (legacy) — ระบบปัจจุบันใช้ AgentBillCounter ราย Agent/เดือน
+  /// ตัวนับเลขบิลเดิม (legacy) — ระบบปัจจุบันใช้ AgentBillCounter ราย Agent/งวด
   billSequence Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -462,11 +462,11 @@ model Bill {
   draw    Draw   @relation(fields: [drawId], references: [id])
 
   /// รหัสภายในที่ออกตอนยืนยัน ไม่แสดงแก่ผู้ใช้
-  /// รูปแบบ: รหัส Agent + ประเภทหวย + DDMMYY + ลำดับ 4 หลัก
+  /// รูปแบบ: รหัส Agent + ประเภทหวย + DDMMYY + ลำดับ 4 หลัก + -<drawId>
   billNumber     String?
-  /// เลขบิลที่ผู้ใช้เห็น นับแยกตาม Agent และเริ่มใหม่จาก 1 ทุกเดือน (เวลาไทย)
+  /// เลขบิลที่ผู้ใช้เห็น นับแยกตาม Agent และเริ่มใหม่จาก 1 ทุกงวด
   drawSequence   Int?
-  /// เดือนของเลขบิล รูปแบบ YYYY-MM ตาม Asia/Bangkok
+  /// คีย์ตัวนับเลขบิล: draw:<drawId> (บิลเก่าเก็บ YYYY-MM)
   sequencePeriod String?
   /// ชื่อลูกค้า
   title          String
@@ -524,8 +524,8 @@ model Bill {
   @@map("bills")
 }
 
-/// ตัวนับเลขบิลราย Agent/เดือน ใช้ upsert แบบ atomic ตอนยืนยันบิล
-/// เพื่อให้ Agent แต่ละคนเริ่มที่บิล 1 ทุกเดือนและไม่มีเลขซ้ำเมื่อกดยืนยันพร้อมกัน
+/// ตัวนับเลขบิลราย Agent/งวด ใช้ upsert แบบ atomic ตอนยืนยันบิล
+/// คีย์ YYYY-MM ของบิลเก่ายังอยู่เพื่อประวัติ
 model AgentBillCounter {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -533,7 +533,7 @@ model AgentBillCounter {
   agentId String
   agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
-  /// YYYY-MM ตามเวลา Asia/Bangkok
+  /// draw:<drawId> สำหรับบิลใหม่; YYYY-MM สำหรับบิลเก่า
   period       String
   lastSequence Int      @default(0)
   updatedAt    DateTime @updatedAt

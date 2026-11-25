@@ -92,8 +92,10 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
     return [type, open.length > 0 ? open : fallback ? [fallback] : []] as const;
   }));
   const selectedDraws = drawsByType.get(selectedLottery) ?? [];
-  const sequencePeriod = billSequencePeriod(new Date());
-  const [prizeTypes, representatives, ownAgent, laoSetRateRows] = await Promise.all([
+  const draws = [...drawsByType.values()].flat();
+  const drawIds = draws.map((draw) => draw.id);
+  const counterPeriods = drawIds.map(billSequencePeriod);
+  const [prizeTypes, representatives, ownAgent, laoSetRateRows, existingSequences] = await Promise.all([
     prisma.prizeType.findMany({
       where: {
         ...orgScope(actor),
@@ -123,9 +125,10 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
             role: true,
             agent: {
               select: {
+                id: true,
                 code: true,
                 commissionRate: true,
-                billCounters: { where: { period: sequencePeriod }, select: { lastSequence: true }, take: 1 },
+                billCounters: { where: { period: { in: counterPeriods } }, select: { period: true, lastSequence: true } },
               },
             },
           },
@@ -134,8 +137,9 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
       ? prisma.agent.findUnique({
           where: { id: actor.agentId },
           select: {
+            id: true,
             commissionRate: true,
-            billCounters: { where: { period: sequencePeriod }, select: { lastSequence: true }, take: 1 },
+            billCounters: { where: { period: { in: counterPeriods } }, select: { period: true, lastSequence: true } },
           },
         })
       : Promise.resolve(null),
@@ -143,12 +147,15 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
       where: { ...orgScope(actor), lotteryType: "LAO_SET", code: { in: LAO_SET_PAYOUT_COLUMNS.map((column) => column.code) } },
       select: { code: true, payoutRate: true },
     }),
+    prisma.bill.groupBy({
+      by: ["agentId", "drawId"],
+      where: { ...orgScope(actor), drawId: { in: drawIds }, drawSequence: { not: null } },
+      _max: { drawSequence: true },
+    }),
   ]);
 
   const laoSetRateByCode = new Map(laoSetRateRows.map((row) => [row.code, row.payoutRate.toNumber()]));
   const laoSetPayouts = buildLaoSetPayoutRows((code) => laoSetRateByCode.get(code) ?? 0);
-
-  const draws = [...drawsByType.values()].flat();
 
   const restrictionRows = draws.length === 0 ? [] : await prisma.restrictedNumber.findMany({
     where: { ...orgScope(actor), drawId: { in: draws.map((draw) => draw.id) } },
@@ -173,13 +180,19 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
   }
 
 
+  const historicalByAgentDraw = new Map(existingSequences.map((row) => [`${row.agentId}:${row.drawId}`, row._max.drawSequence ?? 0]));
+  const nextByDraw = (agent: { id: string; billCounters: { period: string; lastSequence: number }[] } | null) => Object.fromEntries(drawIds.map((drawId) => [
+    drawId,
+    agent ? Math.max(agent.billCounters.find((counter) => counter.period === billSequencePeriod(drawId))?.lastSequence ?? 0, historicalByAgentDraw.get(`${agent.id}:${drawId}`) ?? 0) + 1 : 1,
+  ]));
+
   const slipRepresentatives: SlipRepresentative[] | null = representatives?.map((user) => ({
     id: user.id,
     displayName: user.displayName,
     roleLabel: ROLE_LABEL[user.role],
     agentCode: user.agent?.code ?? null,
     commissionRate: user.agent ? user.agent.commissionRate.toFixed(4) : null,
-    nextBillSequence: (user.agent?.billCounters[0]?.lastSequence ?? 0) + 1,
+    nextBillSequenceByDraw: nextByDraw(user.agent),
   })) ?? null;
 
   return (
@@ -214,7 +227,7 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
           restrictions={restrictions}
           representatives={slipRepresentatives}
           ownCommissionRate={ownAgent ? ownAgent.commissionRate.toFixed(4) : null}
-          ownNextBillSequence={(ownAgent?.billCounters[0]?.lastSequence ?? 0) + 1}
+          ownNextBillSequenceByDraw={nextByDraw(ownAgent)}
           serverNow={Date.now()}
           // ร่างเดียวต่อผู้ใช้ เพราะบิลเดียวรวมได้หลายประเภทหวย
           draftScope={`${actor.userId}:slip`}

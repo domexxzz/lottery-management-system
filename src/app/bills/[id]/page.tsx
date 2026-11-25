@@ -18,6 +18,7 @@ import { listBillAttachments } from "@/lib/evidence/service";
 import { BET_STATUS_LABEL, betStatusOf, drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
 import { LotteryFlag } from "../ThaiFlag";
 import { laoSetPackageLabel } from "@/lib/lao/rules";
+import { publicSlipCode } from "@/lib/bills/numbering";
 
 export const dynamic = "force-dynamic";
 
@@ -74,12 +75,13 @@ export default async function BillDetailPage({
         id: true,
         status: true,
         totalStake: true,
-        draw: { select: { name: true, drawDate: true, lotteryType: true } },
+        draw: { select: { name: true, drawDate: true, cutoffAt: true, lotteryType: true } },
         _count: { select: { items: true } },
       },
     }),
   ]);
   const isMultiSlip = slipParts.length > 1;
+  const slipCode = publicSlipCode(bill.drawSequence, slipParts);
   // บิลหลายหวยเปิดมาที่ "ทั้งหมด" ก่อน ส่วน view=id ใช้ดู/แก้เฉพาะหวยนั้น
   const viewAll = isMultiSlip && (view === undefined || view === "all");
   const detailedParts = viewAll
@@ -121,6 +123,7 @@ export default async function BillDetailPage({
         {placed === "1" && bill.drawSequence !== null && (
           <PlacedBillPanel
             sequence={bill.drawSequence}
+            billCode={slipCode}
             customer={bill.title}
             itemCount={isMultiSlip ? slipItemCount : bill.items.length}
             totalStake={isMultiSlip ? slipTotal.toFixed(2) : bill.totalStake.toFixed(2)}
@@ -139,6 +142,7 @@ export default async function BillDetailPage({
           <div className="bill-detail-title">
             <nav className="slip-breadcrumb" aria-label="ตำแหน่งหน้า"><Link href="/bills">ประวัติรายการ</Link><span aria-hidden="true">/</span><span>รายละเอียดบิล</span></nav>
             <h1 id="bill-heading">รายละเอียดบิล {bill.drawSequence === null ? "ร่าง" : bill.drawSequence}{isMultiSlip ? ` · ${slipParts.length} ประเภทหวย` : ""} <span className={`slip-status slip-status-${betStatus.toLowerCase()}`}>{BET_STATUS_LABEL[betStatus]}</span></h1>
+            {slipCode && <p className="bill-detail-code">รหัสบิล <strong>{slipCode}</strong></p>}
           </div>
           <nav className="bill-detail-tools" aria-label="เครื่องมือบิล">
             {canEditBill && <Link href={`/bills/${bill.id}?view=${bill.id}&edit=1#bill-edit`} className="slip-primary-button">แก้ไขบิล</Link>}

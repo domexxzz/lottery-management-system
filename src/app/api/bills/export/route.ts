@@ -5,7 +5,7 @@ import { parseHistoryFilter } from "@/lib/bills/history-filter";
 import { resolveHistoryScope } from "@/lib/bills/history-scope";
 import { BET_STATUS_LABEL, betStatusOf, drawDateLabel, lotteryLabel } from "@/lib/bills/betting";
 import { AppError } from "@/lib/errors";
-import { visibleBillNumber } from "@/lib/bills/numbering";
+import { publicSlipCode, visibleBillNumber } from "@/lib/bills/numbering";
 import { createReportDownload, type ReportExportInput } from "@/lib/export/report";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
         { label: "เงินรางวัลรวม", value: totalPayout, type: "money", unit: "บาท" },
       ],
       columns: [
-        { header: "เลขบิล", type: "text", width: 14 }, { header: "ชื่อลูกค้า", type: "text", width: 25 },
+        { header: "เลขบิล", type: "text", width: 14 }, { header: "รหัสบิล", type: "text", width: 20 }, { header: "ชื่อลูกค้า", type: "text", width: 25 },
         { header: "รหัส Agent", type: "text", width: 14 }, { header: "ชื่อ Agent", type: "text", width: 25 },
         { header: "ประเภทหวยในบิล", type: "text", width: 35 }, { header: "งวด", type: "text", width: 35 },
         { header: "วันที่ทำรายการ", type: "datetime", width: 20 }, { header: "จำนวนรายการเลข", type: "integer", width: 18 },
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
         { header: "สถานะ", type: "text", width: 16 },
       ],
       rows: bills.map((bill) => [
-        visibleBillNumber(bill.drawSequence), bill.title, bill.agent.code, bill.agent.name,
+        visibleBillNumber(bill.drawSequence), publicSlipCode(bill.drawSequence, bill.parts) ?? "", bill.title, bill.agent.code, bill.agent.name,
         bill.parts.map((part) => lotteryLabel(part.draw.lotteryType)).join(" / "),
         bill.parts.map((part) => drawDateLabel(part.draw)).join(" / "),
         bill.createdAt, bill._count.items, Number(bill.totalStake), Number(bill.totalPayout), BET_STATUS_LABEL[betStatusOf(bill)],

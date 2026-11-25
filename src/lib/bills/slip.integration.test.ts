@@ -94,6 +94,29 @@ describe("บิลเดียวหลายประเภทหวย", () =
     expect(bills.map((bill) => bill.totalStake.toFixed(2)).sort()).toEqual(["20.00", "20.00"]);
   });
 
+  test("บิลหลายงวดใช้เลขเดียวกัน และบิลถัดไปของแต่ละงวดเดินเลขต่อ", async () => {
+    for (let index = 0; index < 3; index += 1) {
+      await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: `ไทย ${index}`, items: [bet(f.prizeTypes.threeTop.id, "123", "10")] });
+    }
+    const laoOnly = await placeBill(f.actors.AGENT1, { drawId: lao, title: "ลาว 1", items: [bet(pt[101]!, "123", "10")] });
+    expect(laoOnly.drawSequence).toBe(1);
+
+    const mixed = await placeSlip(f.actors.AGENT1, {
+      title: "ไทยกับลาว",
+      parts: [
+        { drawId: f.draw.id, items: [bet(f.prizeTypes.threeTop.id, "456", "10")] },
+        { drawId: lao, items: [bet(pt[101]!, "456", "10")] },
+      ],
+    });
+    const mixedRows = await prisma.bill.findMany({ where: { id: { in: mixed.bills.map((part) => part.billId) } }, select: { drawSequence: true } });
+    expect(new Set(mixedRows.map((part) => part.drawSequence))).toEqual(new Set([4]));
+
+    const nextThai = await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ไทยถัดไป", items: [bet(f.prizeTypes.threeTop.id, "789", "10")] });
+    const nextLao = await placeBill(f.actors.AGENT1, { drawId: lao, title: "ลาวถัดไป", items: [bet(pt[101]!, "789", "10")] });
+    const otherAgent = await placeBill(f.actors.AGENT2, { drawId: lao, title: "Agent อื่น", items: [bet(pt[101]!, "789", "10")] });
+    expect([nextThai.drawSequence, nextLao.drawSequence, otherAgent.drawSequence]).toEqual([5, 5, 1]);
+  });
+
   test("หวยรัฐบาล + หวยลาว + หวยลาวชุด อยู่ในบิลเดียวและเลขบิลเดียวกัน", async () => {
     const placed = await placeSlip(f.actors.AGENT1, {
       title: "ครบทุกประเภทหวย",

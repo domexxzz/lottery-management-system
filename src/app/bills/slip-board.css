@@ -247,6 +247,8 @@
 .bill-detail-title { display: grid; gap: .2rem; min-width: 0; }
 .app-page .bill-detail-title h1 { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 0; color: var(--sb-text); font-size: clamp(1.35rem, 2.2vw, 1.9rem); font-weight: 800; letter-spacing: -.02em; line-height: 1.2; }
 .bill-detail-title h1 .slip-status { font-size: .85rem; }
+.bill-detail-title .bill-detail-code { margin: 0; color: #55708e; font-size: .85rem; }
+.bill-detail-code strong { color: #155bb3; font-variant-numeric: tabular-nums; letter-spacing: .03em; }
 .bill-detail-tools { display: flex; flex-wrap: wrap; gap: .5rem; }
 
 .slip-detail-board { display: grid; gap: 1rem; }
@@ -656,4 +658,5 @@
 .slip-card-types span.is-cancelled { opacity: .55; text-decoration: line-through; }
 .slip-card-types svg { width: 21px; height: 14px; flex: none; }
 .slip-summary-note { margin: .6rem .85rem 0; color: #5d7391; font-size: .72rem; line-height: 1.45; }
+.slip-card-head .slip-bill-code { color: #1d65ad; font-size: .7rem; font-weight: 750; letter-spacing: .02em; }
 @media (max-width: 520px) { .slip-card-finance.is-multi { grid-template-columns: repeat(2, minmax(0, 1fr)); }.slip-card-finance.is-multi > div:nth-child(4) { grid-column: 1 / -1; border-top: 1px solid #dce8f4; border-left: 0; } }

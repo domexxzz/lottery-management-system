@@ -12,6 +12,7 @@ import { clearDraft } from "../new/slip-safety";
  */
 export function PlacedBillPanel({
   sequence,
+  billCode,
   customer,
   itemCount,
   totalStake,
@@ -21,6 +22,7 @@ export function PlacedBillPanel({
   duplicate,
 }: {
   sequence: number;
+  billCode: string | null;
   customer: string;
   itemCount: number;
   totalStake: string;
@@ -43,6 +45,7 @@ export function PlacedBillPanel({
         {duplicate && <p>ระบบได้รับคำขอซ้ำ จึงแสดงบิลเดิมโดยไม่สร้างบิลใหม่</p>}
         <dl>
           <div><dt>เลขบิล</dt><dd>บิล {sequence.toLocaleString("th-TH")}</dd></div>
+          {billCode && <div><dt>รหัสบิล</dt><dd>{billCode}</dd></div>}
           <div><dt>ลูกค้า</dt><dd>{customer}</dd></div>
           <div><dt>จำนวนรายการ</dt><dd>{itemCount.toLocaleString("th-TH")} รายการ</dd></div>
           <div className="is-total"><dt>ยอดรวม</dt><dd>{total} บาท</dd></div>
