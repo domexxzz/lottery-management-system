@@ -31,6 +31,7 @@ export const PERMISSIONS = [
   "evidence.upload",
   "evidence.review",
   "evidence.delete",
+  "evidence.deleteAll",
   /** ตั้งเพดานเฉพาะเลข / ปลดเลขเต็ม (เฉพาะ Owner) */
   "number.capOverride",
 ] as const;
@@ -74,6 +75,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "evidence.upload",
     "evidence.review",
     "evidence.delete",
+    "evidence.deleteAll",
     "number.capOverride",
   ],
   ADMIN: [
@@ -95,6 +97,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "evidence.view",
     "evidence.upload",
     "evidence.review",
+    "evidence.deleteAll",
   ],
   AGENT: [
     "bill.viewOwn",

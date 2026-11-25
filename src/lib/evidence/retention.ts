@@ -13,7 +13,7 @@ export { daysUntilExpiry, evidenceCutoff, evidenceExpiresAt, EVIDENCE_RETENTION_
  * อายุการเก็บรูปหลักฐาน และการลบหลักฐานทีละมาก ๆ
  *
  * - เก็บรูปไว้ 1 ปีนับจากวันที่แนบ ครบแล้วระบบลบเอง (purgeExpiredEvidence)
- * - Owner ลบหลักฐานทั้งหมดได้ในครั้งเดียว (deleteAllEvidence)
+ * - Owner/Admin ลบหลักฐานทั้งหมดได้ในครั้งเดียว (deleteAllEvidence)
  *
  * ทั้งสองทางไม่สนสถานะการตรวจ (รอตรวจ / ผ่าน / ตีกลับ) และไม่เปลี่ยนสถานะบิลหรือการตรวจอื่นใด
  * ลบแถวในฐานข้อมูลก่อนใน transaction เดียวพร้อม Audit แล้วค่อยลบไฟล์ใน Storage
@@ -96,7 +96,7 @@ export type EvidenceDrawSummary = { drawId: string; drawName: string; drawDate: 
 
 /** หลักฐานที่มีอยู่ตอนนี้ แยกตามงวด ใช้แสดงในหน้าต่างยืนยันก่อนลบทั้งหมด */
 export async function evidenceSummaryByDraw(actor: Actor): Promise<{ total: number; draws: EvidenceDrawSummary[] }> {
-  requirePermission(actor, "evidence.delete");
+  requirePermission(actor, "evidence.deleteAll");
   const rows = await prisma.$queryRaw<{ drawId: string; drawName: string; drawDate: Date | null; count: number }[]>(Prisma.sql`
     SELECT d.id AS "drawId", d.name AS "drawName", d."drawDate", COUNT(a.id)::int AS count
     FROM ${table("bill_attachments")} a
@@ -110,7 +110,7 @@ export async function evidenceSummaryByDraw(actor: Actor): Promise<{ total: numb
 }
 
 /**
- * Owner ลบหลักฐานทุกรูปขององค์กร
+ * Owner/Admin ลบหลักฐานทุกรูปขององค์กร
  *
  * expectedTotal คือจำนวนที่เห็นในหน้าต่างยืนยัน ถ้าระหว่างนั้นมีคนแนบหรือลบรูปเพิ่ม
  * จำนวนจะไม่ตรง ระบบไม่ลบและให้เปิดหน้าต่างยืนยันใหม่ จะได้ไม่ลบสิ่งที่ผู้ใช้ไม่ได้เห็น
@@ -120,7 +120,7 @@ export async function deleteAllEvidence(
   expectedTotal: number,
   storage: PrivateObjectStorage = getStorageProvider(),
 ): Promise<{ deleted: number }> {
-  requirePermission(actor, "evidence.delete");
+  requirePermission(actor, "evidence.deleteAll");
   const current = await prisma.billAttachment.count({ where: { organizationId: actor.organizationId } });
   if (current !== expectedTotal) {
     throw new ConflictError(`จำนวนหลักฐานเปลี่ยนไปแล้ว (ตอนนี้มี ${current} รูป) กรุณาเปิดหน้าต่างยืนยันใหม่`);
@@ -134,7 +134,7 @@ export async function deleteAllEvidence(
       actorId: actor.userId,
       requestId: actor.requestId,
       ipAddress: actor.ipAddress,
-      reason: "Owner ลบหลักฐานทั้งหมด",
+      reason: `${actor.role === "OWNER" ? "Owner" : "Admin"} ลบหลักฐานทั้งหมด`,
     }, storage);
     if (deleted >= expectedTotal) break;
   }

@@ -23,12 +23,15 @@ describe("Admin เป็นผู้ปฏิบัติงานและผ�
     }
   });
 
-  test("สิทธิ์ลบงวดและหลักฐานยังเป็นของ Owner", () => {
+  test("Owner ลบงวดและหลักฐานรายรูปได้ ส่วน Admin ลบหลักฐานทั้งหมดได้", () => {
     for (const permission of ["draw.delete", "evidence.delete"] as const) {
       expect(can("OWNER", permission)).toBe(true);
       expect(can("ADMIN", permission)).toBe(false);
       expect(can("AGENT", permission)).toBe(false);
     }
+    expect(can("OWNER", "evidence.deleteAll")).toBe(true);
+    expect(can("ADMIN", "evidence.deleteAll")).toBe(true);
+    expect(can("AGENT", "evidence.deleteAll")).toBe(false);
   });
 });
 

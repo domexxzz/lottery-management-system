@@ -8,7 +8,7 @@ export type EvidenceDrawCount = { drawId: string; label: string; count: number }
 const COUNT = new Intl.NumberFormat("th-TH");
 
 /**
- * ปุ่มลบหลักฐานทั้งหมด (เฉพาะ Owner)
+ * ปุ่มลบหลักฐานทั้งหมด (Owner/Admin)
  *
  * ลบทุกรูปไม่ว่าจะรอตรวจ ผ่าน หรือตีกลับ ไม่ใช่การตีกลับ
  * กดแล้วต้องยืนยันอีกครั้งในหน้าต่างที่บอกว่ามีงวดไหนบ้าง งวดละกี่รูป

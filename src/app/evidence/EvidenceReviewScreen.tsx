@@ -30,8 +30,9 @@ export async function EvidenceReviewScreen({ actor, params, mode }: { actor: Act
   // ลบรูปที่ครบ 1 ปีก่อนแสดงรายการ (อย่างมากชั่วโมงละครั้ง ไม่ทำให้หน้าช้า)
   await purgeExpiredEvidenceSoon();
   const canDelete = can(actor.role, "evidence.delete");
+  const canDeleteAll = can(actor.role, "evidence.deleteAll");
   const now = new Date();
-  const summary = canDelete ? await evidenceSummaryByDraw(actor) : null;
+  const summary = canDeleteAll ? await evidenceSummaryByDraw(actor) : null;
   const result = await listEvidenceReviewQueue(actor, {
     status: mode === "verified" ? "VERIFIED" : undefined,
     statuses: mode === "queue" ? ["PENDING", "REJECTED"] : undefined,

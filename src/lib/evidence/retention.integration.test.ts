@@ -80,11 +80,19 @@ describe("ลบหลักฐานทั้งหมด", () => {
     expect(await prisma.billAttachment.count()).toBe(1);
   });
 
-  test("เฉพาะ Owner: Admin และ Agent ลบทั้งหมดไม่ได้", async () => {
-    const { storage } = fakeStorage();
-    await expect(deleteAllEvidence(f.actors.ADMIN, 0, storage)).rejects.toThrow();
+  test("Admin ลบหลักฐานทั้งหมดได้ แต่ Agent ไม่มีสิทธิ์", async () => {
+    const bill = await billIn(f.draw.id);
+    await attach(bill, "PENDING");
+    const summary = await evidenceSummaryByDraw(f.actors.ADMIN);
+    expect(summary.total).toBe(1);
+    const { storage, deleted } = fakeStorage();
     await expect(deleteAllEvidence(f.actors.AGENT1, 0, storage)).rejects.toThrow();
-    await expect(evidenceSummaryByDraw(f.actors.ADMIN)).rejects.toThrow();
+    await expect(evidenceSummaryByDraw(f.actors.AGENT1)).rejects.toThrow();
+    expect((await deleteAllEvidence(f.actors.ADMIN, summary.total, storage)).deleted).toBe(1);
+    expect(deleted).toHaveLength(1);
+    expect(await prisma.billAttachment.count()).toBe(0);
+    const audit = await prisma.auditEvent.findFirst({ where: { entityType: "BillAttachment", entityId: "bulk" } });
+    expect(audit?.reason).toBe("Admin ลบหลักฐานทั้งหมด");
   });
 });
 

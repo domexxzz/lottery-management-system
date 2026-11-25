@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({ expectedTotal: z.number().int().min(0) });
 
-/** Owner ลบหลักฐานทั้งหมด หลังยืนยันในหน้าต่างที่แสดงจำนวนรูปแยกตามงวด */
+/** Owner/Admin ลบหลักฐานทั้งหมด หลังยืนยันในหน้าต่างที่แสดงจำนวนรูปแยกตามงวด */
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
