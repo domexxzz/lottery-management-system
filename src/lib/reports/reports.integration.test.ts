@@ -151,15 +151,20 @@ describe("รายงานตรงกับ Settlement", () => {
     ]));
   });
 
-  test("รายงาน Agent แบบย่อแสดง 2 งวดล่าสุด ยอดขาย ค่าคอม และบิลถูกรางวัล", async () => {
+  test("รายงาน Agent แสดงยอดขาย จ่ายรางวัล ค่าคอม และบิลถูกรางวัลของตน", async () => {
     await settledDraw();
 
     const report = await getSimpleAgentReport(f.actors.AGENT1);
-    expect(report.rounds.length).toBeLessThanOrEqual(2);
+    expect(report.rounds).toHaveLength(1);
     const round = report.rounds.find((item) => item.drawId === f.draw.id);
     expect(round).toMatchObject({ billCount: 1, winnerCount: 1, commissionFinal: true });
     expect(round?.gross.greaterThan(0)).toBe(true);
+    expect(round?.payout.greaterThan(0)).toBe(true);
     expect(round?.commission.greaterThan(0)).toBe(true);
+    expect(report.totals.gross.equals(round!.gross)).toBe(true);
+    expect(report.totals.payout.equals(round!.payout)).toBe(true);
+    expect(report.totals.commission.equals(round!.commission)).toBe(true);
+    expect(report.selectedDrawId).toBe("");
     expect(report.winners).toHaveLength(1);
     expect(report.winners[0]).toMatchObject({ title: "A1 บิลหนึ่ง" });
 
@@ -174,6 +179,50 @@ describe("รายงานตรงกับ Settlement", () => {
     expect(selected.selectedDrawId).toBe(f.draw.id);
     expect(selected.rounds[0]?.drawId).toBe(f.draw.id);
     expect(selected.drawOptions.some((draw) => draw.id === f.draw.id)).toBe(true);
+  });
+
+  test("ตัวกรองประเภท งวด และช่วงวันที่ใช้กับยอดรวมและรายการบิลชุดเดียวกัน", async () => {
+    await settledDraw();
+    const laoDay = new Date(f.draw.drawDate!.getTime() + 32 * 86_400_000).toISOString().slice(0, 10);
+    const laoDraw = await prisma.draw.create({
+      data: {
+        organizationId: f.org.id, name: "งวดลาวทดสอบ", lotteryType: "LAO", drawDate: new Date(`${laoDay}T00:00:00.000Z`),
+        opensAt: new Date(`${laoDay}T00:00:00.000Z`), cutoffAt: new Date(`${laoDay}T12:00:00.000Z`), status: "CLOSED",
+      },
+    });
+    await prisma.bill.create({
+      data: {
+        organizationId: f.org.id, agentId: f.agents.agent1.id, drawId: laoDraw.id,
+        billNumber: "AGENT-LAO-001", title: "บิลลาว", status: "SETTLED", totalStake: "50", totalPayout: "5",
+        createdById: f.users.agentUser1.id, confirmedAt: new Date(),
+      },
+    });
+    await prisma.settlement.create({
+      data: {
+        organizationId: f.org.id, drawId: laoDraw.id, agentId: f.agents.agent1.id,
+        gross: "50", payout: "5", commission: "10", net: "35", commissionRateSnapshot: "20", status: "APPROVED",
+      },
+    });
+
+    const all = await getSimpleAgentReport(f.actors.AGENT1);
+    expect(all.rounds).toHaveLength(2);
+    expect(all.billHistory.counts.all).toBe(2);
+    expect(all.totals.gross.equals(all.rounds[0]!.gross.plus(all.rounds[1]!.gross))).toBe(true);
+    expect(all.totals.payout.equals(all.rounds[0]!.payout.plus(all.rounds[1]!.payout))).toBe(true);
+    expect(all.totals.commission.equals(all.rounds[0]!.commission.plus(all.rounds[1]!.commission))).toBe(true);
+
+    const thai = await getSimpleAgentReport(f.actors.AGENT1, undefined, "ALL", 1, { lottery: "THAI_GOVERNMENT" });
+    expect(thai.rounds).toHaveLength(1);
+    expect(thai.billHistory.rows[0]?.title).toBe("A1 บิลหนึ่ง");
+    const lao = await getSimpleAgentReport(f.actors.AGENT1, undefined, "ALL", 1, { lottery: "LAO_COMBINED", dateFrom: laoDay, dateTo: laoDay });
+    expect(lao.rounds).toHaveLength(1);
+    expect(lao.totals.gross.toFixed(2)).toBe("50.00");
+    expect(lao.totals.payout.toFixed(2)).toBe("5.00");
+    expect(lao.totals.commission.toFixed(2)).toBe("10.00");
+    expect(lao.billHistory.rows.map((bill) => bill.title)).toEqual(["บิลลาว"]);
+    const selected = await getSimpleAgentReport(f.actors.AGENT1, laoDraw.id);
+    expect(selected.selectedDrawId).toBe(laoDraw.id);
+    expect(selected.billHistory.counts.all).toBe(1);
   });
 
   test("ตัวกรองทุกรอบรวมยอดและ Settlement ของ Agent จากหลายรอบ", async () => {

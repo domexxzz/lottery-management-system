@@ -17,6 +17,7 @@ export function DashboardFilters({ draws, category, selectedDrawId }: { draws: D
 
   function updateRange(value: DateRangeValue) {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("page");
     if (value.startDate) params.set("dateFrom", value.startDate); else params.delete("dateFrom");
     if (value.endDate) params.set("dateTo", value.endDate); else params.delete("dateTo");
     startTransition(() => router.replace(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false }));

@@ -27,7 +27,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const params = await searchParams;
   if (actor.role === "AGENT") {
     const status: SimpleAgentBillFilter = params.result === "WON" || params.result === "LOST" || params.result === "PENDING" ? params.result : "ALL";
-    return <AgentReports actor={actor} selectedDrawId={params.drawId ?? params.draw} billStatus={status} page={Number(params.page) || 1} />;
+    return <AgentReports actor={actor} selectedDrawId={params.drawId ?? params.draw} billStatus={status} page={Number(params.page) || 1} lottery={params.lottery} dateFrom={params.dateFrom} dateTo={params.dateTo} />;
   }
 
   const { draw, drawId, lottery, dateFrom, dateTo } = params;

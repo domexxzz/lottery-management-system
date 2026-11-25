@@ -2606,3 +2606,12 @@
 .custom-preview-horizontal strong { color: #173957; font-size: .7rem; white-space: nowrap; }
 @media (max-width: 900px) { .chart-type-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.chart-axis-panels,.chart-filter-columns,.chart-display-settings { grid-template-columns: 1fr; }.custom-chart-guided-header { align-items: stretch; flex-direction: column; }.custom-chart-guided-summary { min-width: 0; }.custom-preview-pie { grid-template-columns: 1fr; }.custom-preview-pie svg { max-height: 270px; }.custom-preview-legend { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 600px) { .chart-type-grid { grid-template-columns: 1fr; }.chart-axis-panel-fields > label { grid-template-columns: 1fr; }.chart-step-nav span { font-size: 0; }.chart-step-nav span b { font-size: .72rem; }.custom-chart-guided-header,.chart-settings-step,.custom-preview-shell { border-radius: 11px; }.custom-preview-shell > header { flex-direction: column; }.custom-preview-svg { min-width: 620px; }.custom-preview-legend { grid-template-columns: 1fr; }.custom-preview-horizontal > button { grid-template-columns: 22px minmax(90px,120px) 1fr; }.custom-preview-horizontal strong { grid-column: 2 / -1; }.custom-chart-guided-actions { flex-wrap: wrap; }.custom-chart-guided-actions > div { flex-basis: 100%; }.custom-chart-guided-actions button { flex: 1; } }
+
+/* Agent report: financial totals follow the shared lottery and date filters. */
+.agent-simple-report { max-width: none !important; }
+.agent-simple-report .dashboard-lottery-filter,.agent-simple-report .dashboard-filters { margin-bottom: 0; }
+.agent-simple-report .agent-bill-overview { grid-template-columns: minmax(240px,1.35fr) repeat(3,minmax(160px,1fr)); }
+.agent-simple-report .agent-bill-overview > div { min-width: 0; }
+.agent-simple-report .agent-bill-overview > div > strong { overflow-wrap: anywhere; }
+@media (max-width: 1100px) { .agent-simple-report .agent-bill-overview { grid-template-columns: repeat(3,minmax(0,1fr)); }.agent-simple-report .agent-bill-overview-heading { grid-column: 1/-1; } }
+@media (max-width: 650px) { .agent-simple-report .agent-bill-overview { grid-template-columns: 1fr; }.agent-simple-report .agent-bill-overview-heading { grid-column: auto; } }

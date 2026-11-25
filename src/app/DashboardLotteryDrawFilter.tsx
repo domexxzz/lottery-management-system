@@ -44,6 +44,7 @@ export function DashboardLotteryDrawFilter({
   function navigate(nextCategory: DashboardLotteryCategory, drawId?: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("page");
+    params.delete("draw");
     if (nextCategory === "ALL") params.delete("lottery");
     else params.set("lottery", nextCategory);
     if (drawId) params.set("drawId", drawId);
