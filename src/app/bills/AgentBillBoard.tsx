@@ -331,7 +331,7 @@ export async function AgentBillBoard({
         <section className="slip-panel slip-history-table" aria-labelledby="slip-history-heading">
           <header className="slip-panel-head">
             <h2 id="slip-history-heading">{filter.showAll ? "ประวัติรายการทั้งหมด" : "5 รายการล่าสุด"}</h2>
-            <span>{filter.showAll ? `แสดงครั้งละไม่เกิน ${pageSize.toLocaleString("th-TH")} รายการ` : "แสดงรายการล่าสุดก่อน"} · พบทั้งหมด {total.toLocaleString("th-TH")}</span>
+            <span>{filter.showAll ? `แสดงครั้งละไม่เกิน ${pageSize.toLocaleString("th-TH")} บิล` : "แสดงบิลล่าสุดก่อน"} · พบทั้งหมด {total.toLocaleString("th-TH")} บิล</span>
           </header>
           {noCurrentDraw ? (
             <div className="slip-empty slip-empty-scope">
@@ -348,7 +348,10 @@ export async function AgentBillBoard({
             <ol className="slip-history-cards">
               {bills.map((bill, index) => {
                 const betStatus = betStatusOf(bill);
-                const statusLabel = bill.cancelReason === "ลบบิลก่อนปิดรับ" ? "ลบแล้ว" : BET_STATUS_LABEL[betStatus];
+                const hasPendingPart = bill.parts.some((part) => part.status === "CONFIRMED" || part.status === "LOCKED");
+                const statusLabel = bill.cancelReason === "ลบบิลก่อนปิดรับ" && betStatus === "CANCELLED"
+                  ? "ลบแล้ว"
+                  : betStatus === "WON" && hasPendingPart ? "ถูกรางวัล · บางประเภทยังรอผล" : BET_STATUS_LABEL[betStatus];
                 const payout = Number(bill.totalPayout);
                 return (
                   <li key={bill.id} className="slip-history-card">
@@ -368,8 +371,12 @@ export async function AgentBillBoard({
                       <p><span>ชื่อลูกค้า</span><strong>{bill.title}</strong></p>
                       <p><span>ชื่อ Agent</span><strong>{bill.agent.code} · {bill.agent.name}</strong></p>
                     </div>
-                    <div className="slip-card-finance">
-                      <div className="slip-card-draw"><LotteryFlag lotteryType={bill.draw.lotteryType} /><span><small>{bill.draw.lotteryType === "THAI_GOVERNMENT" ? "งวด" : lotteryLabel(bill.draw.lotteryType)}</small><strong>{drawDateLabel(bill.draw)}</strong></span></div>
+                    <div className={`slip-card-finance ${bill.parts.length > 1 ? "is-multi" : ""}`}>
+                      {bill.parts.length > 1 ? (
+                        <div className="slip-card-types"><small>ประเภทหวยในบิลนี้</small><div>{bill.parts.map((part) => <span key={part.id} className={part.status === "CANCELLED" ? "is-cancelled" : undefined}><LotteryFlag lotteryType={part.draw.lotteryType} />{lotteryLabel(part.draw.lotteryType)} · {drawDateLabel(part.draw)}</span>)}</div></div>
+                      ) : (
+                        <div className="slip-card-draw"><LotteryFlag lotteryType={bill.draw.lotteryType} /><span><small>{bill.draw.lotteryType === "THAI_GOVERNMENT" ? "งวด" : lotteryLabel(bill.draw.lotteryType)}</small><strong>{drawDateLabel(bill.draw)}</strong></span></div>
+                      )}
                       <div><small>ยอดเดิมพัน</small><strong>{baht(Number(bill.totalStake))} บาท</strong></div>
                       <div><small>จำนวนเลข</small><strong>{bill._count.items.toLocaleString("th-TH")} รายการ</strong></div>
                       <div><small>เงินรางวัล</small><strong className={payout > 0 ? "is-won" : undefined}>{payout > 0 ? `${baht(payout)} บาท` : "—"}</strong></div>
@@ -384,9 +391,9 @@ export async function AgentBillBoard({
             </ol>
           )}
           <footer className={`slip-pagination ${filter.showAll ? "" : "is-preview"}`}>
-            <span>แสดง {firstRow.toLocaleString("th-TH")}–{lastRow.toLocaleString("th-TH")} จาก {total.toLocaleString("th-TH")} รายการ</span>
+            <span>แสดง {firstRow.toLocaleString("th-TH")}–{lastRow.toLocaleString("th-TH")} จาก {total.toLocaleString("th-TH")} บิล</span>
             {!filter.showAll && total > 5 && (
-              <Link className="slip-show-all" href={historyHref("/bills", filter, { all: "1", page: 1 })}>ดูเพิ่มเติมทั้งหมด {total.toLocaleString("th-TH")} รายการ →</Link>
+              <Link className="slip-show-all" href={historyHref("/bills", filter, { all: "1", page: 1 })}>ดูเพิ่มเติมทั้งหมด {total.toLocaleString("th-TH")} บิล →</Link>
             )}
             {filter.showAll && pageCount > 1 && (
               <nav aria-label="เลือกหน้า">
@@ -405,11 +412,12 @@ export async function AgentBillBoard({
 
         <aside className="slip-panel slip-history-summary" aria-labelledby="slip-summary-heading">
           <header className="slip-panel-head"><h2 id="slip-summary-heading">สรุปช่วงที่เลือก</h2></header>
+          <p className="slip-summary-note">บิลที่มีหลายประเภทหวยนับเป็น 1 บิล และรวมยอดทุกประเภทในบิลนั้น</p>
           <dl>
             <div><dt>ยอดเดิมพันรวม</dt><dd className="is-blue">{baht(stake)} บาท</dd></div>
-            <div><dt>จำนวนรายการ</dt><dd>{counts.ALL.toLocaleString("th-TH")}</dd></div>
-            <div><dt>ลบแล้ว</dt><dd className="is-cancelled">{counts.CANCELLED.toLocaleString("th-TH")} รายการ</dd></div>
-            <div><dt>ถูกรางวัล</dt><dd className="is-green">{counts.WON.toLocaleString("th-TH")} รายการ</dd></div>
+            <div><dt>จำนวนบิล</dt><dd>{counts.ALL.toLocaleString("th-TH")}</dd></div>
+            <div><dt>ลบแล้ว</dt><dd className="is-cancelled">{counts.CANCELLED.toLocaleString("th-TH")} บิล</dd></div>
+            <div><dt>ถูกรางวัล</dt><dd className="is-green">{counts.WON.toLocaleString("th-TH")} บิล</dd></div>
             <div><dt>เงินรางวัลรวม</dt><dd>{baht(payout)} บาท</dd></div>
             <div><dt>อัตราถูกรางวัล</dt><dd>{wonShare.toFixed(1)}%</dd></div>
           </dl>
@@ -420,7 +428,7 @@ export async function AgentBillBoard({
               aria-label={`ถูกรางวัล ${counts.WON} ไม่ถูกรางวัล ${counts.LOST} ลบแล้ว ${counts.CANCELLED} กำลังแทง ${counts.PENDING}`}
               style={{ background: `conic-gradient(#12a35c 0 ${wonShare}%, #e2475a ${wonShare}% ${wonShare + lostShare}%, #e8941a ${wonShare + lostShare}% ${wonShare + lostShare + cancelledShare}%, #c9d8e8 ${wonShare + lostShare + cancelledShare}% 100%)` }}
             >
-              <span><strong>{decided.toLocaleString("th-TH")}</strong>ประวัติ</span>
+              <span><strong>{decided.toLocaleString("th-TH")}</strong>บิล</span>
             </div>
             <ul>
               <li><i className="is-won" />ถูกรางวัล <strong>{counts.WON}</strong></li>

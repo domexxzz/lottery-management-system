@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     const exportInput: ReportExportInput = {
       filename: `bill-history_${filter.from || "all"}_${filter.to || filter.from || "all"}`,
       title: "ประวัติบิล",
-      subtitle: "ข้อมูลทั้งหมดที่ผ่านตัวกรอง ไม่จำกัดเฉพาะหน้าปัจจุบัน",
+      subtitle: "หนึ่งแถวต่อหนึ่งบิลที่ผ่านตัวกรอง รวมยอดทุกประเภทหวยในบิล (สูงสุด 5,000 บิล)",
       sheetName: "Details",
       metadata: [
         { label: "ช่วงข้อมูล", value: period }, { label: "ประเภทหวย", value: filter.lotteryType === "LAO_COMBINED" ? "หวยลาวและหวยลาวชุด" : filter.lotteryType ? lotteryLabel(filter.lotteryType) : "ทุกประเภท" },
@@ -53,12 +53,17 @@ export async function GET(request: Request) {
       columns: [
         { header: "เลขบิล", type: "text", width: 14 }, { header: "ชื่อลูกค้า", type: "text", width: 25 },
         { header: "รหัส Agent", type: "text", width: 14 }, { header: "ชื่อ Agent", type: "text", width: 25 },
-        { header: "ประเภทหวย", type: "text", width: 16 }, { header: "งวด", type: "text", width: 22 },
+        { header: "ประเภทหวยในบิล", type: "text", width: 35 }, { header: "งวด", type: "text", width: 35 },
         { header: "วันที่ทำรายการ", type: "datetime", width: 20 }, { header: "จำนวนรายการเลข", type: "integer", width: 18 },
         { header: "ยอดเดิมพัน", type: "money", width: 18 }, { header: "เงินรางวัล", type: "money", width: 18 },
         { header: "สถานะ", type: "text", width: 16 },
       ],
-      rows: bills.map((bill) => [visibleBillNumber(bill.drawSequence), bill.title, bill.agent.code, bill.agent.name, lotteryLabel(bill.draw.lotteryType), drawDateLabel(bill.draw), bill.createdAt, bill._count.items, Number(bill.totalStake), Number(bill.totalPayout), BET_STATUS_LABEL[betStatusOf(bill)]]),
+      rows: bills.map((bill) => [
+        visibleBillNumber(bill.drawSequence), bill.title, bill.agent.code, bill.agent.name,
+        bill.parts.map((part) => lotteryLabel(part.draw.lotteryType)).join(" / "),
+        bill.parts.map((part) => drawDateLabel(part.draw)).join(" / "),
+        bill.createdAt, bill._count.items, Number(bill.totalStake), Number(bill.totalPayout), BET_STATUS_LABEL[betStatusOf(bill)],
+      ]),
     };
     const output = createReportDownload(exportInput, params.get("format") === "xlsx" ? "xlsx" : "csv");
     return new NextResponse(output.body, { headers: output.headers });

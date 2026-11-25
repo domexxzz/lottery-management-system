@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { BillStatus, LotteryType } from "@prisma/client";
-import type { BetTab } from "./betting";
+import { betStatusOf, type BetTab } from "./betting";
 import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { billScope, requirePermission, type Actor } from "@/lib/auth/context";
@@ -1044,23 +1044,6 @@ export async function getBill(actor: Actor, billId: string) {
 
 // ---------------------------------------------------------------- โพยของ Agent
 
-function betTabWhere(tab: BetTab): Prisma.BillWhereInput {
-  switch (tab) {
-    case "PENDING":
-      return { status: { in: ["CONFIRMED", "LOCKED"] } };
-    case "WON":
-      return { status: "SETTLED", totalPayout: { gt: 0 } };
-    case "LOST":
-      return { status: "SETTLED", totalPayout: { lte: 0 } };
-    case "CANCELLED":
-      return { status: "CANCELLED" };
-    default:
-      // หน้า "ทั้งหมด" หมายถึงบิลที่ยังใช้งานอยู่ ส่วนบิลที่ลบแล้วมีแท็บแยก
-      // เพื่อไม่ให้จำนวนบิลปัจจุบันดูมากกว่ายอดที่นำไปคำนวณจริง
-      return { status: { notIn: ["DRAFT", "CANCELLED"] } };
-  }
-}
-
 export type BetBillFilter = {
   tab: BetTab;
   lotteryType?: LotteryType;
@@ -1076,14 +1059,47 @@ export type BetBillFilter = {
   sort?: "newest" | "oldest" | "stake_desc" | "payout_desc";
 };
 
-function betOrderBy(sort: BetBillFilter["sort"]): Prisma.BillOrderByWithRelationInput[] {
-  if (sort === "oldest") return [{ createdAt: "asc" }, { id: "asc" }];
-  if (sort === "stake_desc") return [{ totalStake: "desc" }, { createdAt: "desc" }, { id: "desc" }];
-  if (sort === "payout_desc") return [{ totalPayout: "desc" }, { createdAt: "desc" }, { id: "desc" }];
-  return [{ createdAt: "desc" }, { id: "desc" }];
+export const BET_PAGE_SIZE = 10;
+
+const BET_HISTORY_SELECT = {
+  id: true, slipId: true, billNumber: true, drawSequence: true, title: true,
+  status: true, cancelReason: true, totalStake: true, totalPayout: true,
+  createdAt: true, confirmedAt: true,
+  agent: { select: { code: true, name: true } },
+  draw: { select: { name: true, drawDate: true, lotteryType: true, status: true } },
+  _count: { select: { items: true } },
+} satisfies Prisma.BillSelect;
+
+type BetHistoryPart = Prisma.BillGetPayload<{ select: typeof BET_HISTORY_SELECT }>;
+const BET_HISTORY_CORE_SELECT = {
+  id: true, slipId: true, status: true, totalStake: true, totalPayout: true, createdAt: true, drawSequence: true,
+} satisfies Prisma.BillSelect;
+type BetHistoryCore = Prisma.BillGetPayload<{ select: typeof BET_HISTORY_CORE_SELECT }>;
+
+function slipFacts(id: string, parts: BetHistoryCore[]) {
+  const primary = parts.find((part) => part.id === id) ?? parts[0]!;
+  const active = parts.filter((part) => part.status !== "CANCELLED");
+  const visible = active.length > 0 ? active : parts;
+  const totalStake = visible.reduce((sum, part) => sum.plus(part.totalStake), new Prisma.Decimal(0));
+  const totalPayout = visible.reduce((sum, part) => sum.plus(part.totalPayout), new Prisma.Decimal(0));
+  const hasWon = active.some((part) => part.status === "SETTLED" && part.totalPayout.greaterThan(0));
+  const hasPending = active.some((part) => part.status === "CONFIRMED" || part.status === "LOCKED");
+  const status: BillStatus = active.length === 0 ? "CANCELLED" : hasWon ? "SETTLED" : hasPending ? "CONFIRMED" : "SETTLED";
+  return { id, status, totalStake, totalPayout, createdAt: primary.createdAt };
 }
 
-export const BET_PAGE_SIZE = 10;
+function groupBetSlip(id: string, parts: BetHistoryPart[]) {
+  const primary = parts.find((part) => part.id === id) ?? parts[0]!;
+  const facts = slipFacts(id, parts);
+  const active = parts.filter((part) => part.status !== "CANCELLED");
+  const visible = active.length > 0 ? active : parts;
+  const typeOrder: Record<LotteryType, number> = { THAI_GOVERNMENT: 0, LAO: 1, LAO_SET: 2 };
+  return {
+    ...primary, ...facts,
+    _count: { items: visible.reduce((sum, part) => sum + part._count.items, 0) },
+    parts: [...parts].sort((left, right) => typeOrder[left.draw.lotteryType] - typeOrder[right.draw.lotteryType] || left.createdAt.getTime() - right.createdAt.getTime()).map((part) => ({ id: part.id, status: part.status, draw: part.draw, itemCount: part._count.items })),
+  };
+}
 
 function betBaseWhere(actor: Actor, filter: BetBillFilter): Prisma.BillWhereInput {
   const query = filter.query?.trim();
@@ -1113,70 +1129,69 @@ function betBaseWhere(actor: Actor, filter: BetBillFilter): Prisma.BillWhereInpu
   };
 }
 
-/**
- * ประวัติรายการแบบแบ่งหน้า พร้อมจำนวนต่อแท็บและยอดรวมของช่วงที่กรอง
- *
- * ดึงแถวเฉพาะหน้าที่แสดง (10 แถว) ส่วนตัวเลขสรุปคำนวณด้วย aggregate ในฐานข้อมูล
- * ไม่ดึงบิลทั้งหมดมานับในหน่วยความจำ
- */
+/** ประวัติที่นับบิลหลายประเภทเป็นหนึ่งใบก่อนแบ่งหน้าและนับจำนวนในแต่ละแท็บ */
 export async function listBetBills(actor: Actor, filter: BetBillFilter & { page?: number; pageSize?: number }) {
   requirePermission(actor, "bill.viewOwn");
 
   const base = betBaseWhere(actor, filter);
   const pageSize = filter.pageSize ?? BET_PAGE_SIZE;
-
-  const [grouped, won, totals, sequence] = await Promise.all([
-    prisma.bill.groupBy({ by: ["status"], where: { ...base, status: { not: "DRAFT" } }, _count: { _all: true } }),
-    prisma.bill.count({ where: { ...base, ...betTabWhere("WON") } }),
-    prisma.bill.aggregate({
-      // ยอดสรุปต้องไม่รวมบิลร่างและบิลที่ลบแล้ว
-      where: { ...base, ...betTabWhere("ALL") },
-      _sum: { totalStake: true, totalPayout: true },
-    }),
-    prisma.bill.aggregate({
-      // เลขสูงสุดยังนับบิลที่ลบแล้ว เพื่ออธิบายช่องว่างของ Running Number
-      where: { ...base, status: { not: "DRAFT" } },
-      _max: { drawSequence: true },
-    }),
-  ]);
-
-  const byStatus = new Map(grouped.map((row) => [row.status, row._count._all]));
-  const settled = byStatus.get("SETTLED") ?? 0;
-  const pending = (byStatus.get("CONFIRMED") ?? 0) + (byStatus.get("LOCKED") ?? 0);
-  const cancelled = byStatus.get("CANCELLED") ?? 0;
+  // ค้นหาเฉพาะ id ก่อน เพื่อให้ตัวกรองประเภท/งวดเลือกบิลทั้งใบได้แม้ตรงเงื่อนไขเพียงส่วนเดียว
+  const matched = await prisma.bill.findMany({
+    where: { ...base, status: { not: "DRAFT" } },
+    select: { id: true, slipId: true },
+  });
+  const slipIds = [...new Set(matched.map((part) => part.slipId ?? part.id))];
+  const partWhere: Prisma.BillWhereInput = {
+    ...billScope(actor),
+    ...(filter.agentId && actor.role !== "AGENT" && { agentId: filter.agentId }),
+    status: { not: "DRAFT" },
+    OR: [{ id: { in: slipIds } }, { slipId: { in: slipIds } }],
+  };
+  const parts = slipIds.length === 0 ? [] : await prisma.bill.findMany({
+    where: partWhere,
+    select: BET_HISTORY_CORE_SELECT,
+  });
+  const bySlip = new Map<string, BetHistoryCore[]>();
+  for (const part of parts) {
+    const id = part.slipId ?? part.id;
+    bySlip.set(id, [...(bySlip.get(id) ?? []), part]);
+  }
+  const slips = slipIds.flatMap((id) => {
+    const group = bySlip.get(id);
+    return group?.length ? [slipFacts(id, group)] : [];
+  });
+  const active = slips.filter((slip) => slip.status !== "CANCELLED");
   const counts: Record<BetTab, number> = {
-    ALL: pending + settled,
-    PENDING: pending,
-    WON: won,
-    LOST: settled - won,
-    CANCELLED: cancelled,
+    ALL: active.length,
+    PENDING: active.filter((slip) => betStatusOf(slip) === "PENDING").length,
+    WON: active.filter((slip) => betStatusOf(slip) === "WON").length,
+    LOST: active.filter((slip) => betStatusOf(slip) === "LOST").length,
+    CANCELLED: slips.length - active.length,
   };
 
   const total = counts[filter.tab];
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const page = Math.min(Math.max(1, Math.floor(filter.page ?? 1)), pageCount);
-
-  const bills = total === 0 ? [] : await prisma.bill.findMany({
-    where: { ...base, ...betTabWhere(filter.tab) },
-    // createdAt มี index ร่วมกับ organizationId/agentId จึงแบ่งหน้าได้เร็ว
-    orderBy: betOrderBy(filter.sort),
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-    select: {
-      id: true,
-      billNumber: true,
-      drawSequence: true,
-      title: true,
-      status: true,
-      cancelReason: true,
-      totalStake: true,
-      totalPayout: true,
-      createdAt: true,
-      confirmedAt: true,
-      agent: { select: { code: true, name: true } },
-      draw: { select: { name: true, drawDate: true, lotteryType: true, status: true } },
-      _count: { select: { items: true } },
-    },
+  const selected = filter.tab === "ALL" ? active : slips.filter((slip) => betStatusOf(slip) === filter.tab);
+  selected.sort((left, right) => {
+    const sign = filter.sort === "oldest" ? 1 : -1;
+    if (filter.sort === "stake_desc") return Number(right.totalStake.minus(left.totalStake)) || right.createdAt.getTime() - left.createdAt.getTime();
+    if (filter.sort === "payout_desc") return Number(right.totalPayout.minus(left.totalPayout)) || right.createdAt.getTime() - left.createdAt.getTime();
+    return sign * (left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id));
+  });
+  const selectedIds = selected.slice((page - 1) * pageSize, page * pageSize).map((slip) => slip.id);
+  const displayedParts = selectedIds.length === 0 ? [] : await prisma.bill.findMany({
+    where: { ...partWhere, OR: [{ id: { in: selectedIds } }, { slipId: { in: selectedIds } }] },
+    select: BET_HISTORY_SELECT,
+  });
+  const displayedBySlip = new Map<string, BetHistoryPart[]>();
+  for (const part of displayedParts) {
+    const id = part.slipId ?? part.id;
+    displayedBySlip.set(id, [...(displayedBySlip.get(id) ?? []), part]);
+  }
+  const bills = selectedIds.flatMap((id) => {
+    const group = displayedBySlip.get(id);
+    return group?.length ? [groupBetSlip(id, group)] : [];
   });
 
   return {
@@ -1187,35 +1202,19 @@ export async function listBetBills(actor: Actor, filter: BetBillFilter & { page?
     pageSize,
     total,
     totals: {
-      stake: totals._sum.totalStake ?? new Prisma.Decimal(0),
-      payout: totals._sum.totalPayout ?? new Prisma.Decimal(0),
+      stake: active.reduce((sum, slip) => sum.plus(slip.totalStake), new Prisma.Decimal(0)),
+      payout: active.reduce((sum, slip) => sum.plus(slip.totalPayout), new Prisma.Decimal(0)),
     },
     sequence: {
-      highest: sequence._max.drawSequence,
+      highest: parts.reduce<number | null>((highest, part) => part.drawSequence === null ? highest : Math.max(highest ?? 0, part.drawSequence), null),
     },
   };
 }
 
-/** ส่งออก CSV ตามตัวกรองเดียวกับหน้าประวัติ จำกัดจำนวนแถวเพื่อไม่ให้ request ค้าง */
+/** ส่งออกบิลตามตัวกรองและการรวมบิลเดียวกับหน้าประวัติ จำกัดจำนวนแถวในไฟล์ */
 export async function exportBetBills(actor: Actor, filter: BetBillFilter, limit = 5000) {
-  requirePermission(actor, "bill.viewOwn");
-  return prisma.bill.findMany({
-    where: { ...betBaseWhere(actor, filter), ...betTabWhere(filter.tab) },
-    orderBy: betOrderBy(filter.sort),
-    take: limit,
-    select: {
-      billNumber: true,
-      drawSequence: true,
-      title: true,
-      status: true,
-      totalStake: true,
-      totalPayout: true,
-      createdAt: true,
-      agent: { select: { code: true, name: true } },
-      draw: { select: { name: true, drawDate: true, lotteryType: true } },
-      _count: { select: { items: true } },
-    },
-  });
+  const result = await listBetBills(actor, { ...filter, page: 1, pageSize: limit });
+  return result.bills;
 }
 
 /** ชื่อลูกค้าเดิมของ Agent คนหนึ่ง เรียงจากที่ใช้ล่าสุด จัดกลุ่มในฐานข้อมูลแทนการดึงบิลหลายพันใบ */

@@ -7,7 +7,7 @@ import { addRestriction } from "@/lib/draws/restrictions";
 import { BillItemsRejectedError } from "@/lib/errors";
 import { LAO_PRIZE_TYPES } from "@/lib/lao/rules";
 import { createLaoDraws } from "@/lib/lao/service";
-import { placeBill, placeSlip } from "./service";
+import { exportBetBills, listBetBills, placeBill, placeSlip } from "./service";
 
 /**
  * บิลเดียวหลายประเภทหวย: ผู้ใช้เห็นบิลเดียว (เลขบิลเดียว) ระบบเก็บบิลย่อยต่องวด
@@ -115,6 +115,36 @@ describe("บิลเดียวหลายประเภทหวย", () =
     expect(bills[0]!.slipId).toBeNull();
     expect(bills.slice(1).every((bill) => bill.slipId === bills[0]!.id)).toBe(true);
     expect(bills.reduce((sum, bill) => sum + Number(bill.totalStake), 0)).toBe(70);
+
+    const history = await listBetBills(f.actors.AGENT1, { tab: "ALL", pageSize: 5 });
+    expect(history.total).toBe(1);
+    expect(history.counts.ALL).toBe(1);
+    expect(history.bills).toHaveLength(1);
+    expect(history.bills[0]!.id).toBe(placed.slipId);
+    expect(history.bills[0]!.parts).toHaveLength(3);
+    expect(new Set(history.bills[0]!.parts.map((part) => part.draw.lotteryType))).toEqual(new Set(["THAI_GOVERNMENT", "LAO", "LAO_SET"]));
+    expect(history.bills[0]!.totalStake.toFixed(2)).toBe("70.00");
+    expect(history.bills[0]!._count.items).toBe(3);
+    const exported = await exportBetBills(f.actors.AGENT1, { tab: "ALL" });
+    expect(exported).toHaveLength(1);
+    expect(exported[0]!.parts).toHaveLength(3);
+
+    const thaiOnly = await listBetBills(f.actors.AGENT1, { tab: "ALL", lotteryType: "THAI_GOVERNMENT" });
+    expect(thaiOnly.total).toBe(1);
+    expect(thaiOnly.bills[0]!.parts).toHaveLength(3);
+    await placeBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ใบถัดไป", items: [bet(f.prizeTypes.threeTop.id, "456", "10")] });
+    const pageOne = await listBetBills(f.actors.AGENT1, { tab: "ALL", page: 1, pageSize: 1 });
+    const pageTwo = await listBetBills(f.actors.AGENT1, { tab: "ALL", page: 2, pageSize: 1 });
+    expect(pageOne.total).toBe(2);
+    expect(pageOne.pageCount).toBe(2);
+    expect(pageOne.bills[0]!.id).not.toBe(pageTwo.bills[0]!.id);
+
+    await prisma.bill.update({ where: { id: bills[0]!.id }, data: { status: "SETTLED", totalPayout: "100" } });
+    const wonHistory = await listBetBills(f.actors.AGENT1, { tab: "WON" });
+    expect(wonHistory.total).toBe(1);
+    expect(wonHistory.bills[0]!.id).toBe(placed.slipId);
+    expect(wonHistory.bills[0]!.totalPayout.toFixed(2)).toBe("100.00");
+    expect(wonHistory.bills[0]!.parts).toHaveLength(3);
   });
 
   test("ประเภทรางวัลต้องตรงกับงวดของส่วนนั้น ใส่รางวัลหวยลาวในงวดหวยรัฐบาลไม่ได้", async () => {

@@ -2,11 +2,11 @@ import Link from "next/link";
 import "./reports.css";
 import type { Actor } from "@/lib/auth/context";
 import { visibleBillNumber } from "@/lib/bills/numbering";
-import { betStatusOf } from "@/lib/bills/betting";
+import { betStatusOf, lotteryLabel } from "@/lib/bills/betting";
 import { getSimpleAgentReport, type SimpleAgentBillFilter } from "@/lib/reports/agent-report";
 import { DashboardFilters } from "../DashboardFilters";
 import { dashboardDrawLabel } from "@/lib/dashboard/lottery-draw-filter";
-import { reportCategoryLabel, reportCategoryOf } from "@/lib/reports/draw-groups";
+import { reportCategoryLabel } from "@/lib/reports/draw-groups";
 
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const DATE_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
@@ -55,15 +55,15 @@ export async function AgentReports({ actor, selectedDrawId, billStatus = "ALL", 
         <div><span>ค่าคอมของฉัน</span><strong>{MONEY.format(Number(report.totals.commission))}</strong><small>บาท · {report.totals.commissionFinal ? "คำนวณแล้ว" : "รวมยอดประมาณการของงวดที่รอผล"}</small></div>
       </section>
       <section className="agent-bill-history" aria-labelledby="agent-bill-history-heading">
-        <header><div><h2 id="agent-bill-history-heading">รายการบิลตามตัวกรอง</h2><p>เลือกสถานะ แล้วกด “ดูบิล” เพื่อดูเลขและรายการแทง</p></div><Link href={selectedDraw ? `/bills?draw=${encodeURIComponent(selectedDraw.id)}&scope=all&all=1` : "/bills?scope=all&all=1"}>ไปหน้ารายการบิลทั้งหมด →</Link></header>
+        <header><div><h2 id="agent-bill-history-heading">รายการบิลตามตัวกรอง</h2><p>เลือกสถานะ แล้วกด “ดูบิล” เพื่อดูเลขและรายการแทง · บิลหลายประเภทแสดงรวมทั้งใบ</p></div><Link href={selectedDraw ? `/bills?draw=${encodeURIComponent(selectedDraw.id)}&scope=all&all=1` : "/bills?scope=all&all=1"}>ไปหน้ารายการบิลทั้งหมด →</Link></header>
         <nav className="agent-bill-status-tabs" aria-label="กรองผลรางวัลของบิล">{FILTERS.map((filter) => <Link key={filter.value} href={href(filter.value)} className={history.status === filter.value ? "is-active" : ""} aria-current={history.status === filter.value ? "page" : undefined}>{filter.label} <b>{history.counts[filter.count].toLocaleString("th-TH")}</b></Link>)}</nav>
         {history.rows.length === 0 ? <div className="agent-simple-empty"><strong>ไม่มีบิลตามตัวกรองนี้</strong><p>ลองเลือกสถานะ ประเภทหวย งวด หรือวันที่อื่น</p></div> : <div className="agent-bill-list">{history.rows.map((bill) => {
           const status = betStatusOf(bill);
           const label = status === "WON" ? "ถูกรางวัล" : status === "LOST" ? "ไม่ถูกรางวัล" : "รอผล";
           return <article key={bill.id} className={`agent-bill-row is-${status.toLowerCase()}`}>
-            <div className="agent-bill-main"><small>บิล {visibleBillNumber(bill.drawSequence)} · {DATE_TIME.format(bill.createdAt)}</small><strong>{bill.title || "ไม่ระบุชื่อลูกค้า"}</strong><small>{reportCategoryLabel(reportCategoryOf(bill.draw.lotteryType))} · {dashboardDrawLabel(bill.draw)}</small></div>
+            <div className="agent-bill-main"><small>บิล {visibleBillNumber(bill.drawSequence)} · {DATE_TIME.format(bill.createdAt)}</small><strong>{bill.title || "ไม่ระบุชื่อลูกค้า"}</strong><small>{bill.parts.map((part) => `${lotteryLabel(part.draw.lotteryType)} · ${dashboardDrawLabel(part.draw)}`).join(" / ")}</small></div>
             <span className="agent-bill-result">{label}</span>
-            <div className="agent-bill-money"><span>ยอดเดิมพัน <b>{MONEY.format(Number(bill.totalStake))} บาท</b></span>{status === "WON" && <span>เงินรางวัล <b>{MONEY.format(Number(bill.totalPayout))} บาท</b></span>}</div>
+            <div className="agent-bill-money"><span>ยอดเดิมพัน{bill.parts.length > 1 ? "รวมทั้งบิล" : ""} <b>{MONEY.format(Number(bill.totalStake))} บาท</b></span>{status === "WON" && <span>เงินรางวัล <b>{MONEY.format(Number(bill.totalPayout))} บาท</b></span>}</div>
             <Link className="agent-simple-detail" href={`/bills/${bill.id}`}>ดูบิล →</Link>
           </article>;
         })}</div>}

@@ -5,6 +5,7 @@ import { databaseSchema, prisma } from "@/lib/db";
 import { ForbiddenError } from "@/lib/errors";
 import { sumMoney, ZERO } from "@/lib/money";
 import { commissionRateForLottery } from "@/lib/agents/commission";
+import { listBetBills } from "@/lib/bills/service";
 import { resolveDashboardDrawScope } from "@/lib/dashboard/lottery-draw-filter";
 import { drawDay, inRange, parseDay } from "@/lib/draws/range";
 
@@ -358,27 +359,11 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
     commission: sumMoney(rounds.map((round) => round.commission)),
     commissionFinal: rounds.every((round) => round.commissionFinal || round.billCount === 0),
   };
-  const selectedBills = { ...scope, agentId: actor.agentId, drawId: { in: drawIds } } satisfies Prisma.BillWhereInput;
-  const won = { ...selectedBills, status: "SETTLED", totalPayout: { gt: 0 } } satisfies Prisma.BillWhereInput;
-  const lost = { ...selectedBills, status: "SETTLED", totalPayout: { lte: 0 } } satisfies Prisma.BillWhereInput;
-  const pending = { ...selectedBills, status: { in: ["CONFIRMED", "LOCKED"] } } satisfies Prisma.BillWhereInput;
-  const selectedFilter = billStatus === "WON" ? won : billStatus === "LOST" ? lost : billStatus === "PENDING" ? pending : { ...selectedBills, status: { in: COUNTED_STATUSES } };
-  const [allCount, wonCount, lostCount, pendingCount] = await Promise.all([
-    prisma.bill.count({ where: { ...selectedBills, status: { in: COUNTED_STATUSES } } }),
-    prisma.bill.count({ where: won }),
-    prisma.bill.count({ where: lost }),
-    prisma.bill.count({ where: pending }),
-  ]);
-  const selectedCount = billStatus === "WON" ? wonCount : billStatus === "LOST" ? lostCount : billStatus === "PENDING" ? pendingCount : allCount;
-  const pages = Math.max(1, Math.ceil(selectedCount / 20));
-  const page = Math.min(Math.max(Number.isFinite(requestedPage) ? Math.floor(requestedPage) : 1, 1), pages);
-  const historyRows = await prisma.bill.findMany({
-    where: selectedFilter,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    skip: (page - 1) * 20,
-    take: 20,
-    select: { id: true, drawSequence: true, title: true, status: true, totalStake: true, totalPayout: true, createdAt: true, draw: { select: { name: true, drawDate: true, cutoffAt: true, lotteryType: true } } },
-  });
+  const history = await listBetBills(actor, { tab: billStatus, drawWhere: { id: { in: drawIds } }, page: requestedPage, pageSize: 20 });
 
-  return { agent, rounds, winners, drawOptions, drawScope, selectedDrawId: drawScope.selectedDraw?.id ?? "", totals, billHistory: { rows: historyRows, counts: { all: allCount, won: wonCount, lost: lostCount, pending: pendingCount }, page, pages, status: billStatus } };
+  return { agent, rounds, winners, drawOptions, drawScope, selectedDrawId: drawScope.selectedDraw?.id ?? "", totals, billHistory: {
+    rows: history.bills,
+    counts: { all: history.counts.ALL, won: history.counts.WON, lost: history.counts.LOST, pending: history.counts.PENDING },
+    page: history.page, pages: history.pageCount, status: billStatus,
+  } };
 }
