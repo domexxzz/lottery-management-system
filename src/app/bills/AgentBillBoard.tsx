@@ -125,8 +125,8 @@ export async function AgentBillBoard({
     drawId: scope.drawId || undefined,
     drawWhere: scope.drawWhere,
     agentId: filter.agentId || undefined,
-    page: filter.page,
-    pageSize: filter.pageSize,
+    page: filter.showAll ? filter.page : 1,
+    pageSize: filter.showAll ? filter.pageSize : 5,
     sort: filter.sort,
   });
   const { bills, counts, page, pageCount, pageSize, total, totals, sequence } = result;
@@ -162,7 +162,7 @@ export async function AgentBillBoard({
           <p>{scope.scope === "current" ? "บิลของงวดปัจจุบัน (เปิดรับอยู่ หรือออกรางวัลมาไม่เกิน 2 วัน) เปิดหน้ามาจะเห็นงานของงวดนี้ก่อน" : "ค้นหา ตรวจสอบ และติดตามผลรายการย้อนหลัง"}</p>
         </div>
         <div className="slip-head-actions">
-          <ReportExportButtons csvHref={exportHref} excelHref={excelHref} />
+          <ReportExportButtons excelHref={excelHref} />
           <Link href="/bills/new" className="slip-primary-button">＋ สร้างบิลใหม่</Link>
         </div>
       </header>
@@ -322,6 +322,7 @@ export async function AgentBillBoard({
         tab={filter.tab}
         pageSize={filter.pageSize}
         sort={filter.sort}
+        showAll={filter.showAll}
         draws={scope.drawOptions}
         agents={agents}
       />
@@ -329,8 +330,8 @@ export async function AgentBillBoard({
       <div className="slip-history-layout">
         <section className="slip-panel slip-history-table" aria-labelledby="slip-history-heading">
           <header className="slip-panel-head">
-            <h2 id="slip-history-heading">10 รายการล่าสุด</h2>
-            <span>แสดงครั้งละไม่เกิน 10 รายการ · พบทั้งหมด {total.toLocaleString("th-TH")}</span>
+            <h2 id="slip-history-heading">{filter.showAll ? "ประวัติรายการทั้งหมด" : "5 รายการล่าสุด"}</h2>
+            <span>{filter.showAll ? `แสดงครั้งละไม่เกิน ${pageSize.toLocaleString("th-TH")} รายการ` : "แสดงรายการล่าสุดก่อน"} · พบทั้งหมด {total.toLocaleString("th-TH")}</span>
           </header>
           {noCurrentDraw ? (
             <div className="slip-empty slip-empty-scope">
@@ -382,9 +383,12 @@ export async function AgentBillBoard({
               })}
             </ol>
           )}
-          <footer className="slip-pagination">
+          <footer className={`slip-pagination ${filter.showAll ? "" : "is-preview"}`}>
             <span>แสดง {firstRow.toLocaleString("th-TH")}–{lastRow.toLocaleString("th-TH")} จาก {total.toLocaleString("th-TH")} รายการ</span>
-            {pageCount > 1 && (
+            {!filter.showAll && total > 5 && (
+              <Link className="slip-show-all" href={historyHref("/bills", filter, { all: "1", page: 1 })}>ดูเพิ่มเติมทั้งหมด {total.toLocaleString("th-TH")} รายการ →</Link>
+            )}
+            {filter.showAll && pageCount > 1 && (
               <nav aria-label="เลือกหน้า">
                 {page > 1 ? <Link href={historyHref("/bills", filter, { page: page - 1 })} aria-label="หน้าก่อน">‹</Link> : <span aria-hidden="true">‹</span>}
                 {pageNumbers(page, pageCount).map((value, index) => value === "gap"
@@ -392,6 +396,9 @@ export async function AgentBillBoard({
                   : <Link key={value} href={historyHref("/bills", filter, { page: value })} aria-current={value === page ? "page" : undefined}>{value}</Link>)}
                 {page < pageCount ? <Link href={historyHref("/bills", filter, { page: page + 1 })} aria-label="หน้าถัดไป">›</Link> : <span aria-hidden="true">›</span>}
               </nav>
+            )}
+            {filter.showAll && total > 5 && (
+              <Link className="slip-show-all is-collapse" href={historyHref("/bills", filter, { all: "", page: 1 })}>ย่อเหลือ 5 รายการล่าสุด</Link>
             )}
           </footer>
         </section>

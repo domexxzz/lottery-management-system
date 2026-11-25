@@ -11,6 +11,8 @@ describe("ช่วงเวลาของสรุปบัญชี", () => {
       compare: "none",
       lotteries: ["THAI_GOVERNMENT", "LAO", "LAO_SET"],
       agentId: "",
+      compareAgentA: "",
+      compareAgentB: "",
     });
   });
 
@@ -79,12 +81,17 @@ describe("ช่วงเวลาของสรุปบัญชี", () => {
   test("เลือกเอง: เลือกหน่วยก่อน แล้ว A กับ B เป็นหน่วยเดียวกัน", () => {
     // เดือน: มกราคม เทียบ มีนาคม
     const months = parseAccountingQuery({ compare: "custom", unit: "month", a: "2026-01", b: "2026-03" }, NOW);
-    expect(months).toMatchObject({ compare: "custom", compareUnit: "month", compareA: "2026-01", compareB: "2026-03" });
+    expect(months).toMatchObject({ compare: "custom", compareUnit: "month", compareA: "2026-01", compareB: "2026-03", compareLotteryA: "THAI_GOVERNMENT", compareLotteryB: "LAO_COMBINED" });
     expect(compareValueLabel("month", months.compareA)).toBe("มกราคม 2569");
     const [ma, mb] = customCompareQueries(months, "", "");
     expect(resolveRange(ma, NOW)).toMatchObject({ from: "2026-01-01", to: "2026-01-31" });
     expect(resolveRange(mb, NOW)).toMatchObject({ from: "2026-03-01", to: "2026-03-31" });
     expect(accountingHref("/reports/accounting", months, {})).toContain("compare=custom&unit=month&a=2026-01&b=2026-03");
+
+    const allMonths = parseAccountingQuery({ compare: "custom", unit: "month", a: "all", b: "2026-03" }, NOW);
+    const [allMonthA, allMonthB] = customCompareQueries(allMonths, "", "");
+    expect(allMonthA).toMatchObject({ period: "all", lotteries: ["THAI_GOVERNMENT"] });
+    expect(resolveRange(allMonthB, NOW)).toMatchObject({ from: "2026-03-01", to: "2026-03-31" });
 
     // วัน: วันเดียวเทียบวันเดียว
     const days = parseAccountingQuery({ compare: "custom", unit: "day", a: "2026-11-01", b: "2026-11-08" }, NOW);
@@ -97,12 +104,25 @@ describe("ช่วงเวลาของสรุปบัญชี", () => {
     expect(compareValueLabel("week", weeks.compareA)).toBe("สัปดาห์ 9 พ.ย. 2569 – 15 พ.ย. 2569");
     expect(recentWeeks(2, NOW)[0]!.value).toBe("2026-11-16");
 
-    // งวด: ดูเฉพาะงวดที่เลือก ไม่กรองประเภทหวยซ้ำ
-    const draws = parseAccountingQuery({ compare: "custom", unit: "draw", lotteries: "LAO" }, NOW);
+    // งวด: แต่ละฝั่งเลือกประเภทหวยได้อิสระ จึงรองรับไทยเทียบลาวจริง
+    const draws = parseAccountingQuery({ compare: "custom", unit: "draw", lotteryA: "THAI_GOVERNMENT", lotteryB: "LAO_COMBINED" }, NOW);
     expect(draws.compareA).toBe("");
     const [wa, wb] = customCompareQueries(draws, "drawAAAAAAAA", "drawBBBBBBBB");
-    expect(wa).toMatchObject({ drawIds: ["drawAAAAAAAA"], lotteries: ["THAI_GOVERNMENT", "LAO", "LAO_SET"] });
-    expect(wb.drawIds).toEqual(["drawBBBBBBBB"]);
+    expect(wa).toMatchObject({ drawIds: ["drawAAAAAAAA"], lotteries: ["THAI_GOVERNMENT"] });
+    expect(wb).toMatchObject({ drawIds: ["drawBBBBBBBB"], lotteries: ["LAO", "LAO_SET"] });
+
+    // ช่วงวันที่: A/B มีวันเริ่มและสิ้นสุดของตัวเอง และคงค่าผ่าน URL
+    const ranges = parseAccountingQuery({
+      compare: "custom", unit: "range", lotteryA: "LAO_COMBINED", lotteryB: "THAI_GOVERNMENT",
+      aFrom: "2026-10-01", aTo: "2026-10-15", bFrom: "2026-11-01", bTo: "2026-11-16",
+    }, NOW);
+    const [ra, rb] = customCompareQueries(ranges, "", "");
+    expect(ra).toMatchObject({ from: "2026-10-01", to: "2026-10-15", lotteries: ["LAO", "LAO_SET"] });
+    expect(rb).toMatchObject({ from: "2026-11-01", to: "2026-11-16", lotteries: ["THAI_GOVERNMENT"] });
+    const rangeHref = accountingHref("/reports/accounting", ranges, {});
+    expect(rangeHref).toContain("unit=range");
+    expect(rangeHref).toContain("lotteryA=LAO_COMBINED&lotteryB=THAI_GOVERNMENT");
+    expect(rangeHref).toContain("aFrom=2026-10-01&aTo=2026-10-15&bFrom=2026-11-01&bTo=2026-11-16");
 
     // ค่าที่ผิดหน่วยถูกแทนด้วยค่าเริ่มต้น (เดือนนี้ เทียบ เดือนที่แล้ว)
     expect(parseAccountingQuery({ compare: "custom", unit: "month", a: "2026-01-05" }, NOW)).toMatchObject({ compareA: "2026-11", compareB: "2026-10" });
@@ -118,14 +138,22 @@ describe("ช่วงเวลาของสรุปบัญชี", () => {
     expect(parseAccountingQuery({ period: "current_month", compare: "previous" }, NOW).compare).toBe("previous");
   });
 
-  test("เทียบรายงวดที่ไม่มีงวด: ส่งออกว่างตามหน้าจอ ไม่ตกไปเป็นข้อมูลทั้งเดือน", () => {
+  test("เทียบรายงวดค่าเริ่มต้นเป็นรวมทุกงวดของประเภทหวย", () => {
     const draws = parseAccountingQuery({ compare: "custom", unit: "draw" }, NOW);
     const [a, b] = customCompareQueries(draws, "", "drawBBBBBBBB");
-    expect(a.drawIds).toEqual([]);
+    expect(a).toMatchObject({ period: "all", lotteries: ["THAI_GOVERNMENT"] });
+    expect(a.drawIds).toBeUndefined();
     expect(b.drawIds).toEqual(["drawBBBBBBBB"]);
-    const href = accountingHref("/api/reports/accounting", a, {});
-    expect(href).toContain("draw=none");
-    expect(parseAccountingQuery(Object.fromEntries(new URL(href, "http://x").searchParams), NOW).drawIds).toEqual([]);
+    expect(accountingHref("/api/reports/accounting", a, {})).toContain("period=all");
+  });
+
+  test("ค่าเริ่มต้นเป็นทุก Agent และเลือก Agent ของ A/B แยกกันได้", () => {
+    const query = parseAccountingQuery({ compare: "custom", unit: "month", agentA: "agent-a", agentB: "agent-b" }, NOW);
+    const [a, b] = customCompareQueries(query, "", "");
+    expect(a.agentId).toBe("agent-a");
+    expect(b.agentId).toBe("agent-b");
+    const href = accountingHref("/reports/accounting", query, {});
+    expect(href).toContain("agentA=agent-a&agentB=agent-b");
   });
 
   test("วันให้เลือกเป็นวันที่แบบไทย และลิงก์ส่งออกของงวดเดียว", () => {

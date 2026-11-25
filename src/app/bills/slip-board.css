@@ -215,6 +215,11 @@
 .slip-pagination nav > span { opacity: .45; }
 .slip-pagination nav > .slip-page-gap { border-color: transparent; background: transparent; opacity: 1; }
 .slip-pagination nav a[aria-current="page"] { border-color: var(--sb-blue); color: #fff; background: var(--sb-blue); font-weight: 700; }
+.slip-pagination.is-preview { justify-content: center; flex-direction: column; padding-block: 1rem; }
+.slip-show-all { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; padding: .55rem 1rem; border: 1px solid var(--sb-blue); border-radius: 10px; color: #fff; background: var(--sb-blue); font-weight: 800; text-decoration: none; }
+.slip-show-all:hover { color: #fff; background: #085dc8; }
+.slip-show-all.is-collapse { border-color: #c8dbef; color: #315476; background: #fff; }
+.slip-show-all.is-collapse:hover { color: #173d64; background: #f4f8fd; }
 
 .slip-history-summary { position: sticky; top: 1rem; }
 .slip-history-summary dl, .slip-result-summary dl { display: grid; margin: 0; padding: .35rem 1.15rem; }

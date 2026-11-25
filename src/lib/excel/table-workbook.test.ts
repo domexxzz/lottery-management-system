@@ -36,4 +36,28 @@ describe("Excel ตารางดาวน์โหลด", () => {
     expect(headers["Content-Disposition"]).toContain("filename*=UTF-8''");
     expect(headers["Content-Disposition"]).not.toContain("18/11");
   });
+
+  test("เพิ่มชีตสรุปหลายมุมมองก่อนชีตรายละเอียด และสร้าง relationship ครบ", () => {
+    const bytes = generateTableWorkbook({
+      title: "สรุปบัญชี",
+      sheetName: "รายละเอียด",
+      columns: [{ header: "รายการ" }],
+      rows: [["รายการหลัก"]],
+      additionalSheets: [
+        { title: "แยกรายงวด", sheetName: "แยกรายงวด", columns: [{ header: "งวด" }], rows: [["งวด 1"]] },
+        { title: "แต่ละ Agent", sheetName: "แต่ละ Agent", columns: [{ header: "Agent" }], rows: [["A001"]] },
+      ],
+    });
+    const files = unzipSync(bytes);
+    const workbook = strFromU8(files["xl/workbook.xml"]!);
+    const relationships = strFromU8(files["xl/_rels/workbook.xml.rels"]!);
+    expect(workbook).toContain('name="Summary" sheetId="1"');
+    expect(workbook).toContain('name="แยกรายงวด" sheetId="2"');
+    expect(workbook).toContain('name="แต่ละ Agent" sheetId="3"');
+    expect(workbook).toContain('name="รายละเอียด" sheetId="4"');
+    expect(strFromU8(files["xl/worksheets/sheet2.xml"]!)).toContain("งวด 1");
+    expect(strFromU8(files["xl/worksheets/sheet3.xml"]!)).toContain("A001");
+    expect(strFromU8(files["xl/worksheets/sheet4.xml"]!)).toContain("รายการหลัก");
+    expect(relationships).toContain('Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"');
+  });
 });

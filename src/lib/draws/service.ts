@@ -29,6 +29,7 @@ export async function listDraws(
     select: {
       id: true,
       name: true,
+      drawDate: true,
       opensAt: true,
       cutoffAt: true,
       createdAt: true,

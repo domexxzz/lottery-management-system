@@ -32,7 +32,6 @@ export type AgentTableRow = {
   commission: number;
   net: number;
   profileHref: string;
-  csvHref: string;
   customers: AgentTableCustomer[];
 };
 
@@ -50,7 +49,7 @@ export function AgentTable({
   months,
   rangeDraws,
   shortcuts,
-  csvHref,
+  exportHref,
   agents,
 }: {
   /** คีย์ลัด วันนี้ / งวดนี้ / เดือนนี้ (YYYY-MM-DD เวลาไทย) */
@@ -62,7 +61,7 @@ export function AgentTable({
   months: MonthShortcut[];
   /** ชื่องวดที่อยู่ในช่วงวันที่ที่เลือก */
   rangeDraws: string[];
-  csvHref: string;
+  exportHref: string;
   agents: AgentTableRow[];
 }) {
   const router = useRouter();
@@ -76,13 +75,13 @@ export function AgentTable({
   // รูปแบบการแสดงผล: การ์ด (ค่าเริ่มต้น) หรือตาราง
   const [view, setView] = useState<"table" | "card">("card");
   const filteredExportHref = useMemo(() => {
-    const [path, raw = ""] = csvHref.split("?");
+    const [path, raw = ""] = exportHref.split("?");
     const params = new URLSearchParams(raw);
     if (search.trim()) params.set("q", search.trim()); else params.delete("q");
     if (status) params.set("status", status); else params.delete("status");
     if (sort !== "sales_desc") params.set("sort", sort); else params.delete("sort");
     return `${path}${params.size ? `?${params}` : ""}`;
-  }, [csvHref, search, sort, status]);
+  }, [exportHref, search, sort, status]);
   const excelHref = `${filteredExportHref}${filteredExportHref.includes("?") ? "&" : "?"}format=xlsx`;
 
   const rows = useMemo(() => {
@@ -171,7 +170,7 @@ export function AgentTable({
         <button type="button" aria-pressed={view === "table"} onClick={() => setView("table")}>ตาราง</button>
         <button type="button" aria-pressed={view === "card"} onClick={() => setView("card")}>การ์ด</button>
       </div>
-      <ReportExportButtons csvHref={filteredExportHref} excelHref={excelHref} />
+      <ReportExportButtons excelHref={excelHref} />
     </div>
 
     <div className="agent-table-period" role="group" aria-label="ดูยอดตามช่วงวันที่">

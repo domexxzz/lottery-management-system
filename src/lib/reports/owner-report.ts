@@ -2,6 +2,7 @@ import { Prisma, type DrawStatus, type LotteryType } from "@prisma/client";
 import { databaseSchema, prisma } from "@/lib/db";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { bangkokToday } from "./accounting-period";
+import { drawDay, inRange, parseDay } from "@/lib/draws/range";
 import {
   REPORT_LOTTERIES,
   groupReportDraws,
@@ -427,9 +428,11 @@ async function lotteryBreakdown(actor: Actor, range: { from: string; to: string 
   });
 }
 
-export async function loadOwnerReport(actor: Actor, drawParam?: string, lotteryParam?: string): Promise<OwnerReport | null> {
+export async function loadOwnerReport(actor: Actor, drawParam?: string, lotteryParam?: string, dateFromParam?: string, dateToParam?: string): Promise<OwnerReport | null> {
   requirePermission(actor, "report.viewAllAgents");
   const lotteries = parseReportLottery(lotteryParam);
+  const dateFrom = parseDay(dateFromParam);
+  const dateTo = parseDay(dateToParam);
   const physicalDraws = await prisma.draw.findMany({
     where: { ...orgScope(actor), ...(isAllLotteries(lotteries) ? {} : { lotteryType: { in: [...lotteries] } }) },
     orderBy: { cutoffAt: "desc" },
@@ -438,7 +441,7 @@ export async function loadOwnerReport(actor: Actor, drawParam?: string, lotteryP
   });
   const draws = groupReportDraws(physicalDraws).slice(0, PICKER_DRAWS);
   // ค่าเริ่มต้นของรายงานคือทุกงวดตามที่ผู้ใช้เลือกไว้ หากระบุ draw จึงค่อยเจาะจงงวด
-  if (!drawParam || drawParam === ALL_DRAWS) return loadAllDrawsReport(actor, lotteries, draws);
+  if (!drawParam || drawParam === ALL_DRAWS) return loadAllDrawsReport(actor, lotteries, draws, dateFrom, dateTo);
 
   let chosenLogical = draws.find((draw) => draw.id === drawParam);
   if (!chosenLogical) {
@@ -446,7 +449,7 @@ export async function loadOwnerReport(actor: Actor, drawParam?: string, lotteryP
       where: { ...orgScope(actor), id: drawParam },
       select: { id: true, name: true, drawDate: true, cutoffAt: true, status: true, lotteryType: true, laoFamilyId: true },
     });
-    if (!chosenPhysical) return loadAllDrawsReport(actor, lotteries, draws);
+    if (!chosenPhysical) return loadAllDrawsReport(actor, lotteries, draws, dateFrom, dateTo);
     const family = chosenPhysical.laoFamilyId
       ? await prisma.draw.findMany({
           where: { ...orgScope(actor), laoFamilyId: chosenPhysical.laoFamilyId, lotteryType: { in: ["LAO", "LAO_SET"] } },
@@ -455,7 +458,8 @@ export async function loadOwnerReport(actor: Actor, drawParam?: string, lotteryP
       : [chosenPhysical];
     chosenLogical = groupReportDraws(family)[0];
   }
-  if (!chosenLogical) return loadAllDrawsReport(actor, lotteries, draws);
+  if (!chosenLogical) return loadAllDrawsReport(actor, lotteries, draws, dateFrom, dateTo);
+  if (!inRange(drawDay(chosenLogical), dateFrom, dateTo)) return null;
   const selectedLotteries: ReportLottery = chosenLogical.category === "LAO_COMBINED" ? ["LAO", "LAO_SET"] : ["THAI_GOVERNMENT"];
 
   // 12 งวดย้อนหลังนับจากงวดที่เลือก (รวมงวดที่เลือก) เรียงเก่า → ใหม่
@@ -507,17 +511,19 @@ export async function loadOwnerReport(actor: Actor, drawParam?: string, lotteryP
  * ยอดขายรวมทุกงวด ส่วนจ่ายรางวัล ค่าคอม และกำไร รวมเฉพาะงวดที่คำนวณแล้ว
  * ตัวเลขกำไรจึงเท่ากับผลรวมของรายงานรายงวด ไม่เดาจากงวดที่ยังไม่ออกผล
  */
-async function loadAllDrawsReport(actor: Actor, lotteries: ReportLottery, pickerDraws: ReportDraw[]): Promise<OwnerReport | null> {
-  const physicalDraws = await prisma.draw.findMany({
+async function loadAllDrawsReport(actor: Actor, lotteries: ReportLottery, pickerDraws: ReportDraw[], dateFrom?: string, dateTo?: string): Promise<OwnerReport | null> {
+  const physicalDraws = (await prisma.draw.findMany({
     where: { ...orgScope(actor), ...(isAllLotteries(lotteries) ? {} : { lotteryType: { in: [...lotteries] } }) },
     orderBy: { cutoffAt: "asc" },
     select: { id: true, name: true, drawDate: true, cutoffAt: true, status: true, lotteryType: true, laoFamilyId: true },
-  });
+  })).filter((draw) => inRange(drawDay(draw), dateFrom, dateTo));
   const allDraws = groupReportDraws(physicalDraws).reverse();
   if (allDraws.length === 0) return null;
 
-  const range = breakdownRange();
-  const scope: ReportScope = { kind: "all", lotteries };
+  const range = dateFrom || dateTo ? { from: dateFrom ?? drawDay(allDraws[0]!), to: dateTo ?? drawDay(allDraws.at(-1)!) } : breakdownRange();
+  const scope: ReportScope = dateFrom || dateTo
+    ? { kind: "draw", drawIds: allDraws.flatMap((draw) => draw.memberIds) }
+    : { kind: "all", lotteries };
   const [money, agents, prizes, breakdown, winners] = await Promise.all([
     moneyByDraw(actor, allDraws),
     agentsOf(actor, scope),

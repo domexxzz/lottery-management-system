@@ -12,22 +12,20 @@ function responseFilename(response: Response, fallback: string): string {
 }
 
 export function ReportExportButtons({
-  csvHref,
   excelHref,
   className = "",
 }: {
-  csvHref: string;
   excelHref: string;
   className?: string;
 }) {
-  const [busy, setBusy] = useState<"csv" | "xlsx" | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  async function download(format: "csv" | "xlsx") {
-    setBusy(format);
+  async function download() {
+    setBusy(true);
     setError("");
     try {
-      const response = await fetch(format === "xlsx" ? excelHref : csvHref, { credentials: "same-origin" });
+      const response = await fetch(excelHref, { credentials: "same-origin" });
       if (!response.ok) {
         const payload = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(payload?.error ?? "ไม่สามารถสร้างไฟล์ได้");
@@ -36,7 +34,7 @@ export function ReportExportButtons({
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = responseFilename(response, `report.${format}`);
+      anchor.download = responseFilename(response, "report.xlsx");
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
@@ -44,16 +42,13 @@ export function ReportExportButtons({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "ไม่สามารถสร้างไฟล์ได้");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
   return <div className={`report-export-buttons ${className}`.trim()}>
-    <button type="button" className="is-primary" disabled={busy !== null} onClick={() => download("xlsx")}>
-      {busy === "xlsx" ? "กำลังสร้าง Excel…" : "Export Excel"}
-    </button>
-    <button type="button" disabled={busy !== null} onClick={() => download("csv")}>
-      {busy === "csv" ? "กำลังสร้าง CSV…" : "Export CSV"}
+    <button type="button" className="is-primary" disabled={busy} onClick={download}>
+      {busy ? "กำลังสร้าง Excel…" : "Export Excel"}
     </button>
     {error && <small role="alert">{error}</small>}
   </div>;

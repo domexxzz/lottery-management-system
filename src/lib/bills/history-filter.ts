@@ -15,6 +15,8 @@ export type HistoryParams = {
   page?: string;
   pageSize?: string;
   sort?: string;
+  /** แสดงประวัติเต็มแบบแบ่งหน้า; ค่าเริ่มต้นแสดงเพียง 5 รายการล่าสุด */
+  all?: string;
 };
 
 /**
@@ -45,6 +47,7 @@ export type ParsedHistoryFilter = {
   page: number;
   pageSize: 10 | 25 | 50 | 100;
   sort: "newest" | "oldest" | "stake_desc" | "payout_desc";
+  showAll: boolean;
 };
 
 /** วันที่แบบ YYYY-MM-DD ตามเวลาไทย เป็นขอบเขตต้นวันหรือท้ายวัน */
@@ -76,6 +79,7 @@ export function parseHistoryFilter(params: HistoryParams): ParsedHistoryFilter {
     page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
     pageSize,
     sort,
+    showAll: params.all === "1",
   };
 }
 
@@ -94,6 +98,7 @@ export function historyHref(base: string, filter: ParsedHistoryFilter, override:
     page: filter.page > 1 ? String(filter.page) : "",
     pageSize: filter.pageSize === 10 ? "" : String(filter.pageSize),
     sort: filter.sort === "newest" ? "" : filter.sort,
+    all: filter.showAll ? "1" : "",
   };
   for (const [key, value] of Object.entries(override)) values[key] = String(value);
   if (values.page === "1") values.page = "";

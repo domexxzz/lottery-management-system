@@ -248,3 +248,12 @@
 .or-compare-result { margin: .25rem 0 0; padding-top: .35rem; border-top: 1px solid #eef2f6; color: #4d5b69; font-size: .9rem; font-weight: 800; }
 .or-compare-box.is-good .or-compare-result { color: #12814f; }
 .or-compare-box.is-bad .or-compare-result { color: #c0283f; }
+.report-shortcuts { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:.65rem; margin:.7rem 0 1rem; padding:.75rem; border:1px solid #e0e9f3; border-radius:14px; background:#fff; box-shadow:0 7px 22px rgb(30 70 115 / 8%); }
+.report-shortcuts a { display:inline-flex; min-height:44px; align-items:center; justify-content:center; gap:.5rem; padding:.62rem .95rem; border-radius:10px; font-size:.82rem; font-weight:850; text-decoration:none; transition:border-color .16s ease,background .16s ease,box-shadow .16s ease,transform .16s ease; }
+.report-shortcuts a .dash-icon { width:18px; height:18px; flex:none; }
+.report-shortcuts .is-commission { border:1px solid #4d96ef; color:#1769c8; background:#fff; }
+.report-shortcuts .is-commission:hover { border-color:#1769e0; color:#0d58b5; background:#f2f7ff; box-shadow:0 5px 14px rgb(23 105 224 / 12%); transform:translateY(-1px); }
+.report-shortcuts .is-accounting { border:1px solid transparent; color:#fff; background:linear-gradient(135deg,#2f80ed 0%,#1769e0 48%,#0d4fc4 100%); box-shadow:0 7px 17px rgb(23 105 224 / 23%); }
+.report-shortcuts .is-accounting:hover { color:#fff; background:linear-gradient(135deg,#2475df 0%,#115fcf 48%,#0a45ad 100%); box-shadow:0 9px 21px rgb(23 105 224 / 30%); transform:translateY(-1px); }
+@media (max-width: 640px) { .report-shortcuts { justify-content:stretch; } .report-shortcuts a { flex:1 1 100%; } }
+@media (prefers-reduced-motion: reduce) { .report-shortcuts a { transition:none; } }

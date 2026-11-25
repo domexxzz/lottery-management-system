@@ -85,4 +85,12 @@ describe("ขอบเขตงวดของหน้าบิล", () => {
     expect(filter.drawIds).toEqual(["drawLao01", "drawSet01"]);
     expect(historyHref("/bills", filter)).toBe("/bills?lottery=LAO_COMBINED&draws=drawLao01%2CdrawSet01&scope=all");
   });
+
+  test("ประวัติเริ่มจาก 5 รายการและเปิดโหมดดูทั้งหมดผ่าน URL", () => {
+    expect(parseHistoryFilter({}).showAll).toBe(false);
+    const filter = parseHistoryFilter({ all: "1" });
+    expect(filter.showAll).toBe(true);
+    expect(historyHref("/bills", filter)).toBe("/bills?all=1");
+    expect(historyHref("/bills", filter, { all: "" })).toBe("/bills");
+  });
 });

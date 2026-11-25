@@ -10,6 +10,8 @@ type CommissionPayoutQuery = {
   drawId?: string;
   period?: string;
   date?: string;
+  dateFrom?: string;
+  dateTo?: string;
 };
 
 const number = (value: unknown) => Number(value ?? 0);
@@ -34,7 +36,9 @@ export async function loadCommissionPayoutReport(actor: Actor, query: Commission
     ? categoryDraws
     : categoryDraws.filter((draw) => {
         const key = commissionDrawDateKey(draw.drawDate ?? draw.cutoffAt);
-        return period.mode === "day" ? key === period.value : key.startsWith(period.value!);
+        return period.mode === "range"
+          ? (!period.from || key >= period.from) && (!period.to || key <= period.to)
+          : key.startsWith(period.value!);
       });
   const scopedDrawIds = scopedDraws.map((draw) => draw.id);
   const drawWhere = (scope.drawIds || period.mode !== "all") ? { drawId: { in: scopedDrawIds } } : {};

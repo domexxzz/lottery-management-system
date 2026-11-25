@@ -64,7 +64,6 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
       const stats = performance.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, thaiCommission: 0, laoCommission: 0, commission: 0, net: 0 };
       const customers = customerRows.get(agent.id) ?? [];
       const drawQuery = currentDraw ? `?drawId=${currentDraw.id}` : "";
-      const csvQuery = currentDraw ? `?draw=${currentDraw.id}` : "";
       return {
         id: agent.id,
         code: agent.code,
@@ -81,7 +80,6 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         commission: stats.commission,
         net: stats.net,
         profileHref: `/agents/${agent.id}${drawQuery}`,
-        csvHref: `/api/agents/${agent.id}/customers${csvQuery}`,
         customers: customers.map((customer) => ({
           key: customer.key,
           name: customer.name,
@@ -106,7 +104,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
     ...(currentDraw ? { draw: currentDraw.id } : {}),
     ...(drawScope.category === "ALL" ? {} : { lottery: drawScope.category }),
   });
-  const csvQuery = exportParams.size ? `?${exportParams}` : "";
+  const exportQuery = exportParams.size ? `?${exportParams}` : "";
   const organizationName = organization?.name ?? "ภาพรวมองค์กร";
 
   // คีย์ลัด: คำนวณฝั่ง server ตามเวลาไทย ไม่พึ่งนาฬิกาเครื่องผู้ใช้
@@ -143,7 +141,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
       months={monthShortcuts(physicalDraws.map(drawDay))}
       rangeDraws={rangeLogicalDraws.map((draw) => `${reportCategoryLabel(draw.category)} · ${dashboardDrawLabel(draw)}`)}
       shortcuts={{ today, monthFrom: thisMonth.from, monthTo: thisMonth.to, drawId: thisDraw?.id ?? "" }}
-      csvHref={`/api/agents/export${csvQuery}`}
+      exportHref={`/api/agents/export${exportQuery}`}
       agents={nodes}
     />
   </main>;

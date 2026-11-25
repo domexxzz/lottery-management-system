@@ -607,12 +607,23 @@ export async function evidenceHistory(actor: Actor, billId: string) {
 
 export async function listEvidenceReviewQueue(
   actor: Actor,
-  filter: { query?: string; status?: AttachmentStatus; statuses?: readonly AttachmentStatus[]; type?: AttachmentType; dateFrom?: Date; dateTo?: Date; page?: number; pageSize?: number },
+  filter: { query?: string; status?: AttachmentStatus; statuses?: readonly AttachmentStatus[]; type?: AttachmentType; drawIds?: string[]; dateFrom?: Date; dateTo?: Date; page?: number; pageSize?: number },
 ) {
   requirePermission(actor, "evidence.review");
   if (!canReviewEvidence(actor.role)) throw new ForbiddenError();
   const page = Math.max(1, filter.page ?? 1);
   const pageSize = Math.min(100, Math.max(10, filter.pageSize ?? 25));
+  const billWhere: Prisma.BillWhereInput = {
+    ...(filter.drawIds === undefined ? {} : { drawId: { in: filter.drawIds } }),
+    ...(filter.query ? {
+      OR: [
+        { billNumber: { contains: filter.query, mode: "insensitive" } },
+        { title: { contains: filter.query, mode: "insensitive" } },
+        { agent: { code: { contains: filter.query, mode: "insensitive" } } },
+        { agent: { name: { contains: filter.query, mode: "insensitive" } } },
+      ],
+    } : {}),
+  };
   const where: Prisma.BillAttachmentWhereInput = {
     organizationId: actor.organizationId,
     replacedBy: null,
@@ -623,16 +634,7 @@ export async function listEvidenceReviewQueue(
         : {}),
     ...(filter.type ? { type: filter.type } : {}),
     ...((filter.dateFrom || filter.dateTo) ? { createdAt: { ...(filter.dateFrom ? { gte: filter.dateFrom } : {}), ...(filter.dateTo ? { lte: filter.dateTo } : {}) } } : {}),
-    ...(filter.query ? {
-      bill: {
-        OR: [
-          { billNumber: { contains: filter.query, mode: "insensitive" } },
-          { title: { contains: filter.query, mode: "insensitive" } },
-          { agent: { code: { contains: filter.query, mode: "insensitive" } } },
-          { agent: { name: { contains: filter.query, mode: "insensitive" } } },
-        ],
-      },
-    } : {}),
+    ...(filter.drawIds !== undefined || filter.query ? { bill: billWhere } : {}),
   };
   // แบ่งหน้าตามบิล ไม่ใช่ตามไฟล์ เพื่อไม่ให้หลักฐานของบิลเดียวกันถูกแยกคนละหน้า
   const billGroups = await prisma.billAttachment.groupBy({

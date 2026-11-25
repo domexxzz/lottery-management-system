@@ -5,8 +5,11 @@ import { databaseSchema, prisma } from "@/lib/db";
 type AnalyticsFilter = {
   organizationId: string;
   drawId?: string;
+  drawIds?: string[];
   agentId?: string;
   status?: BillStatus;
+  dateFrom?: Date;
+  dateTo?: Date;
 };
 
 type MoneyValue = Prisma.Decimal | string | number | null;
@@ -17,13 +20,20 @@ function table(name: "bills" | "bill_items" | "prize_types" | "draws" | "agents"
 }
 
 function billWhere(filter: AnalyticsFilter) {
+  const drawIds = filter.drawIds ?? (filter.drawId ? [filter.drawId] : undefined);
   return Prisma.sql`
     b."organizationId" = ${filter.organizationId}
     ${filter.status
       ? Prisma.sql`AND b."status"::text = ${filter.status}`
       : Prisma.sql`AND b."status" IN ('CONFIRMED', 'LOCKED', 'SETTLED')`}
-    ${filter.drawId ? Prisma.sql`AND b."drawId" = ${filter.drawId}` : Prisma.empty}
+    ${drawIds === undefined
+      ? Prisma.empty
+      : drawIds.length > 0
+        ? Prisma.sql`AND b."drawId" IN (${Prisma.join(drawIds)})`
+        : Prisma.sql`AND FALSE`}
     ${filter.agentId ? Prisma.sql`AND b."agentId" = ${filter.agentId}` : Prisma.empty}
+    ${filter.dateFrom ? Prisma.sql`AND b."createdAt" >= ${filter.dateFrom}` : Prisma.empty}
+    ${filter.dateTo ? Prisma.sql`AND b."createdAt" <= ${filter.dateTo}` : Prisma.empty}
   `;
 }
 

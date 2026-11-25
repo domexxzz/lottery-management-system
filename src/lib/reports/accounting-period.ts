@@ -44,6 +44,9 @@ export type AccountingQuery = {
   from: string;
   to: string;
   agentId: string;
+  /** Agent ของแต่ละฝั่งในการเปรียบเทียบแบบเลือกเอง (ค่าว่าง = ทุก Agent) */
+  compareAgentA: string;
+  compareAgentB: string;
   /** ประเภทหวยที่นำมาคำนวณ เลือกได้หลายประเภทและเรียงตามลำดับมาตรฐานเสมอ */
   lotteries: AccountingLottery[];
   /**
@@ -54,22 +57,31 @@ export type AccountingQuery = {
    */
   compare: AccountingCompareMode;
   compareUnit: CompareUnit;
+  /** ประเภทหวยของแต่ละฝั่งในการเปรียบเทียบแบบเลือกเอง */
+  compareLotteryA: AccountingCompareCategory;
+  compareLotteryB: AccountingCompareCategory;
   /**
    * ค่าของช่วง A/B ตามหน่วย
    * วัน: YYYY-MM-DD · สัปดาห์: วันจันทร์ YYYY-MM-DD · เดือน: YYYY-MM · งวด: id ของงวด ("" = ให้หน้าเลือกงวดล่าสุด)
    */
   compareA: string;
   compareB: string;
+  /** ช่วงวันที่อิสระของแต่ละฝั่ง เมื่อ compareUnit = range */
+  compareAFrom: string;
+  compareATo: string;
+  compareBFrom: string;
+  compareBTo: string;
   /** ใช้ภายใน: ดูเฉพาะงวดเหล่านี้ (เปรียบเทียบรายงวด) */
   drawIds?: string[];
 };
 
 export type AccountingCompareMode = "none" | "previous" | "custom";
+export type AccountingCompareCategory = "THAI_GOVERNMENT" | "LAO_COMBINED";
 export type DateSpan = { from: string; to: string };
 
-export const COMPARE_UNITS = ["day", "draw", "week", "month"] as const;
+export const COMPARE_UNITS = ["day", "draw", "week", "month", "range"] as const;
 export type CompareUnit = (typeof COMPARE_UNITS)[number];
-export const COMPARE_UNIT_LABEL: Record<CompareUnit, string> = { day: "วัน", draw: "งวด", week: "สัปดาห์", month: "เดือน" };
+export const COMPARE_UNIT_LABEL: Record<CompareUnit, string> = { day: "วัน", draw: "งวด", week: "สัปดาห์", month: "เดือน", range: "ช่วงวันที่" };
 
 /** ช่วงที่แสดงเป็นชิปหลักของหน้าสรุปบัญชี ที่เหลืออยู่ในเมนู "ช่วงอื่น" */
 export const ACCOUNTING_MAIN_PERIODS: readonly AccountingPeriodKind[] = ["current_draw", "current_month", "current_year", "custom"];
@@ -115,6 +127,7 @@ export function parseAccountingQuery(raw: Raw, now = new Date()): AccountingQuer
   const unitRaw = first(raw.unit);
   const compareUnit: CompareUnit = (COMPARE_UNITS as readonly string[]).includes(unitRaw) ? unitRaw as CompareUnit : "month";
   const defaults = defaultCompareValues(compareUnit, now);
+  const rangeDefaults = defaultCompareRanges(now);
   const value = (key: string, fallback: string) => {
     const raw_ = first(raw[key]);
     return isCompareValue(compareUnit, raw_) ? (compareUnit === "week" ? mondayOf(raw_) : raw_) : fallback;
@@ -124,11 +137,19 @@ export function parseAccountingQuery(raw: Raw, now = new Date()): AccountingQuer
     from: isDate(first(raw.from)) ? first(raw.from) : "",
     to: isDate(first(raw.to)) ? first(raw.to) : "",
     agentId: first(raw.agentId).slice(0, 64),
+    compareAgentA: first(raw.agentA).slice(0, 64),
+    compareAgentB: first(raw.agentB).slice(0, 64),
     lotteries,
     compare,
     compareUnit,
+    compareLotteryA: parseCompareCategory(first(raw.lotteryA), "THAI_GOVERNMENT"),
+    compareLotteryB: parseCompareCategory(first(raw.lotteryB), "LAO_COMBINED"),
     compareA: value("a", defaults.a),
     compareB: value("b", defaults.b),
+    compareAFrom: isDate(first(raw.aFrom)) ? first(raw.aFrom) : rangeDefaults.a.from,
+    compareATo: isDate(first(raw.aTo)) && first(raw.aTo) >= first(raw.aFrom) ? first(raw.aTo) : rangeDefaults.a.to,
+    compareBFrom: isDate(first(raw.bFrom)) ? first(raw.bFrom) : rangeDefaults.b.from,
+    compareBTo: isDate(first(raw.bTo)) && first(raw.bTo) >= first(raw.bFrom) ? first(raw.bTo) : rangeDefaults.b.to,
     // ส่งออกของงวดเดียว (มาจากการเทียบรายงวด)
     ...(/^[A-Za-z0-9_-]{8,64}$/.test(first(raw.draw)) ? { drawIds: [first(raw.draw)] } : first(raw.draw) === "none" ? { drawIds: [] } : {}),
   };
@@ -137,10 +158,31 @@ export function parseAccountingQuery(raw: Raw, now = new Date()): AccountingQuer
   return query;
 }
 
+function parseCompareCategory(value: string, fallback: AccountingCompareCategory): AccountingCompareCategory {
+  if (value === "LAO_COMBINED" || value === "LAO" || value === "LAO_SET") return "LAO_COMBINED";
+  if (value === "THAI_GOVERNMENT") return "THAI_GOVERNMENT";
+  return fallback;
+}
+
 function isCompareValue(unit: CompareUnit, value: string): boolean {
-  if (unit === "month") return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+  if (unit === "range") return false;
+  if (unit === "month") return value === "all" || /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
   if (unit === "draw") return /^[A-Za-z0-9_-]{8,64}$/.test(value);
   return isDate(value);
+}
+
+function defaultCompareRanges(now = new Date()): { a: DateSpan; b: DateSpan } {
+  const today = bangkokToday(now);
+  const [year, month, day] = today.split("-").map(Number);
+  const previousStart = new Date(Date.UTC(year!, month! - 2, 1));
+  const previousLastDay = new Date(Date.UTC(year!, month! - 1, 0)).getUTCDate();
+  return {
+    a: { from: `${today.slice(0, 7)}-01`, to: today },
+    b: {
+      from: previousStart.toISOString().slice(0, 10),
+      to: new Date(Date.UTC(year!, month! - 2, Math.min(day!, previousLastDay))).toISOString().slice(0, 10),
+    },
+  };
 }
 
 /** ค่าเริ่มต้นเมื่อเลือกหน่วย: ช่วงล่าสุด (A) เทียบกับช่วงก่อนหน้า (B) งวดให้หน้าเลือกจากรายการงวด */
@@ -158,6 +200,7 @@ export function defaultCompareValues(unit: CompareUnit, now = new Date()): { a: 
       return { a: today.slice(0, 7), b: new Date(Date.UTC(year!, month! - 2, 1)).toISOString().slice(0, 7) };
     }
     case "draw":
+    case "range":
       return { a: "", b: "" };
   }
 }
@@ -307,6 +350,16 @@ export function accountingHref(base: string, query: AccountingQuery, change: Par
     params.set("unit", next.compareUnit);
     if (next.compareA) params.set("a", next.compareA);
     if (next.compareB) params.set("b", next.compareB);
+    params.set("lotteryA", next.compareLotteryA);
+    params.set("lotteryB", next.compareLotteryB);
+    if (next.compareAgentA) params.set("agentA", next.compareAgentA);
+    if (next.compareAgentB) params.set("agentB", next.compareAgentB);
+    if (next.compareUnit === "range") {
+      params.set("aFrom", next.compareAFrom);
+      params.set("aTo", next.compareATo);
+      params.set("bFrom", next.compareBFrom);
+      params.set("bTo", next.compareBTo);
+    }
   }
   return `${base}?${params}`;
 }
@@ -358,22 +411,42 @@ export function previousPeriodQuery(query: AccountingQuery, now = new Date()): A
 }
 
 /**
- * ช่วง A/B ของการเลือกเอง แปลงเป็น query ของรายงาน (ใช้ Agent เดียวกับหน้า)
- * รายงวด: ดูเฉพาะงวดนั้น ไม่กรองประเภทหวยซ้ำ เพราะงวดกำหนดประเภทหวยอยู่แล้ว
+ * ช่วง A/B ของการเลือกเอง แปลงเป็น query ของรายงาน โดยแต่ละฝั่งเลือก Agent ได้อิสระ
+ * รายงวด: เลือก id เพื่อดูงวดเดียว หรือเว้นว่างเพื่อรวมทุกงวดของประเภทหวยฝั่งนั้น
  * วัน/สัปดาห์/เดือน: ใช้ตัวกรองประเภทหวยเดียวกับหน้า
  */
 export function customCompareQueries(query: AccountingQuery, drawA: string, drawB: string): [AccountingQuery, AccountingQuery] {
   const base = { ...query, compare: "none" as const, period: "custom" as const };
+  const sideA = { ...base, agentId: query.compareAgentA };
+  const sideB = { ...base, agentId: query.compareAgentB };
+  const lotteries = (category: AccountingCompareCategory): AccountingLottery[] => category === "THAI_GOVERNMENT"
+    ? ["THAI_GOVERNMENT"]
+    : ["LAO", "LAO_SET"];
   if (query.compareUnit === "draw") {
     return [
-      { ...base, lotteries: [...ACCOUNTING_LOTTERIES], drawIds: drawA ? [drawA] : [] },
-      { ...base, lotteries: [...ACCOUNTING_LOTTERIES], drawIds: drawB ? [drawB] : [] },
+      { ...sideA, period: drawA ? "custom" : "all", lotteries: lotteries(query.compareLotteryA), drawIds: drawA ? [drawA] : undefined },
+      { ...sideB, period: drawB ? "custom" : "all", lotteries: lotteries(query.compareLotteryB), drawIds: drawB ? [drawB] : undefined },
+    ];
+  }
+  if (query.compareUnit === "range") {
+    return [
+      { ...sideA, lotteries: lotteries(query.compareLotteryA), from: query.compareAFrom, to: query.compareATo, drawIds: undefined },
+      { ...sideB, lotteries: lotteries(query.compareLotteryB), from: query.compareBFrom, to: query.compareBTo, drawIds: undefined },
     ];
   }
   const unit = query.compareUnit;
+  if (unit === "month" && (query.compareA === "all" || query.compareB === "all")) {
+    const monthQuery = (side: AccountingQuery, value: string, category: AccountingCompareCategory): AccountingQuery => value === "all"
+      ? { ...side, period: "all", lotteries: lotteries(category), drawIds: undefined }
+      : { ...side, lotteries: lotteries(category), ...compareSpan("month", value), drawIds: undefined };
+    return [monthQuery(sideA, query.compareA, query.compareLotteryA), monthQuery(sideB, query.compareB, query.compareLotteryB)];
+  }
   const a = compareSpan(unit, query.compareA);
   const b = compareSpan(unit, query.compareB);
-  return [{ ...base, ...a }, { ...base, ...b }];
+  return [
+    { ...sideA, lotteries: lotteries(query.compareLotteryA), ...a, drawIds: undefined },
+    { ...sideB, lotteries: lotteries(query.compareLotteryB), ...b, drawIds: undefined },
+  ];
 }
 
 /** ชื่อเรียกช่วงก่อนหน้าแบบภาษาพูด ตามช่วงที่ดูอยู่ */

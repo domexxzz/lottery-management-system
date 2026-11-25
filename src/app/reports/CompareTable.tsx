@@ -1,24 +1,37 @@
+import { DashboardIcon, type DashboardIconName } from "../DashboardIcon";
 import { COUNT_FORMAT, MONEY_FORMAT } from "@/lib/reports/terms";
 
-/**
- * ตารางเปรียบเทียบที่อ่านได้ทันที: ช่วงนี้ | ช่วงก่อน | เปลี่ยนแปลง (เป็นคำ)
- *
- * เดิมแสดงแค่ "▲ +1,200 (+12%)" ไม่บอกตัวเลขของช่วงก่อน และ ▲ เป็นสีเขียวเสมอ
- * แม้ตัวที่เพิ่มคือรายจ่าย (จ่ายรางวัลเพิ่ม = ไม่ดี) ตอนนี้สีบอกว่าดีหรือไม่ดีต่อเจ้าของ
- */
+export type ComparisonRule = "profit" | "revenue" | "expense" | "neutral" | "winners";
+
 export type CompareRow = {
   label: string;
+  /** ค่าในช่วง A */
   current: number | null;
+  /** ค่าในช่วง B */
   previous: number | null;
+  rule: ComparisonRule;
   kind?: "money" | "count";
-  /** เพิ่มขึ้นแล้วดีต่อเจ้าของไหม: up = ยิ่งมากยิ่งดี, down = ยิ่งน้อยยิ่งดี, neutral = แค่บอกข้อมูล */
-  better: "up" | "down" | "neutral";
   unit?: string;
-  /** แสดงแทนตัวเลขเมื่อเป็น null เช่น "ยังสรุปไม่ได้" */
   emptyText?: string;
-  /** กำไร/ขาดทุน: แสดงคำว่ากำไรหรือขาดทุนนำหน้าตัวเลข */
   signedWord?: boolean;
+  icon?: DashboardIconName;
 };
+
+export type ComparisonNumbers = {
+  diff: number;
+  direction: "up" | "down" | "same";
+  state: "changed" | "started" | "stopped" | "same";
+  percent: number | null;
+};
+
+/** ชั้นที่ 1: คำนวณ B − A โดยยังไม่ตัดสินว่าผลดีหรือผลเสีย */
+export function calculateComparison(a: number, b: number): ComparisonNumbers {
+  const diff = Math.round((b - a) * 100) / 100;
+  if (diff === 0) return { diff, direction: "same", state: "same", percent: 0 };
+  const state = a === 0 ? "started" : b === 0 ? "stopped" : "changed";
+  const percent = a === 0 ? null : Math.round((diff / Math.abs(a) * 100) * 10) / 10;
+  return { diff, direction: diff > 0 ? "up" : "down", state, percent };
+}
 
 function format(row: CompareRow, value: number | null): string {
   if (value === null) return row.emptyText ?? "—";
@@ -27,71 +40,193 @@ function format(row: CompareRow, value: number | null): string {
   return `${value < 0 ? "−" : ""}${text}${row.unit ? ` ${row.unit}` : ""}`;
 }
 
-function change(row: CompareRow): { text: string; tone: "is-good" | "is-bad" | "is-neutral" } {
-  if (row.current === null || row.previous === null) return { text: "เทียบไม่ได้", tone: "is-neutral" };
-  const diff = Math.round((row.current - row.previous) * 100) / 100;
-  if (diff === 0) return { text: "เท่าเดิม", tone: "is-neutral" };
-  const amount = row.kind === "count" ? COUNT_FORMAT.format(Math.abs(diff)) : MONEY_FORMAT.format(Math.abs(diff));
-  const percent = row.previous === 0 ? "" : ` (${diff > 0 ? "+" : "−"}${Math.abs(diff / Math.abs(row.previous) * 100).toFixed(1)}%)`;
-  const word = row.signedWord ? (diff > 0 ? "ดีขึ้น" : "แย่ลง") : diff > 0 ? "มากขึ้น" : "น้อยลง";
-  const good = row.better === "neutral" ? null : (diff > 0) === (row.better === "up");
+function signedBaht(value: number): string {
+  if (value === 0) return "คุ้มทุน 0.00 บาท";
+  return `${value < 0 ? "ขาดทุน" : "กำไร"} ${MONEY_FORMAT.format(Math.abs(value))} บาท`;
+}
+
+export type ChangeResult = {
+  direction: "up" | "down" | "same" | "na";
+  word: string;
+  amount: string;
+  detail: string;
+  percent: string;
+  tone: "is-good" | "is-bad" | "is-neutral";
+};
+
+function formatPercent(value: number | null): string {
+  if (value === null) return "";
+  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value).toFixed(1)}%`;
+}
+
+/** ชั้นที่ 2: ตีความผลจากชั้นคำนวณตามกฎทางธุรกิจของแต่ละรายการ */
+export function comparisonChange(row: CompareRow): ChangeResult {
+  if (row.current === null || row.previous === null) {
+    return { direction: "na", word: "เทียบไม่ได้", amount: "", detail: "", percent: "", tone: "is-neutral" };
+  }
+
+  const numbers = calculateComparison(row.current, row.previous);
+  if (numbers.direction === "same") {
+    return {
+      direction: "same",
+      word: row.current === 0 ? "ไม่มีการเปลี่ยนแปลง" : "เท่าเดิม",
+      amount: "",
+      detail: "",
+      percent: row.current === 0 ? "" : "0.0%",
+      tone: "is-neutral",
+    };
+  }
+
+  const amount = row.kind === "count" ? COUNT_FORMAT.format(Math.abs(numbers.diff)) : MONEY_FORMAT.format(Math.abs(numbers.diff));
+  const unit = row.unit && !row.signedWord ? ` ${row.unit}` : "";
+  const crossedSign = row.rule === "profit" && ((row.current > 0 && row.previous < 0) || (row.current < 0 && row.previous > 0));
+
+  if (row.rule === "profit") {
+    const word = row.current > 0 && row.previous < 0
+      ? "พลิกจากกำไรเป็นขาดทุน"
+      : row.current < 0 && row.previous > 0
+        ? "พลิกจากขาดทุนเป็นกำไร"
+        : numbers.state === "started"
+          ? row.previous > 0 ? "เริ่มมีกำไร" : "เริ่มขาดทุน"
+          : numbers.diff > 0 ? "ดีขึ้น" : "แย่ลง";
+    return {
+      direction: numbers.direction,
+      word,
+      amount,
+      detail: "",
+      percent: crossedSign ? "" : formatPercent(numbers.percent),
+      tone: numbers.diff > 0 ? "is-good" : "is-bad",
+    };
+  }
+
+  if (row.rule === "expense") {
+    return {
+      direction: numbers.direction,
+      word: numbers.state === "started" && numbers.diff > 0 ? "มีค่าใช้จ่ายเพิ่ม" : numbers.diff > 0 ? "ค่าใช้จ่ายเพิ่มขึ้น" : "ค่าใช้จ่ายลดลง",
+      amount: `${amount}${unit}`,
+      detail: "",
+      percent: formatPercent(numbers.percent),
+      tone: numbers.diff > 0 ? "is-bad" : "is-good",
+    };
+  }
+
+  const isRevenue = row.rule === "revenue";
+  const word = numbers.state === "started"
+    ? isRevenue ? "เริ่มมียอดขาย" : row.rule === "winners" ? "เพิ่มขึ้น" : "เริ่มมีรายการ"
+    : numbers.diff > 0 ? "เพิ่มขึ้น" : "ลดลง";
   return {
-    text: `${diff > 0 ? "▲" : "▼"} ${word} ${amount}${row.unit && !row.signedWord ? ` ${row.unit}` : ""}${percent}`,
-    tone: good === null ? "is-neutral" : good ? "is-good" : "is-bad",
+    direction: numbers.direction,
+    word,
+    amount: `${amount}${unit}`,
+    detail: row.rule === "winners" && numbers.state === "started" && numbers.diff > 0 ? "(เริ่มมีผู้ถูกรางวัล)" : "",
+    percent: formatPercent(numbers.percent),
+    tone: isRevenue ? numbers.diff > 0 ? "is-good" : "is-bad" : "is-neutral",
   };
 }
 
-export function CompareTable({ currentLabel, previousLabel, currentShort = "ช่วงนี้", previousShort = "ช่วงก่อน", rows, summary, note }: {
+export type NarrativeItem = { tone: ChangeResult["tone"]; text: string };
+
+/** สร้างคำอธิบายภาษาคนจากผลเปรียบเทียบ โดยไม่ตัดสินตัวเลขทั่วไปว่าเป็นผลดีหรือผลเสีย */
+export function comparisonNarrative(rows: CompareRow[]): NarrativeItem[] {
+  const items: NarrativeItem[] = [];
+  for (const row of rows) {
+    if (row.current === null || row.previous === null) continue;
+    const result = comparisonChange(row);
+    if (row.rule === "profit") {
+      if (result.direction === "same") {
+        items.push({ tone: "is-neutral", text: `ผลประกอบการทั้งสองช่วงเท่ากันที่ ${signedBaht(row.current)}` });
+      } else {
+        const impact = result.tone === "is-good" ? "ผลประกอบการดีขึ้น" : "ผลประกอบการแย่ลง";
+        items.push({
+          tone: result.tone,
+          text: `${impact}: ช่วง A ${signedBaht(row.current)} ส่วนช่วง B ${signedBaht(row.previous)} — ${result.word} ${result.amount} บาท`,
+        });
+      }
+      continue;
+    }
+
+    if (row.rule === "revenue") {
+      const effect = result.direction === "same" ? "ยอดขายไม่เปลี่ยนแปลง" : `ยอดขาย${result.direction === "up" ? "เพิ่มขึ้น" : "ลดลง"} ${result.amount}${result.percent ? ` (${result.percent})` : ""}`;
+      items.push({ tone: result.tone, text: `${effect}${result.direction === "same" ? "" : result.tone === "is-good" ? " เป็นสัญญาณด้านรายได้ที่ดีขึ้น" : " เป็นสัญญาณด้านรายได้ที่ลดลง"}` });
+      continue;
+    }
+
+    if (row.rule === "expense") {
+      const effect = result.direction === "same" ? `${row.label}ไม่เปลี่ยนแปลง` : `${row.label}: ${result.word} ${result.amount}${result.percent ? ` (${result.percent})` : ""}`;
+      items.push({ tone: result.tone, text: `${effect}${result.direction === "same" ? "" : result.tone === "is-good" ? " ช่วยลดภาระค่าใช้จ่าย" : " ทำให้ภาระค่าใช้จ่ายเพิ่มขึ้น"}` });
+      continue;
+    }
+
+    const valueText = result.direction === "same" ? `${row.label}ไม่มีการเปลี่ยนแปลง` : `${row.label}${result.word} ${result.amount}${result.percent ? ` (${result.percent})` : ""}${result.detail ? ` ${result.detail}` : ""}`;
+    items.push({
+      tone: "is-neutral",
+      text: `${valueText} — เป็นข้อมูลประกอบ ไม่ได้หมายความว่าผลประกอบการดีขึ้นหรือแย่ลงโดยตรง`,
+    });
+  }
+  return items;
+}
+
+export function CompareTable({ currentLabel, previousLabel, currentShort = "ช่วง A", previousShort = "ช่วง B", rows, note }: {
   currentLabel: string;
   previousLabel: string;
-  /** หัวคอลัมน์สั้น (มือถือแคบ) ชื่อเต็มอยู่ใต้หัวคอลัมน์ */
   currentShort?: string;
   previousShort?: string;
   rows: CompareRow[];
-  /** ประโยคสรุปภาษาพูด เช่น "เดือนนี้กำไรมากกว่าเดือนก่อน 2,000 บาท" */
-  summary?: string;
   note?: string;
 }) {
-  return (
-    <section className="cmp" aria-labelledby="cmp-heading">
-      <header>
-        <h2 id="cmp-heading">เทียบ <b>{currentLabel}</b> กับ <b>{previousLabel}</b></h2>
-        {summary && <p className="cmp-summary">{summary}</p>}
-      </header>
-      <table className="cmp-table">
-        <thead>
-          <tr>
-            <th scope="col">รายการ</th>
-            <th scope="col" className="num">{currentShort}<small>{currentLabel}</small></th>
-            <th scope="col" className="num">{previousShort}<small>{previousLabel}</small></th>
-            <th scope="col" className="num">เปลี่ยนแปลง</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const result = change(row);
-            return (
-              <tr key={row.label}>
-                <th scope="row">{row.label}</th>
-                <td className="num" data-label={currentShort}>{format(row, row.current)}</td>
-                <td className="num" data-label={previousShort}>{format(row, row.previous)}</td>
-                <td className={`num cmp-change ${result.tone}`} data-label="เปลี่ยนแปลง">{result.text}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <p className="cmp-legend"><span className="is-good">สีเขียว</span> = ดีต่อเจ้าของ · <span className="is-bad">สีแดง</span> = ไม่ดี · สีเทา = แค่บอกข้อมูล{note ? ` · ${note}` : ""}</p>
-    </section>
-  );
-}
+  const profit = rows.find((row) => row.rule === "profit");
+  const profitNumbers = profit?.current !== null && profit?.current !== undefined && profit.previous !== null
+    ? calculateComparison(profit.current, profit.previous)
+    : null;
+  const narrative = comparisonNarrative(rows);
 
-/** ประโยคสรุปกำไร เช่น "เดือนนี้กำไร 14,000.00 บาท มากกว่า 1 – 19 ต.ค. (กำไร 12,000.00) อยู่ 2,000.00 บาท" */
-export function profitSummary(currentLabel: string, previousLabel: string, current: number | null, previous: number | null): string | undefined {
-  if (current === null) return `${currentLabel} ยังสรุปกำไรไม่ได้ เพราะยังไม่มีงวดที่คำนวณแล้ว`;
-  const word = (value: number) => `${value < 0 ? "ขาดทุน" : "กำไร"} ${MONEY_FORMAT.format(Math.abs(value))} บาท`;
-  if (previous === null) return `${currentLabel} ${word(current)} · ${previousLabel} ยังสรุปไม่ได้ จึงยังเทียบกำไรไม่ได้`;
-  const diff = Math.round((current - previous) * 100) / 100;
-  if (diff === 0) return `${currentLabel} ${word(current)} เท่ากับ ${previousLabel}`;
-  return `${currentLabel} ${word(current)} ${diff > 0 ? "ดีกว่า" : "แย่กว่า"} ${previousLabel} (${word(previous)}) อยู่ ${MONEY_FORMAT.format(Math.abs(diff))} บาท`;
+  return <section className="cmp" aria-labelledby="cmp-heading">
+    <header className="cmp-heading">
+      <span><DashboardIcon name="analytics" /></span>
+      <div><h2 id="cmp-heading">สรุปความแตกต่างของข้อมูล</h2><p>ส่วนต่างคำนวณจากช่วง B − ช่วง A และใช้สีตามผลกระทบจริง</p></div>
+    </header>
+
+    {profit && profit.current !== null && profit.previous !== null && profitNumbers && <section className={`cmp-performance ${profitNumbers.diff > 0 ? "is-good" : profitNumbers.diff < 0 ? "is-bad" : "is-neutral"}`} aria-label="สรุปผลการเปรียบเทียบ">
+      <header><DashboardIcon name="report" /><strong>สรุปผลการเปรียบเทียบ</strong></header>
+      <div className="cmp-performance-grid">
+        <article className="is-a"><span>{currentShort}</span><small>{currentLabel}</small><strong>{signedBaht(profit.current)}</strong></article>
+        <article className="is-b"><span>{previousShort}</span><small>{previousLabel}</small><strong>{signedBaht(profit.previous)}</strong></article>
+        <article className="is-result">
+          <span>{profitNumbers.diff > 0 ? "ผลประกอบการดีขึ้น" : profitNumbers.diff < 0 ? "ผลประกอบการแย่ลง" : "ผลประกอบการเท่าเดิม"}</span>
+          <strong>{MONEY_FORMAT.format(Math.abs(profitNumbers.diff))} บาท</strong>
+          <small>{profit.current > 0 && profit.previous < 0 ? "ผลต่างระหว่างกำไรและขาดทุน" : profit.current < 0 && profit.previous > 0 ? "พลิกจากขาดทุนเป็นกำไร" : "ผลต่างสุทธิระหว่างสองช่วง"}</small>
+        </article>
+      </div>
+    </section>}
+
+    <div className="cmp-table-wrap"><table className="cmp-table">
+      <thead><tr>
+        <th scope="col"><span className="cmp-column-title"><DashboardIcon name="report" /> รายการ</span></th>
+        <th scope="col" className="num cmp-period-head is-a"><b>{currentShort}</b><small>{currentLabel}</small></th>
+        <th scope="col" className="num cmp-period-head is-b"><b>{previousShort}</b><small>{previousLabel}</small></th>
+        <th scope="col" className="num"><span className="cmp-column-title cmp-column-change"><DashboardIcon name="reset" /> {previousShort} เทียบ {currentShort}</span></th>
+      </tr></thead>
+      <tbody>{rows.map((row) => {
+        const result = comparisonChange(row);
+        return <tr key={row.label}>
+          <th scope="row"><span className="cmp-row-icon"><DashboardIcon name={row.icon ?? "report"} /></span><span>{row.label}</span></th>
+          <td className="num cmp-value is-a" data-label={currentShort}>{format(row, row.current)}</td>
+          <td className="num cmp-value is-b" data-label={previousShort}>{format(row, row.previous)}</td>
+          <td className={`num cmp-change ${result.tone}`} data-label="เปลี่ยนแปลง">
+            <span className="cmp-change-pill"><b aria-hidden="true">{result.direction === "up" ? "↑" : result.direction === "down" ? "↓" : result.direction === "same" ? "=" : "—"}</b><span><strong>{result.word}{result.amount ? ` ${result.amount}` : ""}{result.detail ? ` ${result.detail}` : ""}</strong>{result.percent && <small>{result.percent}</small>}</span></span>
+          </td>
+        </tr>;
+      })}</tbody>
+    </table></div>
+
+    {narrative.length > 0 && <section className="cmp-written-summary" aria-labelledby="cmp-written-summary-heading">
+      <header><span><DashboardIcon name="report" /></span><div><strong id="cmp-written-summary-heading">สรุปแบบเข้าใจง่าย</strong><small>อธิบายสิ่งที่เกิดขึ้นจากช่วง A ไปช่วง B</small></div></header>
+      <ul>{narrative.map((item, index) => <li className={item.tone} key={`${index}-${item.text}`}><i aria-hidden="true" /><span>{item.text}</span></li>)}</ul>
+    </section>}
+
+    <footer className="cmp-footer">
+      <p className="cmp-legend"><span className="is-good"><i />ผลดีขึ้น</span><span className="is-bad"><i />ผลแย่ลง</span><span className="is-neutral"><i />ข้อมูลทั่วไป</span></p>
+      {note && <p className="cmp-note">หมายเหตุ: {note}</p>}
+    </footer>
+  </section>;
 }

@@ -51,6 +51,8 @@ export function DashboardLotteryDrawFilter({
     if (drawId && clearDateRangeOnDraw) {
       params.delete("from");
       params.delete("to");
+      params.delete("dateFrom");
+      params.delete("dateTo");
     }
     startTransition(() => router.replace(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false }));
   }

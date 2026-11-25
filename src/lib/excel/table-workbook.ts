@@ -17,6 +17,14 @@ export type TableWorkbookSummaryItem = {
   unit?: string;
 };
 
+export type TableWorkbookSheet = {
+  title: string;
+  subtitle?: string;
+  sheetName: string;
+  columns: readonly TableWorkbookColumn[];
+  rows: readonly (readonly TableWorkbookCell[])[];
+};
+
 export type TableWorkbookInput = {
   title: string;
   subtitle?: string;
@@ -27,6 +35,8 @@ export type TableWorkbookInput = {
   metadata?: readonly TableWorkbookSummaryItem[];
   /** ยอดสรุปของข้อมูลที่ผ่านตัวกรอง */
   summary?: readonly TableWorkbookSummaryItem[];
+  /** ชีตมุมมองเพิ่มเติม เรียงต่อจาก Summary และก่อนชีตรายละเอียดหลัก */
+  additionalSheets?: readonly TableWorkbookSheet[];
   generatedAt?: Date;
 };
 
@@ -88,7 +98,7 @@ function displayLength(value: TableWorkbookCell): number {
   return String(value).length;
 }
 
-function columnWidth(input: TableWorkbookInput, index: number): number {
+function columnWidth(input: Pick<TableWorkbookInput, "columns" | "rows">, index: number): number {
   const configured = input.columns[index]?.width;
   if (configured) return configured;
   const type = input.columns[index]?.type ?? "text";
@@ -103,7 +113,7 @@ function safeSheetName(value: string): string {
   return safe || "รายงาน";
 }
 
-function worksheetXml(input: TableWorkbookInput): string {
+function worksheetXml(input: Pick<TableWorkbookInput, "title" | "subtitle" | "columns" | "rows">): string {
   const lastColumn = columnName(input.columns.length - 1);
   const lastRow = Math.max(4, input.rows.length + 4);
   const title = `<row r="1" ht="28" customHeight="1">${cell("A1", input.title, 1)}</row>`;
@@ -200,7 +210,7 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
-function validateInput(input: TableWorkbookInput): void {
+function validateSheet(input: Pick<TableWorkbookInput, "columns" | "rows">): void {
   if (input.columns.length === 0) throw new Error("ต้องมีอย่างน้อย 1 คอลัมน์");
   const headers = input.columns.map((column) => column.header.trim());
   if (headers.some((header) => !header)) throw new Error("ชื่อคอลัมน์ห้ามว่าง");
@@ -208,24 +218,49 @@ function validateInput(input: TableWorkbookInput): void {
   if (input.rows.some((row) => row.length > input.columns.length)) throw new Error("จำนวนข้อมูลในแถวมากกว่าจำนวนคอลัมน์");
 }
 
+function uniqueSheetNames(wanted: readonly string[]): string[] {
+  const used = new Set<string>();
+  return wanted.map((value) => {
+    const base = safeSheetName(value);
+    let name = base;
+    let sequence = 2;
+    while (used.has(name.toLocaleLowerCase("en-US"))) {
+      const suffix = ` (${sequence})`;
+      name = `${base.slice(0, 31 - suffix.length)}${suffix}`;
+      sequence += 1;
+    }
+    used.add(name.toLocaleLowerCase("en-US"));
+    return name;
+  });
+}
+
 /** สร้าง XLSX มาตรฐานบัญชี: ชีต Summary และชีตรายละเอียด พร้อม typed cells */
 export function generateTableWorkbook(input: TableWorkbookInput): Uint8Array {
-  validateInput(input);
+  validateSheet(input);
+  for (const sheet of input.additionalSheets ?? []) validateSheet(sheet);
   const generatedAt = input.generatedAt ?? new Date();
   const now = generatedAt.toISOString();
   const sheetName = safeSheetName(input.sheetName ?? input.title);
   const summarySheetName = sheetName === "Summary" ? "Report Summary" : "Summary";
+  const tableSheets = [...(input.additionalSheets ?? []), { title: input.title, subtitle: input.subtitle, sheetName, columns: input.columns, rows: input.rows }];
+  const names = uniqueSheetNames([summarySheetName, ...tableSheets.map((sheet) => sheet.sheetName)]);
+  const worksheetCount = names.length;
+  const contentTypes = names.map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("");
+  const workbookSheets = names.map((name, index) => `<sheet name="${xml(name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join("");
+  const worksheetRelationships = names.map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join("");
   const files: Record<string, Uint8Array> = {
-    "[Content_Types].xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`),
+    "[Content_Types].xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${contentTypes}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`),
     "_rels/.rels": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`),
     "docProps/core.xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xml(input.title)}</dc:title><dc:creator>Lottery Management System</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`),
     "docProps/app.xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Lottery Management System</Application></Properties>`),
-    "xl/workbook.xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xml(summarySheetName)}" sheetId="1" r:id="rId1"/><sheet name="${xml(sheetName)}" sheetId="2" r:id="rId2"/></sheets></workbook>`),
-    "xl/_rels/workbook.xml.rels": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`),
+    "xl/workbook.xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets></workbook>`),
+    "xl/_rels/workbook.xml.rels": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${worksheetRelationships}<Relationship Id="rId${worksheetCount + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`),
     "xl/styles.xml": strToU8(STYLES),
     "xl/worksheets/sheet1.xml": strToU8(summaryWorksheetXml(input, generatedAt)),
-    "xl/worksheets/sheet2.xml": strToU8(worksheetXml(input)),
   };
+  tableSheets.forEach((sheet, index) => {
+    files[`xl/worksheets/sheet${index + 2}.xml`] = strToU8(worksheetXml(sheet));
+  });
   return zipSync(files, { level: 6 });
 }
 

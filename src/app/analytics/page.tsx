@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { BillStatus } from "@prisma/client";
 import { getActor, orgScope } from "@/lib/auth/context";
 import { getAnalyticsData } from "@/lib/analytics/service";
 import { prisma } from "@/lib/db";
-import { AnalyticsFilters } from "./AnalyticsFilters";
+import { DashboardFilters } from "../DashboardFilters";
+import { dashboardDrawLabel, resolveDashboardDrawScope } from "@/lib/dashboard/lottery-draw-filter";
+import { reportCategoryLabel } from "@/lib/reports/draw-groups";
 import { customerProfileKey } from "@/lib/customers/profile-key";
 import "../reports/reports.css";
 import "./analytics.css";
@@ -12,8 +13,12 @@ import "./analytics.css";
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const INTEGER = new Intl.NumberFormat("th-TH");
 
-const ANALYTICS_STATUSES: BillStatus[] = ["CONFIRMED", "LOCKED", "SETTLED"];
 function first(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] : value; }
+function bangkokBoundary(value: string | undefined, endOfDay = false) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const date = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00"}+07:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
 
 /*
  * ทุกหน้าในแอปนี้ผูกกับ session ของผู้ใช้ จึงต้องไม่ถูกทำเป็น static
@@ -31,16 +36,23 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
   const query = await searchParams;
   const drawId = first(query.drawId);
-  const agentId = first(query.agentId);
-  const rawStatus = first(query.status);
-  const selectedStatus = ANALYTICS_STATUSES.includes(rawStatus as BillStatus) ? rawStatus as BillStatus : undefined;
+  const lottery = first(query.lottery);
+  const dateFrom = bangkokBoundary(first(query.dateFrom));
+  const dateTo = bangkokBoundary(first(query.dateTo), true);
   const scope = orgScope(actor);
 
-  const [analytics, draws, agents] = await Promise.all([
-    getAnalyticsData({ organizationId: actor.organizationId, drawId, agentId, status: selectedStatus }),
-    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, lotteryType: true } }),
-    prisma.agent.findMany({ where: scope, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
-  ]);
+  const physicalDraws = await prisma.draw.findMany({
+    where: scope,
+    orderBy: { cutoffAt: "desc" },
+    select: { id: true, name: true, drawDate: true, cutoffAt: true, status: true, lotteryType: true, laoFamilyId: true },
+  });
+  const drawScope = resolveDashboardDrawScope(physicalDraws, lottery, drawId);
+  const analytics = await getAnalyticsData({
+    organizationId: actor.organizationId,
+    drawIds: drawScope.drawIds,
+    dateFrom,
+    dateTo,
+  });
 
   const timeDemand = new Map<string, { bills: number; sales: number }>([["เช้า", { bills: 0, sales: 0 }], ["บ่าย", { bills: 0, sales: 0 }], ["เย็น/ค่ำ", { bills: 0, sales: 0 }]]);
   for (const row of analytics.times) timeDemand.set(row.label, { bills: row.bills, sales: row.sales });
@@ -81,7 +93,17 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       <div className="data-badge"><span>●</span><div><strong>ข้อมูลจริงจากระบบ</strong><small>{INTEGER.format(analytics.billCount)} บิลที่ยืนยันแล้ว</small></div></div>
     </header>
 
-    <AnalyticsFilters draws={draws.map((draw) => ({ id: draw.id, label: draw.name, lotteryType: draw.lotteryType }))} agents={agents.map((agent) => ({ id: agent.id, label: `${agent.code} · ${agent.name}` }))} />
+    <DashboardFilters
+      draws={drawScope.logicalDraws.map((draw) => ({
+        id: draw.id,
+        label: `${reportCategoryLabel(draw.category)} · ${dashboardDrawLabel(draw)}`,
+        lotteryType: draw.lotteryType,
+        category: draw.category,
+        status: draw.status,
+      }))}
+      category={drawScope.category}
+      selectedDrawId={drawScope.selectedDraw?.id}
+    />
 
     {insights.length > 0 && (
       <section className="analytics-insights" aria-labelledby="analytics-insights-heading">

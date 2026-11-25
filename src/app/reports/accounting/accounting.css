@@ -35,6 +35,14 @@
 .acc-compare-switch { display: inline-flex; min-height: 40px; align-items: center; gap: .5rem; margin: 0; padding: 0 .85rem; border: 1px solid #c8dbef; border-radius: 999px; color: #123b62; background: #f7fbff; font-size: .88rem; font-weight: 750; cursor: pointer; }
 .acc-compare-switch input { width: 18px; height: 18px; accent-color: #1769e0; }
 .acc-loading { color: #1769e0; font-size: .82rem; font-weight: 750; }
+.acc-calendar-filter { display:grid; grid-template-columns:minmax(180px,.65fr) repeat(2,minmax(220px,1fr)); align-items:end; gap:.65rem; padding:.7rem; border:1px solid #d8e5f1; border-radius:12px; background:linear-gradient(135deg,#f8fbff,#fff); }
+.acc-calendar-filter.is-muted { opacity:.62; }
+.acc-calendar-heading { display:grid; align-self:center; gap:.12rem; }
+.acc-calendar-heading strong { color:#173b63; font-size:.84rem; }
+.acc-calendar-heading small { color:#71849a; font-size:.68rem; line-height:1.4; }
+.acc-calendar-filter .date-range-field { min-width:0; margin:0; }
+.acc-calendar-filter .date-range-field>span { color:#435d77; font-size:.72rem; font-weight:750; }
+.acc-calendar-filter .date-picker-trigger { width:100%; min-height:44px; margin:0; border-color:#b9d2ec; border-radius:10px; background:#fff; }
 
 /* ---------------------------------------------------------------- ได้หรือเสีย */
 .acc-hero { display: grid; gap: .35rem; padding: 1.1rem 1.2rem; border: 2px solid #d5dde4; border-radius: 18px; background: #fff; }
@@ -42,6 +50,7 @@
 .acc-hero.is-loss { border-color: #f1a7b2; background: linear-gradient(135deg, #fff2f4, #fff 60%); }
 .acc-hero.is-pending { border-color: #b9d3ee; background: linear-gradient(135deg, #eef5fd, #fff 60%); }
 .app-page .acc-hero h2 { margin: 0; color: #3f4c59; font-size: .95rem; font-weight: 800; }
+.acc-hero-scope { margin:0;color:#526b86;font-size:.84rem;font-weight:650;line-height:1.45 }
 .acc-hero-answer { margin: 0; color: #33414f; font-size: 1.3rem; font-weight: 800; }
 .acc-hero-answer strong { font-size: 2.5rem; font-weight: 900; font-variant-numeric: tabular-nums; }
 .acc-hero.is-profit .acc-hero-answer strong { color: #12814f; }
@@ -54,6 +63,35 @@
 .acc-delta.is-up { color: #087a4b; }
 .acc-delta.is-down { color: #bd3348; }
 .acc-hero-compare .acc-delta { display: inline; font-size: inherit; }
+
+/* เปิดเปรียบเทียบ: แบ่งผลลัพธ์เป็นช่วง A, ช่วง B และรวม A+B */
+.acc-comparison-overview { display:grid;gap:.85rem;padding:1rem;border:1px solid #bdd4ee;border-radius:18px;background:linear-gradient(145deg,#f8fbff,#fff);box-shadow:0 10px 26px rgb(30 78 135 / 6%) }
+.acc-comparison-overview>header { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.45rem 1rem }
+.acc-comparison-overview>header h2 { margin:0;color:#183a60;font-size:1.05rem }
+.acc-comparison-overview>header p { margin:.12rem 0 0;color:#5e748b;font-size:.8rem }
+.acc-comparison-overview>header>span { padding:.35rem .65rem;border:1px solid #c9d9eb;border-radius:999px;color:#47627e;background:#fff;font-size:.72rem;font-weight:800 }
+.acc-comparison-total-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem }
+.acc-comparison-total { display:grid;align-content:start;gap:.65rem;min-width:0;padding:.9rem;border:1px solid #c8dcef;border-radius:15px;background:#fff;box-shadow:0 5px 14px rgb(30 78 135 / 5%) }
+.acc-comparison-total.is-a { border-top:4px solid #1769e0;background:linear-gradient(145deg,#f2f7ff,#fff 62%) }
+.acc-comparison-total.is-b { border-top:4px solid #138b86;background:linear-gradient(145deg,#effaf8,#fff 62%) }
+.acc-comparison-total.is-total { border-top:4px solid #654cc4;background:linear-gradient(145deg,#f5f2ff,#fff 62%) }
+.acc-comparison-total>header { display:grid;gap:.12rem;min-width:0 }
+.acc-comparison-total>header>span { color:#173a60;font-size:1rem;font-weight:900 }
+.acc-comparison-total>header>small { overflow:hidden;color:#60758b;font-size:.72rem;font-weight:650;text-overflow:ellipsis;white-space:nowrap }
+.acc-comparison-result { display:flex;flex-wrap:wrap;align-items:baseline;gap:.2rem .4rem;margin:0;padding:.65rem 0;border-top:1px solid #e4ecf5;border-bottom:1px solid #e4ecf5 }
+.acc-comparison-result>span { color:#536b82;font-size:.82rem;font-weight:800 }
+.acc-comparison-result>strong { color:#12814f;font-size:1.65rem;font-weight:950;font-variant-numeric:tabular-nums;overflow-wrap:anywhere }
+.acc-comparison-total.is-loss .acc-comparison-result>strong { color:#c0283f }
+.acc-comparison-total.is-pending .acc-comparison-result>strong { color:#1d5a96;font-size:1.05rem }
+.acc-comparison-result>small { color:#536b82;font-size:.75rem;font-weight:700 }
+.acc-comparison-total dl { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;margin:0 }
+.acc-comparison-total dl>div { display:grid;gap:.08rem;padding:.5rem .55rem;border:1px solid #e1eaf3;border-radius:10px;background:rgb(255 255 255 / 78%) }
+.acc-comparison-total dt { color:#667b90;font-size:.68rem;font-weight:750 }
+.acc-comparison-total dd { margin:0;color:#173a5d;font-size:.86rem;font-weight:900;font-variant-numeric:tabular-nums;overflow-wrap:anywhere }
+.acc-comparison-total>footer { color:#61778d;font-size:.7rem;font-weight:700;line-height:1.4 }
+
+@media(max-width:1000px){.acc-comparison-total-grid{grid-template-columns:1fr}.acc-comparison-total>header>small{white-space:normal}.acc-comparison-total dl{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:700px){.acc-comparison-overview{padding:.7rem}.acc-comparison-overview>header{align-items:flex-start;flex-direction:column}.acc-comparison-total dl{grid-template-columns:repeat(2,minmax(0,1fr))}.acc-comparison-result>strong{font-size:1.4rem}}
 
 /* ---------------------------------------------------------------- ตัวเลขรอง */
 .acc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .7rem; }
@@ -127,6 +165,8 @@
   .acc-custom-range { padding-left: 0; }
   .acc-custom-range label { flex: 1; }
   .acc-filter-extra { flex-wrap: wrap; }
+  .acc-calendar-filter { grid-template-columns:1fr 1fr; }
+  .acc-calendar-heading { grid-column:1/-1; }
   .acc-agent-filter { flex: 1 1 100%; min-width: 0; }
   .acc-agent-filter .app-dropdown { min-width: 0; }
   .acc-compare-switch { flex: 1 1 100%; min-height: 44px; justify-content: flex-start; }
@@ -171,6 +211,10 @@
   .acc-agent-table td::before { color: #738492; font-size: .7rem; font-weight: 700; content: attr(data-label); }
   .acc-agent-table td:first-child { grid-column: 1 / -1; }
   .acc-agent-table td:first-child::before { display: none; }
+}
+@media (max-width: 480px) {
+  .acc-calendar-filter { grid-template-columns:1fr; }
+  .acc-calendar-heading { grid-column:1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .acc-filters { transition: none; }
@@ -241,4 +285,186 @@
 .acc-span-picker .app-dropdown { min-width: 230px; }
 @media (max-width: 700px) {
   .acc-span-picker .app-dropdown { min-width: 0; }
+}
+
+/* เปรียบเทียบแบบเป็นขั้นตอน: ปิดอยู่เหลือเพียงหัวสั้น ๆ เปิดแล้วจึงแสดงตัวเลือก */
+.acc-compare-card { padding: .7rem .75rem; border: 1px solid #d4e2ef; border-radius: 13px; background: linear-gradient(135deg,#fbfdff,#fff); }
+.acc-compare-card.is-active { border-color: #9fc4e9; box-shadow: 0 8px 24px rgb(23 105 224 / 7%); }
+.acc-compare-header { display: flex; align-items: center; justify-content: space-between; gap: .65rem 1rem; }
+.acc-compare-header > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem; }
+.acc-compare-header strong { color: #173b63; font-size: .88rem; }
+.acc-compare-header small { color: #71849a; font-size: .68rem; }
+.acc-compare-toggle { display: flex; flex-wrap: wrap; gap: .4rem; }
+.accounting-page .acc-compare-toggle button { min-height: 40px; margin: 0; padding: .45rem .9rem; border: 1px solid #b9d2ec; color: #20496f; background: #fff; box-shadow: none; font-size: .78rem; font-weight: 850; }
+.accounting-page .acc-compare-toggle button[aria-pressed="true"] { border-color: #0d6678; color: #fff; background: linear-gradient(135deg,#0c7180,#0b8d91); box-shadow: 0 5px 14px rgb(11 113 128 / 18%); }
+.acc-compare-steps { display: grid; gap: .7rem; margin-top: .75rem; padding-top: .75rem; border-top: 1px solid #dbe7f2; }
+.acc-compare-step,.acc-compare-agent { display: grid; grid-template-columns: minmax(180px,.45fr) minmax(0,1.55fr); align-items: start; gap: .75rem; padding: .7rem; border: 1px solid #e0e9f2; border-radius: 12px; background: #fff; }
+.acc-step-title { display: flex; align-items: center; gap: .55rem; min-width: 0; }
+.acc-step-title > b { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 50%; color: #fff; background: #1769e0; font-size: .78rem; }
+.acc-step-title > span { display: grid; min-width: 0; }
+.acc-step-title strong { color: #173b63; font-size: .78rem; }
+.acc-step-title small { color: #71849a; font-size: .64rem; line-height: 1.35; }
+.acc-pair-options,.acc-method-options { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .5rem; }
+.accounting-page .acc-pair-options button,.accounting-page .acc-method-options button { min-height: 46px; margin: 0; padding: .55rem .7rem; border: 1px solid #c8dbef; color: #244a70; background: #f9fbfe; box-shadow: none; font-size: .78rem; font-weight: 850; }
+.accounting-page .acc-pair-options button[aria-pressed="true"],.accounting-page .acc-method-options button[aria-pressed="true"] { border-color: #1769e0; color: #fff; background: #1769e0; box-shadow: 0 5px 14px rgb(23 105 224 / 16%); }
+.acc-method-options button { display: grid; gap: .08rem; text-align: left; }
+.acc-method-options button strong { color: inherit; font-size: .76rem; }
+.acc-method-options button small { color: #71849a; font-size: .59rem; font-weight: 600; }
+.acc-method-options button[aria-pressed="true"] small { color: #eaf3ff; }
+.acc-compare-sides { display: grid; grid-template-columns: minmax(0,1fr) 42px minmax(0,1fr); align-items: center; gap: .55rem; }
+.acc-compare-side { display: grid; gap: .55rem; min-width: 0; padding: .7rem; border: 1px solid #c8dbef; border-radius: 12px; background: #f8fbff; }
+.acc-compare-side-b { border-color: #b9ddd9; background: #f7fcfb; }
+.acc-compare-side header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem .55rem; }
+.acc-compare-side header > span { display: inline-grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; color: #fff; background: #1769e0; font-size: .72rem; font-weight: 900; }
+.acc-compare-side-b header > span { background: #0c8a85; }
+.acc-compare-side header strong { display: inline-flex; align-items: center; gap: .4rem; color: #173b63; font-size: .75rem; }
+.acc-compare-side .app-dropdown { margin-top: 0; }
+.acc-compare-side .app-dropdown-trigger { min-height: 44px; background: #fff; }
+.acc-compare-side .date-range-picker { grid-template-columns: repeat(2,minmax(0,1fr)); gap: .45rem; }
+.acc-compare-side .date-range-field { min-width: 0; }
+.acc-compare-side .date-range-field > span { font-size: .63rem; }
+.acc-compare-side .date-picker-trigger { min-height: 44px; background: #fff; font-size: .68rem; }
+.acc-compare-vs { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid #c8dbef; border-radius: 50%; color: #1769e0; background: #fff; font-size: .72rem; font-weight: 950; }
+.acc-compare-agent .app-dropdown { max-width: 420px; margin-top: 0; }
+.acc-compare-agent .app-dropdown-trigger { min-height: 44px; }
+
+@media (max-width: 850px) {
+  .acc-compare-step,.acc-compare-agent { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .acc-compare-header { align-items: stretch; flex-direction: column; }
+  .acc-compare-toggle { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .accounting-page .acc-compare-toggle button { width: 100%; }
+  .acc-pair-options,.acc-method-options { grid-template-columns: 1fr; }
+  .acc-compare-sides { grid-template-columns: 1fr; }
+  .acc-compare-vs { margin: -.15rem auto; }
+  .acc-compare-side .date-range-picker { grid-template-columns: 1fr; }
+  .acc-compare-agent .app-dropdown { max-width: none; }
+}
+
+/* ธีมฟอร์มขั้นตอนตามต้นแบบ: โปร่ง อ่านจากบนลงล่าง และใช้ฟ้าเฉพาะตัวเลือกที่ทำงานอยู่ */
+.acc-compare-card { position:relative;overflow:hidden;padding:.9rem 1rem;border-color:#cbdcf3;border-radius:17px;background:linear-gradient(135deg,#fff 0%,#f7fbff 72%,#edf5ff 100%);box-shadow:0 10px 30px rgb(35 78 135 / 7%) }
+.acc-compare-card::after { position:absolute;z-index:0;top:-90px;right:-75px;width:260px;height:190px;border-radius:50%;background:radial-gradient(circle,#d9e9ff 0%,rgb(217 233 255 / 0%) 70%);content:"";pointer-events:none }
+.acc-compare-card.is-active { border-color:#8fbaf0;box-shadow:0 14px 34px rgb(23 105 224 / 10%) }
+.acc-compare-header { position:relative;z-index:1;gap:.8rem 1.2rem }
+.acc-compare-header>div { display:flex;align-items:center;gap:.65rem }
+.acc-compare-header>div>span:last-child { display:grid;gap:.05rem }
+.acc-compare-heading-icon { display:grid;width:40px;height:40px;flex:none;place-items:center;border-radius:50%;color:#1769e0;background:#e8f2ff }
+.acc-compare-heading-icon .dash-icon { width:21px;height:21px }
+.acc-compare-header strong { color:#122f55;font-size:.96rem }
+.acc-compare-header small { color:#71849a;font-size:.7rem }
+.acc-compare-toggle { gap:.55rem }
+.accounting-page .acc-compare-toggle button { display:inline-flex;min-height:44px;align-items:center;justify-content:center;gap:.42rem;padding:.5rem 1rem;border-color:#c5d5e8;color:#31516f;background:#fff;box-shadow:0 4px 12px rgb(35 78 135 / 6%);font-size:.8rem }
+.accounting-page .acc-compare-toggle button.is-primary { min-width:150px;border-color:#8eb8ef;color:#1769e0 }
+.accounting-page .acc-compare-toggle button[aria-pressed="true"] { border-color:#1769e0;color:#fff;background:linear-gradient(135deg,#1882f4,#075bd8);box-shadow:0 8px 18px rgb(23 105 224 / 22%) }
+.acc-compare-toggle .dash-icon { width:17px;height:17px }
+.acc-compare-steps { position:relative;z-index:1;gap:.9rem;margin-top:1rem;padding-top:1rem;border-color:#d8e6f6 }
+.acc-compare-step,.acc-compare-agent { grid-template-columns:minmax(225px,.5fr) minmax(0,1.5fr);align-items:stretch;gap:1rem;padding:1rem;border-color:#dbe7f4;border-radius:15px;background:rgb(255 255 255 / 88%);box-shadow:0 5px 16px rgb(35 78 135 / 4%) }
+.acc-compare-step>:nth-child(2),.acc-compare-agent>:nth-child(2) { padding-left:1rem;border-left:1px solid #e1eaf5 }
+.acc-step-title> b { width:34px;height:34px;background:linear-gradient(135deg,#70adf7,#3a82e8);box-shadow:0 5px 12px rgb(23 105 224 / 18%);font-size:.82rem }
+.acc-step-title>i { display:grid;width:30px;height:30px;flex:none;place-items:center;color:#1769e0;font-style:normal }
+.acc-step-title>i .dash-icon { width:24px;height:24px }
+.acc-step-title strong { font-size:.82rem }
+.acc-step-title small { font-size:.66rem;line-height:1.4 }
+.acc-pair-options,.acc-method-options { gap:.75rem }
+.accounting-page .acc-pair-options button,.accounting-page .acc-method-options button { min-height:58px;padding:.7rem .85rem;border-color:#c8d9ee;border-radius:12px;background:#fff;box-shadow:0 4px 12px rgb(35 78 135 / 5%);font-size:.8rem }
+.accounting-page .acc-pair-options button[aria-pressed="true"],.accounting-page .acc-method-options button[aria-pressed="true"] { border-color:#1769e0;color:#fff;background:linear-gradient(135deg,#1685f5,#075bd8);box-shadow:0 8px 18px rgb(23 105 224 / 20%) }
+.acc-pair-options button { display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.55rem;text-align:left }
+.acc-pair-options button>.dash-icon { width:18px;height:18px }
+.acc-pair-flags { display:inline-flex;align-items:center;gap:.2rem }
+.acc-method-options button { display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.55rem;text-align:left }
+.acc-method-options button>.dash-icon { width:22px;height:22px }
+.acc-method-options button>span { display:grid;gap:.08rem }
+.acc-method-options button strong { font-size:.78rem }
+.acc-method-options button small { font-size:.61rem }
+.acc-compare-sides { grid-template-columns:minmax(0,1fr) 58px minmax(0,1fr);gap:.85rem }
+.acc-compare-side { gap:.75rem;padding:.9rem;border-color:#bdd6f3;border-radius:14px;background:linear-gradient(135deg,#f7fbff,#fff);box-shadow:0 5px 14px rgb(35 78 135 / 5%) }
+.acc-compare-side-b { border-color:#cbd8e8;background:linear-gradient(135deg,#fbfcfe,#fff) }
+.acc-compare-side header>span { width:32px;height:32px }
+.acc-compare-side-b header>span { background:#5c7189 }
+.accounting-page button.acc-compare-vs { display:grid;width:58px;min-height:58px;margin:0;padding:.35rem;place-items:center;border:1px solid #9fc3ed;border-radius:50%;color:#1769e0;background:#fff;box-shadow:0 7px 18px rgb(23 105 224 / 12%);font-size:.58rem;font-weight:900 }
+.accounting-page button.acc-compare-vs:hover { border-color:#1769e0;color:#fff;background:#1769e0;transform:none }
+.acc-compare-vs .dash-icon { width:21px;height:21px }
+.acc-compare-vs span { margin-top:-6px }
+.acc-compare-agent .app-dropdown-trigger { min-height:48px;border-color:#bfd3eb;background:#fff }
+.acc-agent-compare-fields { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem }
+.acc-agent-compare-fields>label { display:grid;gap:.4rem;min-width:0;padding:.75rem;border:1px solid #d7e4f2;border-radius:12px;background:#f8fbff }
+.acc-agent-compare-fields>label>span { display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;color:#153d6a }
+.acc-agent-compare-fields>label>span b { font-size:.84rem }
+.acc-agent-compare-fields>label>span small { color:#718499;font-size:.7rem;font-weight:650 }
+.acc-agent-compare-fields .app-dropdown { max-width:none }
+
+@media(max-width:850px){
+  .acc-compare-step,.acc-compare-agent { grid-template-columns:1fr }
+  .acc-compare-step>:nth-child(2),.acc-compare-agent>:nth-child(2) { padding-top:.8rem;padding-left:0;border-top:1px solid #e1eaf5;border-left:0 }
+}
+@media(max-width:700px){
+  .accounting-page button.acc-compare-vs { margin:-.1rem auto }
+  .acc-agent-compare-fields { grid-template-columns:1fr }
+}
+
+/* อ่านง่ายบนจอเดสก์ท็อป: ขยายข้อความหลัก ช่องเลือก และระยะหายใจของแต่ละขั้น */
+.acc-compare-card { padding:1.15rem 1.25rem }
+.acc-compare-header { min-height:52px }
+.acc-compare-heading-icon { width:46px;height:46px }
+.acc-compare-heading-icon .dash-icon { width:24px;height:24px }
+.acc-compare-header strong { font-size:1.08rem;line-height:1.35 }
+.acc-compare-header small { color:#526b86;font-size:.82rem;line-height:1.45 }
+.accounting-page .acc-compare-toggle button { min-height:50px;padding:.65rem 1.15rem;font-size:.9rem }
+.accounting-page .acc-compare-toggle button.is-primary { min-width:176px }
+.acc-compare-steps { gap:1.05rem;margin-top:1.15rem;padding-top:1.15rem }
+.acc-compare-step,.acc-compare-agent { grid-template-columns:minmax(275px,.52fr) minmax(0,1.48fr);gap:1.2rem;padding:1.15rem }
+.acc-compare-step>:nth-child(2),.acc-compare-agent>:nth-child(2) { padding-left:1.2rem }
+.acc-step-title { gap:.7rem }
+.acc-step-title>b { width:42px;height:42px;font-size:.95rem }
+.acc-step-title>i { width:36px;height:36px }
+.acc-step-title>i .dash-icon { width:28px;height:28px }
+.acc-step-title strong { color:#102f52;font-size:1rem;line-height:1.35 }
+.acc-step-title small { margin-top:.12rem;color:#526b86;font-size:.8rem;line-height:1.45 }
+.acc-pair-options,.acc-method-options { gap:.85rem }
+.accounting-page .acc-pair-options button,.accounting-page .acc-method-options button { min-height:70px;padding:.85rem 1rem;font-size:.92rem }
+.acc-pair-options button strong,.acc-method-options button strong { font-size:.92rem }
+.acc-method-options button small { margin-top:.12rem;color:#526b86;font-size:.75rem;line-height:1.35 }
+.acc-method-options button[aria-pressed="true"] small { color:#fff }
+.acc-pair-options .lottery-flag { width:24px;height:auto }
+.acc-pair-options button>.dash-icon,.acc-method-options button>.dash-icon:last-child { width:20px;height:20px }
+.acc-compare-sides { grid-template-columns:minmax(0,1fr) 66px minmax(0,1fr);gap:1rem }
+.acc-compare-side { gap:.9rem;padding:1rem }
+.acc-compare-side header { min-height:44px }
+.acc-side-title { display:flex;align-items:center;gap:.55rem }
+.acc-side-title>span:first-child { display:grid;width:38px;height:38px;flex:none;place-items:center;border-radius:50%;color:#fff;background:#1769e0;font-size:.88rem;font-weight:900 }
+.acc-compare-side-b .acc-side-title>span:first-child { background:#526b86 }
+.acc-side-title>span:last-child { display:grid;gap:.02rem }
+.acc-side-title b { color:#15395e;font-size:.9rem }
+.acc-side-title small { color:#61778f;font-size:.72rem;font-weight:650 }
+.acc-compare-side header>strong { font-size:.86rem }
+.acc-compare-side header>strong .lottery-flag { width:22px;height:auto }
+.acc-compare-side .app-dropdown-trigger { min-height:54px;padding-inline:.9rem;font-size:.9rem }
+.acc-compare-side .date-range-field>span { color:#304f70;font-size:.78rem }
+.acc-compare-side .date-picker-trigger { min-height:54px;font-size:.82rem }
+.accounting-page button.acc-compare-vs { width:66px;min-height:66px;font-size:.66rem }
+.acc-compare-vs .dash-icon { width:24px;height:24px }
+.acc-compare-agent .app-dropdown { max-width:520px }
+.acc-compare-agent .app-dropdown-trigger { min-height:54px;padding-inline:.9rem;font-size:.92rem }
+
+@media(max-width:1050px){
+  .acc-compare-step,.acc-compare-agent { grid-template-columns:minmax(220px,.45fr) minmax(0,1.55fr) }
+  .acc-step-title>i { display:none }
+}
+@media(max-width:850px){
+  .acc-compare-step,.acc-compare-agent { grid-template-columns:1fr }
+  .acc-step-title>i { display:grid }
+  .acc-compare-step>:nth-child(2),.acc-compare-agent>:nth-child(2) { padding-top:1rem;padding-left:0 }
+}
+@media(max-width:700px){
+  .acc-compare-card { padding:.8rem }
+  .acc-compare-header strong { font-size:1rem }
+  .acc-compare-header small { font-size:.75rem }
+  .acc-compare-heading-icon { width:40px;height:40px }
+  .acc-step-title>b { width:36px;height:36px }
+  .acc-step-title>i { width:30px;height:30px }
+  .acc-step-title>i .dash-icon { width:23px;height:23px }
+  .acc-step-title strong { font-size:.92rem }
+  .acc-step-title small { font-size:.75rem }
+  .accounting-page .acc-pair-options button,.accounting-page .acc-method-options button { min-height:60px }
 }

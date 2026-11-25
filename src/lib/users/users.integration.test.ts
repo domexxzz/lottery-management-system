@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
 import { verifyPassword } from "@/lib/auth/password";
 import { confirmBill, createDraftBill, replaceDraftItems } from "@/lib/bills/service";
+import { getOrganizationMapData } from "@/lib/agents/organization-map";
 import {
   createManagedUser,
   deleteManagedUser,
@@ -159,6 +160,10 @@ describe("Owner จัดการบัญชี", () => {
     expect(await prisma.bill.count({ where: { id: billId } })).toBe(1);
     const listed = await listManagedUsers(f.actors.OWNER);
     expect(listed.some((user) => user.id === agentUserId)).toBe(false);
+    const agentOverview = await getOrganizationMapData(f.actors.OWNER);
+    expect(agentOverview.agents.some((agent) => agent.id === hidden.agent?.id)).toBe(false);
+    expect(agentOverview.stats.some((row) => row.agentId === hidden.agent?.id)).toBe(false);
+    expect(agentOverview.topCustomers.some((row) => row.agentId === hidden.agent?.id)).toBe(false);
 
     // เลขของบัญชีที่ถูกซ่อน (มีประวัติ) ไม่ถูกนำกลับมาใช้
     // ส่วนเลขของบัญชีที่ลบจริง (ไม่เคยใช้งาน) นำกลับมาใช้ได้ เพราะไม่มีบิลใดอ้างถึง

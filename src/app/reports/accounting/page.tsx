@@ -6,20 +6,40 @@ import { prisma } from "@/lib/db";
 import { drawDateLabel } from "@/lib/bills/betting";
 import { groupReportDraws, reportCategoryLabel } from "@/lib/reports/draw-groups";
 import { loadAccountingReport, type AccountingTotals } from "@/lib/reports/accounting";
-import { accountingHref, accountingLotterySelectionLabel, compareValueLabel, comparisonText, customCompareQueries, parseAccountingQuery, previousPeriodLabel, previousPeriodQuery, recentDays, recentMonths, recentWeeks, type CompareUnit } from "@/lib/reports/accounting-period";
+import { combineAccountingTotals } from "@/lib/reports/accounting-totals";
+import { accountingHref, accountingLotterySelectionLabel, compareValueLabel, customCompareQueries, parseAccountingQuery, previousPeriodLabel, previousPeriodQuery, recentMonths, type AccountingCompareCategory } from "@/lib/reports/accounting-period";
 import { COUNT_FORMAT, MONEY_FORMAT } from "@/lib/reports/terms";
 import { ReportExportButtons } from "@/components/ReportExportButtons";
 import { AccountingFilters } from "./AccountingFilters";
 import { AgentTable, DrawTable } from "./AccountingTables";
 import { InfoTip } from "../InfoTip";
 import { ProfitReceipt } from "../ProfitReceipt";
-import { CompareTable, profitSummary } from "../CompareTable";
+import { CompareTable } from "../CompareTable";
 import "./accounting.css";
 import "../report-shared.css";
 
 export const dynamic = "force-dynamic";
 
 const baht = (value: number) => MONEY_FORMAT.format(value);
+
+function ComparisonTotalCard({ title, label, totals, tone }: { title: string; label: string; totals: AccountingTotals; tone: "a" | "b" | "total" }) {
+  const settled = totals.settledDraws > 0;
+  const pending = totals.draws - totals.settledDraws;
+  const loss = settled && totals.profit < 0;
+  return <article className={`acc-comparison-total is-${tone} ${!settled ? "is-pending" : loss ? "is-loss" : "is-profit"}`}>
+    <header><span>{title}</span><small title={label}>{label}</small></header>
+    <p className="acc-comparison-result">
+      {totals.draws === 0 ? <strong>ไม่มีข้อมูล</strong> : settled ? <><span>{loss ? "ขาดทุน" : "กำไร"}</span><strong>{loss ? "−" : ""}{baht(Math.abs(totals.profit))}</strong><small>บาท</small></> : <strong>ยังสรุปไม่ได้</strong>}
+    </p>
+    <dl>
+      <div><dt>ยอดขาย</dt><dd>{baht(totals.gross)}</dd></div>
+      <div><dt>จ่ายรางวัล</dt><dd>{baht(totals.payout)}</dd></div>
+      <div><dt>ค่าคอม Agent</dt><dd>{baht(totals.commission)}</dd></div>
+      <div><dt>หลังหักคอม</dt><dd>{baht(totals.net)}</dd></div>
+    </dl>
+    <footer>{COUNT_FORMAT.format(totals.draws)} งวด · {COUNT_FORMAT.format(totals.bills)} บิล{pending > 0 ? ` · รอผล ${COUNT_FORMAT.format(pending)} งวด` : ""}</footer>
+  </article>;
+}
 
 /**
  * สรุปบัญชี: ช่วงเวลาที่เลือกได้หรือเสียเท่าไร แยกรายงวดและราย Agent ส่งออก Excel ไปทำบัญชีต่อได้
@@ -57,17 +77,11 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     ...await prisma.draw.findMany({ where: { ...orgScope(actor), laoFamilyId: { in: missingFamilies } }, select: drawSelect }),
   ];
   const drawOptions = groupReportDraws([...new Map(withFamilies.map((draw) => [draw.id, draw])).values()]);
-  // ยังไม่ได้เลือกงวด: A = งวดล่าสุดของประเภทหวยที่กรองอยู่ · B = งวดก่อนหน้าของประเภทเดียวกัน
-  const inFilter = drawOptions.filter((draw) => draw.category === "THAI_GOVERNMENT" ? query.lotteries.includes("THAI_GOVERNMENT") : query.lotteries.includes("LAO"));
-  const drawA = drawOptions.find((draw) => draw.id === query.compareA)?.id ?? inFilter[0]?.id ?? drawOptions[0]?.id ?? "";
-  const drawALottery = drawOptions.find((draw) => draw.id === drawA)?.category;
-  // B ที่ยังไม่ได้เลือก: งวดก่อนหน้าของประเภทเดียวกับ A (เก่ากว่า A) ถ้าไม่มีจึงใช้งวดอื่นของประเภทเดียวกัน
-  const drawAIndex = drawOptions.findIndex((draw) => draw.id === drawA);
-  const sameLottery = (draw: (typeof drawOptions)[number]) => draw.id !== drawA && draw.category === drawALottery;
-  const drawB = drawOptions.find((draw) => draw.id === query.compareB)?.id
-    ?? drawOptions.slice(drawAIndex + 1).find(sameLottery)?.id
-    ?? drawOptions.find(sameLottery)?.id
-    ?? "";
+  // แต่ละฝั่งมีประเภทหวยของตัวเอง ไทยเทียบลาวจึงเลือกงวดและคำนวณคนละหมวดได้จริง
+  const selectedA = drawOptions.find((draw) => draw.id === query.compareA && draw.category === query.compareLotteryA);
+  const drawA = selectedA?.id ?? "";
+  const selectedB = drawOptions.find((draw) => draw.id === query.compareB && draw.category === query.compareLotteryB && draw.id !== drawA);
+  const drawB = selectedB?.id ?? "";
   const drawLabel = (id: string) => {
     const draw = drawOptions.find((row) => row.id === id);
     return draw ? `${reportCategoryLabel(draw.category)} งวด ${drawDateLabel(draw)}` : "ยังไม่มีงวด";
@@ -89,39 +103,59 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   const prev: AccountingTotals | undefined = previous?.totals;
   const pendingDraws = totals.draws - totals.settledDraws;
   // ส่งออกตามสิ่งที่แสดงอยู่ (เลือกเองแล้วเป็นช่วง A)
-  const csvHref = accountingHref("/api/reports/accounting", viewQuery, {});
-  const excelHref = `${csvHref}${csvHref.includes("?") ? "&" : "?"}format=xlsx`;
-  const lotterySelection = query.compare === "custom" && query.compareUnit === "draw"
-    ? "ประเภทหวยตามงวดที่เลือก"
+  const exportHref = accountingHref("/api/reports/accounting", viewQuery, {});
+  const excelHref = `${exportHref}${exportHref.includes("?") ? "&" : "?"}format=xlsx`;
+  const compareCategoryLabel = (category: AccountingCompareCategory) => category === "THAI_GOVERNMENT" ? "หวยรัฐบาล" : "หวยลาวและหวยลาวชุด";
+  const lotterySelection = query.compare === "custom"
+    ? `${compareCategoryLabel(query.compareLotteryA)} เทียบ ${compareCategoryLabel(query.compareLotteryB)}`
     : accountingLotterySelectionLabel(query.lotteries);
   const agentName = query.agentId ? agentOptions.find((agent) => agent.id === query.agentId) : undefined;
+  const compareAgentA = query.compareAgentA ? agentOptions.find((agent) => agent.id === query.compareAgentA) : undefined;
+  const compareAgentB = query.compareAgentB ? agentOptions.find((agent) => agent.id === query.compareAgentB) : undefined;
+  const agentLabel = (agent: typeof compareAgentA) => agent ? `${agent.code} ${agent.name}` : "ทุก Agent";
+  const viewAgent = query.compare === "custom" ? compareAgentA : agentName;
   const settled = totals.settledDraws > 0;
   const loss = settled && totals.profit < 0;
   const compareLabel = previousPeriodLabel(query, now);
   // สองฝั่งของตารางเทียบ: เลือกเอง (ช่วง A กับ B) หรือเทียบกับช่วงก่อนหน้าของช่วงหลัก
-  const customLabel = (value: string) => (query.compareUnit === "draw" ? drawLabel(value) : compareValueLabel(query.compareUnit, value));
+  const customLabel = (side: "A" | "B") => {
+    const category = side === "A" ? query.compareLotteryA : query.compareLotteryB;
+    if (query.compareUnit === "draw") {
+      const draw = side === "A" ? drawA : drawB;
+      return draw ? drawLabel(draw) : `รวมทุกงวด ${compareCategoryLabel(category)}`;
+    }
+    if (query.compareUnit === "range") {
+      const from = side === "A" ? query.compareAFrom : query.compareBFrom;
+      const to = side === "A" ? query.compareATo : query.compareBTo;
+      return `${compareCategoryLabel(category)} · ${compareValueLabel("day", from)} – ${compareValueLabel("day", to)}`;
+    }
+    const value = side === "A" ? query.compareA : query.compareB;
+    return value === "all" ? `รวมทุกเดือน ${compareCategoryLabel(category)}` : `${compareCategoryLabel(category)} · ${compareValueLabel(query.compareUnit, value)}`;
+  };
+  const customComparisonLabel = (side: "A" | "B") => `${customLabel(side)} · ${agentLabel(side === "A" ? compareAgentA : compareAgentB)}`;
   const comparisonSides = customA && customB
     ? {
         current: customA.totals,
         other: customB.totals,
-        currentLabel: customLabel(query.compareUnit === "draw" ? drawA : query.compareA),
-        otherLabel: customLabel(query.compareUnit === "draw" ? drawB : query.compareB),
+        currentLabel: customComparisonLabel("A"),
+        otherLabel: customComparisonLabel("B"),
         currentShort: "ช่วง A",
         otherShort: "ช่วง B",
       }
     : prev
       ? { current: totals, other: prev, currentLabel: report.range.label, otherLabel: compareLabel, currentShort: "ช่วงนี้", otherShort: "ช่วงก่อน" }
       : null;
+  const comparisonTotal = comparisonSides ? combineAccountingTotals(comparisonSides.current, comparisonSides.other) : null;
   // ค่า A/B ในลิงก์ที่อยู่นอกรายการให้เลือก (เก่ากว่ารายการ) เพิ่มเข้าไปให้ช่องเลือกยังแสดงค่าที่ใช้อยู่
-  const withSelected = (options: { value: string; label: string }[], unit: Exclude<CompareUnit, "draw">) => {
-    if (query.compare !== "custom" || query.compareUnit !== unit) return options;
+  const withSelectedMonths = (options: { value: string; label: string }[]) => {
+    if (query.compare !== "custom" || query.compareUnit !== "month") return options;
     const extra = [query.compareA, query.compareB]
-      .filter((value, index, values) => value && values.indexOf(value) === index && !options.some((option) => option.value === value))
-      .map((value) => ({ value, label: compareValueLabel(unit, value) }));
+      .filter((value, index, values) => value && value !== "all" && values.indexOf(value) === index && !options.some((option) => option.value === value))
+      .map((value) => ({ value, label: compareValueLabel("month", value) }));
     return extra.length === 0 ? options : [...options, ...extra].sort((a, b) => b.value.localeCompare(a.value));
   };
   // ชื่อของสิ่งที่กำลังแสดง: เลือกเองแล้วเป็นช่วง A
-  const viewLabel = customQueries && comparisonSides ? `ช่วง A · ${comparisonSides.currentLabel}` : report.range.label;
+  const viewLabel = customQueries && comparisonSides ? `ช่วง A · ${customLabel("A")}` : report.range.label;
 
   return (
     <main className="workspace-page accounting-page">
@@ -130,18 +164,16 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
           <p className="page-eyebrow"><Link href="/reports">รายงาน</Link> / สรุปบัญชี</p>
           <h1>สรุปบัญชี</h1>
           <p className="acc-viewing">
-            กำลังดู: <strong>{viewLabel}</strong> · {lotterySelection}{agentName ? ` · ${agentName.code} ${agentName.name}` : " · ทุก Agent"}
+            กำลังดู: <strong>{viewLabel}</strong> · {lotterySelection}{viewAgent ? ` · ${viewAgent.code} ${viewAgent.name}` : " · ทุก Agent"}
           </p>
         </div>
-        <ReportExportButtons className="acc-export acc-export-top" csvHref={csvHref} excelHref={excelHref} />
+        <ReportExportButtons className="acc-export acc-export-top" excelHref={excelHref} />
       </header>
 
       <AccountingFilters
         query={query}
-        comparison={comparisonText(query, now)}
-        months={withSelected(recentMonths(24, now).map((month, index) => ({ ...month, label: index === 0 ? `${month.label} (เดือนนี้)` : month.label })), "month")}
-        weeks={withSelected(recentWeeks(26, now), "week")}
-        days={withSelected(recentDays(120, now), "day")}
+        range={{ from: report.range.from, to: report.range.to }}
+        months={[{ value: "all", label: "ทุกเดือน" }, ...withSelectedMonths(recentMonths(24, now).map((month, index) => ({ ...month, label: index === 0 ? `${month.label} (เดือนนี้)` : month.label })))]}
         draws={drawOptions.map((draw) => ({
           value: draw.id,
           label: `${reportCategoryLabel(draw.category)} งวด ${drawDateLabel(draw)}${draw.status === "OPEN" ? " (เปิดรับ)" : draw.status === "SETTLED" || draw.status === "CLOSED" ? "" : " (รอผล)"}`,
@@ -152,12 +184,20 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         agents={agentOptions.map((agent) => ({ id: agent.id, label: `${agent.code} · ${agent.name}` }))}
       />
 
-      {query.lotteries.length === 0 ? (
+      {viewQuery.lotteries.length === 0 ? (
         <p className="acc-empty">ยังไม่ได้เลือกประเภทหวย เลือก &ldquo;ทุกประเภท&rdquo; หรือประเภทที่ต้องการด้านบน</p>
       ) : (
         <>
-          <section className={`acc-hero ${settled ? (loss ? "is-loss" : "is-profit") : "is-pending"}`} aria-labelledby="acc-hero-heading">
-            <h2 id="acc-hero-heading">{customQueries && comparisonSides ? comparisonSides.currentLabel : report.range.label} ได้หรือเสีย</h2>
+          {comparisonSides && comparisonTotal ? <section className="acc-comparison-overview" aria-labelledby="acc-hero-heading">
+            <header><div><h2 id="acc-hero-heading">ผลลัพธ์ตามตัวกรอง</h2><p>แบ่งผลเปรียบเทียบเป็นช่วง A, ช่วง B และยอดรวมของทั้งสองช่วง</p></div><span>รวม = ช่วง A + ช่วง B</span></header>
+            <div className="acc-comparison-total-grid">
+              <ComparisonTotalCard title="ช่วง A" label={comparisonSides.currentLabel} totals={comparisonSides.current} tone="a" />
+              <ComparisonTotalCard title="ช่วง B" label={comparisonSides.otherLabel} totals={comparisonSides.other} tone="b" />
+              <ComparisonTotalCard title="รวม" label="ช่วง A + ช่วง B" totals={comparisonTotal} tone="total" />
+            </div>
+          </section> : <section className={`acc-hero ${settled ? (loss ? "is-loss" : "is-profit") : "is-pending"}`} aria-labelledby="acc-hero-heading">
+            <h2 id="acc-hero-heading">ผลลัพธ์ตามตัวกรอง</h2>
+            <p className="acc-hero-scope">{customQueries && comparisonSides ? customLabel("A") : report.range.label} · {lotterySelection}{viewAgent ? ` · ${viewAgent.code} ${viewAgent.name}` : " · ทุก Agent"}</p>
             {settled ? (
               <>
                 <p className="acc-hero-answer">{loss ? "ขาดทุน" : "กำไร"} <strong>{baht(Math.abs(totals.profit))}</strong> บาท</p>
@@ -186,7 +226,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                 </p>
               </>
             )}
-          </section>
+          </section>}
 
           {comparisonSides && (
             <CompareTable
@@ -194,23 +234,17 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
               previousLabel={comparisonSides.otherLabel}
               currentShort={comparisonSides.currentShort}
               previousShort={comparisonSides.otherShort}
-              summary={profitSummary(
-                comparisonSides.currentLabel,
-                comparisonSides.otherLabel,
-                comparisonSides.current.settledDraws > 0 ? comparisonSides.current.profit : null,
-                comparisonSides.other.settledDraws > 0 ? comparisonSides.other.profit : null,
-              )}
               note={[comparisonSides.current, comparisonSides.other]
                 .map((side, index) => side.draws > side.settledDraws ? `${index === 0 ? comparisonSides.currentShort : comparisonSides.otherShort}ยังรอผล ${side.draws - side.settledDraws} งวด` : "")
                 .filter(Boolean)
                 .join(" · ") || undefined}
               rows={[
-                { label: "กำไร / ขาดทุน", current: comparisonSides.current.settledDraws > 0 ? comparisonSides.current.profit : null, previous: comparisonSides.other.settledDraws > 0 ? comparisonSides.other.profit : null, better: "up", signedWord: true, emptyText: "ยังสรุปไม่ได้" },
-                { label: "ยอดขาย", current: comparisonSides.current.gross, previous: comparisonSides.other.gross, better: "up", unit: "บาท" },
-                { label: "จำนวนบิล", current: comparisonSides.current.bills, previous: comparisonSides.other.bills, better: "up", kind: "count", unit: "บิล" },
-                { label: "จ่ายรางวัล", current: comparisonSides.current.payout, previous: comparisonSides.other.payout, better: "down", unit: "บาท" },
-                { label: "ค่าคอม Agent", current: comparisonSides.current.commission, previous: comparisonSides.other.commission, better: "neutral", unit: "บาท" },
-                { label: "ลูกค้าถูกรางวัล", current: comparisonSides.current.winners, previous: comparisonSides.other.winners, better: "neutral", kind: "count", unit: "คน" },
+                { label: "กำไร / ขาดทุน", icon: "analytics", current: comparisonSides.current.settledDraws > 0 ? comparisonSides.current.profit : null, previous: comparisonSides.other.settledDraws > 0 ? comparisonSides.other.profit : null, rule: "profit", signedWord: true, emptyText: "ยังสรุปไม่ได้" },
+                { label: "ยอดขาย", icon: "wallet", current: comparisonSides.current.gross, previous: comparisonSides.other.gross, rule: "revenue", unit: "บาท" },
+                { label: "จำนวนบิล", icon: "bill", current: comparisonSides.current.bills, previous: comparisonSides.other.bills, rule: "neutral", kind: "count", unit: "บิล" },
+                { label: "จ่ายรางวัล", icon: "winner", current: comparisonSides.current.payout, previous: comparisonSides.other.payout, rule: "expense", unit: "บาท" },
+                { label: "ค่าคอม Agent", icon: "percent", current: comparisonSides.current.commission, previous: comparisonSides.other.commission, rule: "expense", unit: "บาท" },
+                { label: "ลูกค้าถูกรางวัล", icon: "agent", current: comparisonSides.current.winners, previous: comparisonSides.other.winners, rule: "winners", kind: "count", unit: "คน" },
               ]}
             />
           )}
@@ -283,7 +317,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
 
           <section className="acc-card acc-export-card" aria-labelledby="acc-export-heading">
             <header><h2 id="acc-export-heading">ส่งออกไปทำบัญชี</h2><span>ได้ตัวเลขชุดเดียวกับหน้านี้ ตามช่วงและตัวกรองที่เลือก</span></header>
-            <ReportExportButtons className="acc-export" csvHref={csvHref} excelHref={excelHref} />
+            <ReportExportButtons className="acc-export" excelHref={excelHref} />
           </section>
         </>
       )}

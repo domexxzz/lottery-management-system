@@ -1,12 +1,12 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { Prisma } from "@prisma/client";
-import { ALL_DRAWS, drawShortLabel, isAllLotteries, reportLotteryParam, type AllDrawsMoney, type DrawMoney, type OwnerReport as Report, type ReportDraw, type WinnerSummary } from "@/lib/reports/owner-report";
+import { drawShortLabel, isAllLotteries, reportLotteryParam, type AllDrawsMoney, type DrawMoney, type OwnerReport as Report, type ReportDraw, type WinnerSummary } from "@/lib/reports/owner-report";
 import { BREAKDOWN_DAYS, type LotteryBreakdown } from "@/lib/reports/owner-report";
 import { reportCategoryLabel } from "@/lib/reports/draw-groups";
 import { COUNT_FORMAT, MONEY_FORMAT } from "@/lib/reports/terms";
 import { InfoTip } from "./InfoTip";
 import { ProfitReceipt } from "./ProfitReceipt";
-import { ReportViewPicker } from "./ReportViewPicker";
 import "./owner-report.css";
 import "./report-shared.css";
 
@@ -194,7 +194,7 @@ function SalesChart({ trend, selectedId }: { trend: DrawMoney[]; selectedId: str
   );
 }
 
-export function OwnerReport({ report }: { report: Report }) {
+export function OwnerReport({ report, filters }: { report: Report; filters?: ReactNode }) {
   const { selected, all, previous, trend, agents, agentTotal, prizes } = report;
   // ดูทุกงวด: ไม่มีงวดเดียวให้โฟกัส ใช้ผลรวมของทุกงวดในประเภทหวยที่เลือก
   const draw = selected?.draw ?? null;
@@ -231,18 +231,7 @@ export function OwnerReport({ report }: { report: Report }) {
         </div>
       </header>
 
-      <ReportViewPicker
-        lotteries={[...report.lotteries]}
-        selectedId={all ? ALL_DRAWS : draw!.id}
-        draws={report.draws.map((row) => ({
-          id: row.id,
-          lotteryType: row.lotteryType,
-          category: row.category,
-          fullLabel: `${reportCategoryLabel(row.category)} · ${drawShortLabel(row)}`,
-          open: row.status === "OPEN",
-          settled: row.status === "SETTLED" || row.status === "CLOSED",
-        }))}
-      />
+      {filters}
 
       {all ? <AllDrawsResult all={all} /> : (
         <section className={`or-card or-result ${selected!.settled ? (loss ? "is-loss" : "is-profit") : "is-pending"}`} aria-labelledby="or-result-heading">
@@ -359,10 +348,6 @@ export function OwnerReport({ report }: { report: Report }) {
 
       {report.breakdown.length > 1 && <LotteryBreakdownTable rows={report.breakdown} range={report.breakdownRange} lotteryParam={reportLotteryParam(report.lotteries)} />}
 
-      <footer className="or-footer">
-        <span>อยากเจาะลึกกว่านี้?</span>
-        <Link href={draw ? `/reports/charts?draw=${draw.id}` : "/reports/charts"}>สร้างกราฟเอง (สำหรับนักบัญชี) →</Link>
-      </footer>
     </main>
   );
 }

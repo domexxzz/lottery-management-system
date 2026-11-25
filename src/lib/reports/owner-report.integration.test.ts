@@ -147,6 +147,23 @@ describe("รายงาน Owner", () => {
     expect(laoOnly!.breakdown.map((row) => row.lotteryType)).toEqual(["LAO_COMBINED"]);
   });
 
+  test("กรองรายงานตามวันออกรางวัล และใช้ช่วงวันที่ร่วมกับงวดที่เลือก", async () => {
+    const first = await prisma.draw.create({
+      data: { organizationId: f.org.id, name: "งวดนอกช่วง", drawDate: new Date("2040-01-01T00:00:00Z"), opensAt: new Date(Date.now() - 60_000), cutoffAt: new Date(Date.now() + 86_400_000) },
+    });
+    const second = await prisma.draw.create({
+      data: { organizationId: f.org.id, name: "งวดในช่วง", drawDate: new Date("2040-02-01T00:00:00Z"), opensAt: new Date(Date.now() - 60_000), cutoffAt: new Date(Date.now() + 172_800_000) },
+    });
+    await placeBill(f.actors.AGENT1, { drawId: first.id, title: "นอกช่วง", items: [bet(f.prizeTypes.threeTop.id, "111", "50")] });
+    await placeBill(f.actors.AGENT1, { drawId: second.id, title: "ในช่วง", items: [bet(f.prizeTypes.threeTop.id, "222", "80")] });
+
+    const report = await loadOwnerReport(f.actors.OWNER, "all", "THAI_GOVERNMENT", "2040-02-01", "2040-02-29");
+    expect(report!.all).toMatchObject({ drawCount: 1, billCount: 1 });
+    expect(report!.all!.gross.toFixed(2)).toBe("80.00");
+    expect(report!.breakdownRange).toEqual({ from: "2040-02-01", to: "2040-02-29" });
+    await expect(loadOwnerReport(f.actors.OWNER, first.id, "THAI_GOVERNMENT", "2040-02-01", "2040-02-29")).resolves.toBeNull();
+  });
+
   test("Agent เปิดรายงานภาพรวมไม่ได้", async () => {
     await expect(loadOwnerReport(f.actors.AGENT1)).rejects.toThrow();
   });

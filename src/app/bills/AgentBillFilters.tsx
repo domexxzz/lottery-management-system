@@ -39,6 +39,7 @@ export function AgentBillFilters({
   tab,
   pageSize,
   sort,
+  showAll,
   draws,
   agents,
 }: {
@@ -59,6 +60,7 @@ export function AgentBillFilters({
   tab: string;
   pageSize: 10 | 25 | 50 | 100;
   sort: "newest" | "oldest" | "stake_desc" | "payout_desc";
+  showAll: boolean;
   draws: Option[];
   /** null เมื่อผู้ใช้เป็น Agent ซึ่งเห็นเฉพาะบิลของตนเอง */
   agents: Option[] | null;
@@ -86,6 +88,7 @@ export function AgentBillFilters({
     if (tab !== "ALL") params.set("tab", tab);
     if (scope !== "current") params.set("scope", scope);
     if (lottery) params.set("lottery", lottery);
+    if (showAll) params.set("all", "1");
     for (const [key, value] of Object.entries(values)) {
       if (!value || (key === "pageSize" && value === "10") || (key === "sort" && value === "newest")) continue;
       params.set(key, value);

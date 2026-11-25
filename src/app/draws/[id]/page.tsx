@@ -378,7 +378,6 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
 
             {canCalculate && (
               <ReportExportButtons
-                csvHref={`/api/draws/${draw.id}/reconciliation`}
                 excelHref={`/api/draws/${draw.id}/reconciliation?format=xlsx`}
               />
             )}

@@ -7,7 +7,7 @@ const CUSTOMER_PREVIEW_LIMIT = 6;
 
 type MoneyValue = Prisma.Decimal | string | number | null;
 
-function table(name: "agents" | "bills" | "draws" | "settlements") {
+function table(name: "agents" | "bills" | "draws" | "settlements" | "users") {
   const schema = databaseSchema().replaceAll('"', '""');
   return Prisma.raw(`"${schema}"."${name}"`);
 }
@@ -57,7 +57,12 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
   requirePermission(actor, "report.viewAllAgents");
   const [agents, stats, topCustomers] = await Promise.all([
     prisma.agent.findMany({
-      where: orgScope(actor),
+      where: {
+        ...orgScope(actor),
+        // Agent ที่ผูกกับบัญชีซึ่ง Owner ลบแล้วต้องหายจากภาพรวม
+        // ส่วน Agent เก่าที่ไม่ได้ผูกบัญชียังแสดงตามเดิม
+        OR: [{ userId: null }, { user: { deletedAt: null } }],
+      },
       orderBy: { code: "asc" },
       select: { id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true },
     }),
@@ -90,9 +95,11 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
              COALESCE(sa.commission, 0) AS commission,
              COALESCE(sa.net, 0) AS net
       FROM ${table("agents")} a
+      LEFT JOIN ${table("users")} u ON u.id = a."userId"
       LEFT JOIN bill_agg ba ON ba."agentId" = a.id
       LEFT JOIN settlement_agg sa ON sa."agentId" = a.id
       WHERE a."organizationId" = ${actor.organizationId}
+        AND (a."userId" IS NULL OR u."deletedAt" IS NULL)
     `),
     prisma.$queryRaw<CustomerRow[]>(Prisma.sql`
       WITH normalized_bills AS (
@@ -101,7 +108,11 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
                CASE WHEN BTRIM(b.title) = '' THEN 'ไม่ระบุชื่อ' ELSE BTRIM(b.title) END AS name,
                b."totalStake"
         FROM ${table("bills")} b
+        INNER JOIN ${table("agents")} a
+          ON a.id = b."agentId" AND a."organizationId" = b."organizationId"
+        LEFT JOIN ${table("users")} u ON u.id = a."userId"
         WHERE ${billWhere(actor, draws)}
+          AND (a."userId" IS NULL OR u."deletedAt" IS NULL)
       ), customers AS (
         SELECT nb."agentId", nb.key, MIN(nb.name) AS name,
                COUNT(*)::int AS "billCount",

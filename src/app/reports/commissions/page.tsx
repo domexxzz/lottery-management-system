@@ -7,6 +7,7 @@ import { can } from "@/lib/auth/permissions";
 import { dashboardDrawLabel } from "@/lib/dashboard/lottery-draw-filter";
 import { loadCommissionPayoutReport } from "@/lib/reports/commission-payout";
 import { currentCommissionMonth } from "@/lib/reports/commission-period";
+import { parseDay } from "@/lib/draws/range";
 import { reportCategoryLabel } from "@/lib/reports/draw-groups";
 import { CommissionPeriodFilter } from "./CommissionPeriodFilter";
 import { CommissionPaymentToggle } from "./CommissionPaymentToggle";
@@ -25,17 +26,19 @@ const statusOf = (row: { draftCount: number; reconciledCount: number; approvedCo
 };
 
 export default async function CommissionPayoutPage({ searchParams }: {
-  searchParams: Promise<{ lottery?: string; drawId?: string; period?: string; date?: string }>;
+  searchParams: Promise<{ lottery?: string; drawId?: string; period?: string; date?: string; dateFrom?: string; dateTo?: string }>;
 }) {
   const actor = await getActor();
   if (!actor) redirect("/login");
   if (actor.mustChangePassword) redirect("/change-password");
   if (!can(actor.role, "report.viewAllAgents")) redirect("/reports");
   const query = await searchParams;
-  const selectedDay = query.period === "day" && /^\d{4}-\d{2}-\d{2}$/.test(query.date ?? "") ? query.date : undefined;
+  const legacyDay = query.period === "day" ? parseDay(query.date) : undefined;
+  const selectedFrom = query.period === "range" ? parseDay(query.dateFrom) : legacyDay;
+  const selectedTo = query.period === "range" ? parseDay(query.dateTo) : legacyDay;
   const selectedMonth = query.period === "month" && /^\d{4}-\d{2}$/.test(query.date ?? "") ? query.date! : currentCommissionMonth();
-  const effectiveQuery = selectedDay
-    ? { ...query, period: "day", date: selectedDay }
+  const effectiveQuery = selectedFrom || selectedTo
+    ? { ...query, period: "range", dateFrom: selectedFrom, dateTo: selectedTo }
     : { ...query, period: "month", date: selectedMonth };
   const report = await loadCommissionPayoutReport(actor, effectiveQuery);
 
@@ -56,7 +59,12 @@ export default async function CommissionPayoutPage({ searchParams }: {
       selectedDrawId={report.scope.selectedDraw?.id}
     />
 
-    <CommissionPeriodFilter mode={report.period.mode === "day" ? "day" : "month"} value={report.period.value ?? selectedMonth} />
+    <CommissionPeriodFilter
+      mode={report.period.mode === "range" ? "range" : "month"}
+      startDate={report.period.mode === "range" ? report.period.from ?? "" : ""}
+      endDate={report.period.mode === "range" ? report.period.to ?? "" : ""}
+      month={report.period.mode === "month" ? report.period.value ?? selectedMonth : selectedMonth}
+    />
 
     {report.checklist && <section className="commission-check-summary" aria-label="ความคืบหน้าการจ่ายค่าคอมรายเดือน">
       <div><small>จ่ายแล้ว</small><strong>{COUNT.format(report.checklist.paidAgents)} / {COUNT.format(report.rows.length)} Agent</strong></div>
