@@ -274,7 +274,8 @@ model Agent {
   /// ทุกช่องเป็น null = ไม่ใช้โปรโมชั่น และกลับไปใช้อัตราปกติด้านบน
   commissionPromotionStartsOn DateTime? @db.Date
   commissionPromotionEndsOn   DateTime? @db.Date
-  commissionPromotionMinGross Decimal?  @db.Decimal(18, 2)
+  commissionPromotionThaiMinGross Decimal? @db.Decimal(18, 2)
+  commissionPromotionLaoMinGross  Decimal? @db.Decimal(18, 2)
   commissionPromotionThaiRate Decimal?  @db.Decimal(7, 4)
   commissionPromotionLaoRate  Decimal?  @db.Decimal(7, 4)
   /// วงเงินรวมต่อรอบ null = ไม่จำกัด

@@ -50,7 +50,7 @@
 .user-promotion-section>header>span{background:#d99012}
 .user-promotion-note{display:flex;gap:.55rem;margin:.8rem .85rem 0;padding:.65rem .75rem;border:1px solid #f1d79b;border-radius:10px;color:#6d5a32;background:#fffbf1;font-size:.62rem;line-height:1.5}
 .user-promotion-note strong{flex:0 0 auto;color:#9b6507}
-.user-promotion-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+.user-promotion-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .user-calendar-field{display:grid;align-content:start;gap:.25rem;min-width:0}.user-calendar-field>label{color:#405e70;font-size:.64rem;font-weight:800}.user-calendar-field>.date-picker{margin-top:0}.user-calendar-field>small{color:#81929d;font-size:.57rem;font-weight:500;line-height:1.45}
 .user-promotion-clear{margin:-.2rem .85rem .8rem;color:#8b6d31;font-size:.58rem}
 .user-edit-message{margin:0;padding:.65rem .75rem;border-radius:10px;background:#effaf5;font-size:.67rem;font-weight:750}.user-edit-message.error{background:#fff0f1}

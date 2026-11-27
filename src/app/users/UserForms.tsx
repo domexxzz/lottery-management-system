@@ -71,7 +71,8 @@ export type EditableUser = {
     laoCommissionRate: string;
     commissionPromotionStartsOn: string;
     commissionPromotionEndsOn: string;
-    commissionPromotionMinGross: string;
+    commissionPromotionThaiMinGross: string;
+    commissionPromotionLaoMinGross: string;
     commissionPromotionThaiRate: string;
     commissionPromotionLaoRate: string;
     creditLimit: string;
@@ -110,19 +111,20 @@ export function EditUserForm({ user }: { user: EditableUser }) {
     </section>}
 
     {isAgent && <section className="user-edit-section user-promotion-section">
-      <header><span>3</span><div><h2>โปรโมชั่นค่าคอม</h2><p>ตั้งช่วงเวลาและยอดขายขั้นต่ำของงวด หากไม่ตั้งหรือยอดไม่ถึง ระบบใช้ค่าคอมปกติด้านบน</p></div></header>
+      <header><span>3</span><div><h2>โปรโมชั่นค่าคอม</h2><p>ตั้งช่วงเวลาและยอดขายขั้นต่ำแยกหวยรัฐบาลกับหวยลาว หากยอดของงวดนั้นไม่ถึงเกณฑ์ ระบบใช้ค่าคอมปกติด้านบน</p></div></header>
       <div className="user-promotion-note">
         <strong>วิธีคิด</strong>
-        <span>ตรวจยอดขายของ Agent แยกทีละงวด · ถึงเกณฑ์แล้วใช้เรตโปรโมชั่นตามประเภทหวย · หวยลาวและหวยลาวชุดใช้เรต Lao Family เดียวกัน · งวดที่คำนวณแล้วต้องกดคำนวณใหม่ก่อนปิดบัญชี</span>
+        <span>ตรวจยอดขายของ Agent แยกทีละงวดและแต่ละประเภท ไม่รวมยอดไทยกับลาว · หวยลาวและหวยลาวชุดใช้เกณฑ์และเรต Lao Family เดียวกัน แต่ยังตรวจยอดของแต่ละงวดแยกกัน · งวดที่คำนวณแล้วต้องกดคำนวณใหม่ก่อนปิดบัญชี</span>
       </div>
       <div className="user-edit-grid user-promotion-grid">
         <div className="user-calendar-field"><label htmlFor="commission-promotion-start">วันเริ่มโปรโมชั่น</label><DatePicker id="commission-promotion-start" name="commissionPromotionStartsOn" defaultValue={user.agent?.commissionPromotionStartsOn ?? ""} placeholder="เลือกวันเริ่มโปรโมชั่น" ariaLabel="เลือกวันเริ่มโปรโมชั่น" /><small>นับรวมวันเริ่มต้น โดยดูจากวันออกรางวัลของงวด</small></div>
         <div className="user-calendar-field"><label htmlFor="commission-promotion-end">วันสิ้นสุดโปรโมชั่น</label><DatePicker id="commission-promotion-end" name="commissionPromotionEndsOn" defaultValue={user.agent?.commissionPromotionEndsOn ?? ""} placeholder="เลือกวันสิ้นสุดโปรโมชั่น" ariaLabel="เลือกวันสิ้นสุดโปรโมชั่น" /><small>นับรวมวันสิ้นสุด</small></div>
-        <label>ยอดขายขั้นต่ำต่องวด (บาท)<input name="commissionPromotionMinGross" type="number" min="0.01" step="0.01" defaultValue={user.agent?.commissionPromotionMinGross ?? ""} placeholder="เช่น 20000" /><small>Agent ต้องขายในงวดนั้นถึงยอดนี้จึงได้เรตโปรโมชั่น</small></label>
-        <label>โปรโมชั่นหวยรัฐบาล (%)<input name="commissionPromotionThaiRate" type="number" min="0" max="100" step="0.0001" defaultValue={user.agent?.commissionPromotionThaiRate ?? ""} placeholder="เช่น 35" /><small>ใช้กับยอดขายหวยรัฐบาลที่ถึงเกณฑ์</small></label>
-        <label>โปรโมชั่นหวยลาว Family (%)<input name="commissionPromotionLaoRate" type="number" min="0" max="100" step="0.0001" defaultValue={user.agent?.commissionPromotionLaoRate ?? ""} placeholder="เช่น 30" /><small>ใช้ร่วมกันทั้งหวยลาวและหวยลาวชุด</small></label>
+        <label>ยอดขายขั้นต่ำหวยรัฐบาลต่องวด (บาท)<input name="commissionPromotionThaiMinGross" type="number" min="0.01" step="0.01" defaultValue={user.agent?.commissionPromotionThaiMinGross ?? ""} placeholder="เช่น 20000" /><small>นับเฉพาะยอดหวยรัฐบาลในงวดนั้น</small></label>
+        <label>ค่าคอมโปรโมชั่นหวยรัฐบาล (%)<input name="commissionPromotionThaiRate" type="number" min="0" max="100" step="0.0001" defaultValue={user.agent?.commissionPromotionThaiRate ?? ""} placeholder="เช่น 32" /><small>ใช้เมื่อยอดหวยรัฐบาลถึงเกณฑ์</small></label>
+        <label>ยอดขายขั้นต่ำหวยลาว Family ต่องวด (บาท)<input name="commissionPromotionLaoMinGross" type="number" min="0.01" step="0.01" defaultValue={user.agent?.commissionPromotionLaoMinGross ?? ""} placeholder="เช่น 15000" /><small>นับยอดของงวดหวยลาวหรือลาวชุดแยกกัน</small></label>
+        <label>ค่าคอมโปรโมชั่นหวยลาว Family (%)<input name="commissionPromotionLaoRate" type="number" min="0" max="100" step="0.0001" defaultValue={user.agent?.commissionPromotionLaoRate ?? ""} placeholder="เช่น 30" /><small>ใช้อัตราเดียวกันกับหวยลาวและหวยลาวชุด</small></label>
       </div>
-      <p className="user-promotion-clear">ต้องการปิดโปรโมชั่น ให้ล้างทั้ง 5 ช่องแล้วบันทึก</p>
+      <p className="user-promotion-clear">ตั้งเฉพาะประเภทที่ต้องการได้ โดยกรอกยอดขั้นต่ำและค่าคอมเป็นคู่ · ต้องการปิดโปรโมชั่นทั้งหมด ให้ล้างทั้ง 6 ช่องแล้วบันทึก</p>
     </section>}
 
     <section className="user-edit-section">

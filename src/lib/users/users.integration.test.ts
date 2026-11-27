@@ -72,7 +72,8 @@ describe("Owner จัดการบัญชี", () => {
       laoCommissionRate: "27.25",
       commissionPromotionStartsOn: "2026-11-01",
       commissionPromotionEndsOn: "2026-12-01",
-      commissionPromotionMinGross: "20000",
+      commissionPromotionThaiMinGross: "20000",
+      commissionPromotionLaoMinGross: "15000",
       commissionPromotionThaiRate: "35",
       commissionPromotionLaoRate: "30",
       creditLimit: "5000",
@@ -92,7 +93,8 @@ describe("Owner จัดการบัญชี", () => {
     expect(updated.agent?.laoCommissionRate.toString()).toBe("27.25");
     expect(updated.agent?.commissionPromotionStartsOn?.toISOString().slice(0, 10)).toBe("2026-11-01");
     expect(updated.agent?.commissionPromotionEndsOn?.toISOString().slice(0, 10)).toBe("2026-12-01");
-    expect(updated.agent?.commissionPromotionMinGross?.toString()).toBe("20000");
+    expect(updated.agent?.commissionPromotionThaiMinGross?.toString()).toBe("20000");
+    expect(updated.agent?.commissionPromotionLaoMinGross?.toString()).toBe("15000");
     expect(updated.agent?.commissionPromotionThaiRate?.toString()).toBe("35");
     expect(updated.agent?.commissionPromotionLaoRate?.toString()).toBe("30");
     expect(updated.agent?.creditLimit?.toString()).toBe("5000");
@@ -120,13 +122,32 @@ describe("Owner จัดการบัญชี", () => {
     await expect(updateManagedUser(f.actors.OWNER, user.id, {
       ...base,
       commissionPromotionStartsOn: "2026-11-01",
-    })).rejects.toThrow("กรอกข้อมูลโปรโมชั่นให้ครบ");
+    })).rejects.toThrow("กรอกช่วงวันโปรโมชั่นให้ครบ");
+
+    await expect(updateManagedUser(f.actors.OWNER, user.id, {
+      ...base,
+      commissionPromotionStartsOn: "2026-11-01",
+      commissionPromotionEndsOn: "2026-12-01",
+      commissionPromotionThaiMinGross: "20000",
+    })).rejects.toThrow("หวยรัฐบาลให้ครบทั้งคู่");
 
     await updateManagedUser(f.actors.OWNER, user.id, {
       ...base,
       commissionPromotionStartsOn: "2026-11-01",
       commissionPromotionEndsOn: "2026-12-01",
-      commissionPromotionMinGross: "20000",
+      commissionPromotionThaiMinGross: "20000",
+      commissionPromotionThaiRate: "35",
+    });
+    const thaiOnly = await prisma.agent.findUniqueOrThrow({ where: { userId: user.id } });
+    expect(thaiOnly.commissionPromotionThaiMinGross?.toString()).toBe("20000");
+    expect(thaiOnly.commissionPromotionLaoMinGross).toBeNull();
+
+    await updateManagedUser(f.actors.OWNER, user.id, {
+      ...base,
+      commissionPromotionStartsOn: "2026-11-01",
+      commissionPromotionEndsOn: "2026-12-01",
+      commissionPromotionThaiMinGross: "20000",
+      commissionPromotionLaoMinGross: "15000",
       commissionPromotionThaiRate: "35",
       commissionPromotionLaoRate: "30",
     });
@@ -135,7 +156,8 @@ describe("Owner จัดการบัญชี", () => {
     const agent = await prisma.agent.findUniqueOrThrow({ where: { userId: user.id } });
     expect(agent.commissionPromotionStartsOn).toBeNull();
     expect(agent.commissionPromotionEndsOn).toBeNull();
-    expect(agent.commissionPromotionMinGross).toBeNull();
+    expect(agent.commissionPromotionThaiMinGross).toBeNull();
+    expect(agent.commissionPromotionLaoMinGross).toBeNull();
     expect(agent.commissionPromotionThaiRate).toBeNull();
     expect(agent.commissionPromotionLaoRate).toBeNull();
   });

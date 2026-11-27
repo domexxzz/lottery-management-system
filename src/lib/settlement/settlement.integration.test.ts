@@ -59,7 +59,8 @@ describe("เส้นทางเงินเต็มเส้น", () => {
       data: {
         commissionPromotionStartsOn: new Date(`${day}T00:00:00.000Z`),
         commissionPromotionEndsOn: new Date(`${day}T00:00:00.000Z`),
-        commissionPromotionMinGross: "1000",
+        commissionPromotionThaiMinGross: "1000",
+        commissionPromotionLaoMinGross: "2000",
         commissionPromotionThaiRate: "35",
         commissionPromotionLaoRate: "30",
       },

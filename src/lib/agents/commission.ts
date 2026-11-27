@@ -8,7 +8,8 @@ export type AgentCommissionRates = {
 export type AgentCommissionPromotion = AgentCommissionRates & {
   commissionPromotionStartsOn: Date | null;
   commissionPromotionEndsOn: Date | null;
-  commissionPromotionMinGross: Prisma.Decimal | null;
+  commissionPromotionThaiMinGross: Prisma.Decimal | null;
+  commissionPromotionLaoMinGross: Prisma.Decimal | null;
   commissionPromotionThaiRate: Prisma.Decimal | null;
   commissionPromotionLaoRate: Prisma.Decimal | null;
 };
@@ -41,13 +42,17 @@ export function effectiveCommissionRate(input: {
   const {
     commissionPromotionStartsOn: startsOn,
     commissionPromotionEndsOn: endsOn,
-    commissionPromotionMinGross: minGross,
+    commissionPromotionThaiMinGross: thaiMinGross,
+    commissionPromotionLaoMinGross: laoMinGross,
     commissionPromotionThaiRate: thaiRate,
     commissionPromotionLaoRate: laoRate,
   } = input.agent;
 
-  if (!startsOn || !endsOn || !minGross || !thaiRate || !laoRate) return baseRate;
+  if (!startsOn || !endsOn) return baseRate;
   if (input.drawDay < databaseDay(startsOn) || input.drawDay > databaseDay(endsOn)) return baseRate;
+  const minGross = input.lotteryType === "THAI_GOVERNMENT" ? thaiMinGross : laoMinGross;
+  const rate = input.lotteryType === "THAI_GOVERNMENT" ? thaiRate : laoRate;
+  if (!minGross || !rate) return baseRate;
   if (input.gross.lessThan(minGross)) return baseRate;
-  return input.lotteryType === "THAI_GOVERNMENT" ? thaiRate : laoRate;
+  return rate;
 }
