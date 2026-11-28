@@ -584,8 +584,6 @@
 .agent-grid-promotion dd{display:block}
 .agent-grid-promotion .agent-promotion-cell{min-width:0}
 
-/* อัตราคอมที่ได้จริงในช่วงที่ดู ต่างจากเรตปกติเมื่อมีงวดที่เข้าโปรโมชั่น */
-.agent-rate-note{display:block;color:#7b8f99;font-size:.64rem;font-weight:600;line-height:1.4}
-.agent-rate-promo{display:inline-block;margin-left:.25rem;padding:.02rem .3rem;border-radius:999px;background:#e8f6ef;color:#12724f;font-size:.6rem;font-weight:800}
+/* อัตราคอมใช้ป้ายกลางจาก CommissionRateNote เหลือไว้แค่สถานะเข้าเกณฑ์ของช่องโปรโมชั่น */
 .agent-promotion-hit{color:#12724f;font-size:.64rem;font-weight:800}
 .agent-promotion-miss{color:#8a8f94;font-size:.62rem;font-weight:700}

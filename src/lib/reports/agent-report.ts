@@ -4,7 +4,8 @@ import { orgScope, requirePermission } from "@/lib/auth/context";
 import { databaseSchema, prisma } from "@/lib/db";
 import { ForbiddenError } from "@/lib/errors";
 import { sumMoney, ZERO } from "@/lib/money";
-import { commissionDecision, promotionGroupOf, promotionStatus, promotionTargetFor } from "@/lib/agents/commission";
+import { promotionGroupOf, promotionStatus, promotionTargetFor } from "@/lib/agents/commission";
+import { drawCommission, summarizeCommissionRates } from "@/lib/agents/commission-basis";
 import { listBetBills } from "@/lib/bills/service";
 import { resolveDashboardDrawScope } from "@/lib/dashboard/lottery-draw-filter";
 import { drawDay, inRange, parseDay, todayInBangkok } from "@/lib/draws/range";
@@ -314,6 +315,7 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
     agent, rounds: [] as SimpleAgentRound[], winners: [], drawOptions, drawScope,
     promotion: promotionStatus(agent, todayInBangkok()),
     promotionProgress: [] as AgentPromotionProgress[],
+    commissionRates: { baseRates: [] as number[], promotionRates: [] as number[], promotionDraws: 0, estimated: false },
     selectedDrawId: drawScope.selectedDraw?.id ?? "",
     totals: { gross: ZERO, payout: ZERO, commission: ZERO, commissionFinal: true },
     billHistory: { rows: [], counts: { all: 0, won: 0, lost: 0, pending: 0 }, page: 1, pages: 1, status: billStatus },
@@ -348,7 +350,13 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
     `),
     prisma.settlement.findMany({
       where: { ...scope, agentId: actor.agentId, drawId: { in: drawIds } },
-      select: { drawId: true, commission: true },
+      select: {
+        drawId: true,
+        commission: true,
+        commissionRateSnapshot: true,
+        commissionBaseRateSnapshot: true,
+        commissionPromotionApplied: true,
+      },
     }),
     prisma.bill.findMany({
       where: { ...billFilter, totalPayout: { gt: 0 } },
@@ -379,7 +387,8 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
     const bill = billsByDraw.get(draw.id);
     const gross = bill?._sum.totalStake ?? ZERO;
     const settlement = settlementByDraw.get(draw.id);
-    const decision = commissionDecision({ agent, lotteryType: draw.lotteryType, drawDay: drawDay(draw), gross });
+    const payout = bill?._sum.totalPayout ?? ZERO;
+    const basis = drawCommission({ agent, lotteryType: draw.lotteryType, drawDay: drawDay(draw), gross, payout, settlement });
     return {
       drawId: draw.id,
       drawName: draw.name,
@@ -387,12 +396,12 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
       billCount: bill?._count._all ?? 0,
       winnerCount: winnersByDraw.get(draw.id) ?? 0,
       gross,
-      payout: bill?._sum.totalPayout ?? ZERO,
-      commission: settlement?.commission ?? gross.times(decision.rate).dividedBy(100),
-      commissionFinal: Boolean(settlement),
-      commissionRate: decision.rate,
-      baseCommissionRate: decision.baseRate,
-      promotionApplied: decision.promotionApplied,
+      payout,
+      commission: basis.commission,
+      commissionFinal: !basis.estimated,
+      commissionRate: basis.rate,
+      baseCommissionRate: basis.baseRate,
+      promotionApplied: basis.promotionApplied,
     };
   });
 
@@ -434,9 +443,19 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
     commission: sumMoney(rounds.map((round) => round.commission)),
     commissionFinal: rounds.every((round) => round.commissionFinal || round.billCount === 0),
   };
+  /* สรุปอัตราที่ใช้จริง นับเฉพาะงวดที่มีบิล งวดเปล่าไม่ได้บอกอะไรเกี่ยวกับอัตรา */
+  const commissionRates = summarizeCommissionRates(rounds
+    .filter((round) => round.billCount > 0)
+    .map((round) => ({
+      commission: round.commission,
+      rate: round.commissionRate,
+      baseRate: round.baseCommissionRate,
+      promotionApplied: round.promotionApplied,
+      estimated: !round.commissionFinal,
+    })));
   const history = await listBetBills(actor, { tab: billStatus, drawWhere: { id: { in: drawIds } }, page: requestedPage, pageSize: 20 });
 
-  return { agent, rounds, winners, drawOptions, drawScope, promotion, promotionProgress, selectedDrawId: drawScope.selectedDraw?.id ?? "", totals, billHistory: {
+  return { agent, rounds, winners, drawOptions, drawScope, promotion, promotionProgress, commissionRates, selectedDrawId: drawScope.selectedDraw?.id ?? "", totals, billHistory: {
     rows: history.bills,
     counts: { all: history.counts.ALL, won: history.counts.WON, lost: history.counts.LOST, pending: history.counts.PENDING },
     page: history.page, pages: history.pageCount, status: billStatus,

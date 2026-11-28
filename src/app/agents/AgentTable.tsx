@@ -8,6 +8,7 @@ import { DateRangePicker } from "@/components/calendar";
 import type { MonthShortcut } from "@/lib/draws/range";
 import { ReportExportButtons } from "@/components/ReportExportButtons";
 import { PROMOTION_STATE_LABEL, type PromotionState } from "@/lib/agents/commission";
+import { CommissionRateNote } from "@/components/CommissionRateNote";
 
 export type AgentTableCustomer = {
   key: string;
@@ -42,12 +43,14 @@ export type AgentTableRow = {
   payout: number;
   thaiCommission: number;
   laoCommission: number;
-  /** ยอดขายเฉพาะงวดที่คำนวณแล้ว ใช้เป็นตัวหารของอัตราคอมที่ได้จริง */
-  thaiSettledGross: number;
-  laoSettledGross: number;
   thaiPromotionDraws: number;
   laoPromotionDraws: number;
   settledDraws: number;
+  /** อัตราที่ถูกใช้จริง แยกเรตปกติกับเรตโปรโมชั่น ไม่ใช่ค่าเฉลี่ย */
+  thaiBaseRates: number[];
+  thaiPromotionRates: number[];
+  laoBaseRates: number[];
+  laoPromotionRates: number[];
   commission: number;
   net: number;
   profileHref: string;
@@ -63,34 +66,6 @@ const PROMOTION_TONE: Record<PromotionState, string> = {
   ENDING_SOON: "warning",
   EXPIRED: "danger",
 };
-
-const RATE = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-/**
- * อัตราคอมที่ Agent ได้รับจริงในช่วงที่กำลังดู
- *
- * ของเดิมแสดงอัตราปกติที่ตั้งไว้ในโปรไฟล์ ซึ่งไม่ใช่สิ่งที่เกิดขึ้นจริงเมื่อมีโปรโมชั่น
- * ยอดเงินข้าง ๆ มาจาก Settlement ที่คิดเรตโปรฯ ไปแล้ว คนอ่านจึงเห็นเงินกับเปอร์เซ็นต์
- * ที่หารกันไม่ลงตัว แล้วสรุปว่าระบบคำนวณผิด
- *
- * หารจากยอดขายของงวดที่คำนวณแล้วเท่านั้น เพราะงวดที่ยังไม่ปิดบัญชีไม่มีค่าคอม
- * ถ้าเอายอดขายทั้งหมดมาหาร เปอร์เซ็นต์จะต่ำกว่าความจริงทุกครั้งที่มีงวดค้าง
- */
-function effectiveRate(commission: number, settledGross: number, fallback: number): { value: number; actual: boolean } {
-  if (settledGross <= 0) return { value: fallback, actual: false };
-  return { value: commission / settledGross * 100, actual: true };
-}
-
-function RateNote({ commission, settledGross, baseRate, promotionDraws }: { commission: number; settledGross: number; baseRate: number; promotionDraws: number }) {
-  const rate = effectiveRate(commission, settledGross, baseRate);
-  const label = rate.actual && Math.abs(rate.value - baseRate) >= 0.005
-    ? `${RATE.format(rate.value)}%`
-    : `${baseRate.toFixed(0)}%`;
-  return <small className="agent-rate-note">
-    {" "}({label}{!rate.actual && " ตามเรตปกติ"})
-    {promotionDraws > 0 && <b className="agent-rate-promo" title={`มี ${promotionDraws} งวดที่ยอดถึงเกณฑ์และได้เรตโปรโมชั่น`}>เข้าโปรฯ {promotionDraws} งวด</b>}
-  </small>;
-}
 
 /**
  * ช่องโปรโมชั่นในตาราง Agent
@@ -308,7 +283,7 @@ export function AgentTable({
           <div className="agent-grid-sales"><span>ยอดขาย</span><strong>{MONEY.format(agent.sales)}<small> บาท</small></strong></div>
           <dl>
             <div><dt>จ่ายรางวัล</dt><dd>{MONEY.format(agent.payout)}</dd></div>
-            <div className="agent-grid-commission"><dt>ค่าคอม Agent</dt><dd><span>หวยไทย <b>{MONEY.format(agent.thaiCommission)}</b><RateNote commission={agent.thaiCommission} settledGross={agent.thaiSettledGross} baseRate={agent.commissionRate} promotionDraws={agent.thaiPromotionDraws} /></span><span>หวยลาวและหวยลาวชุด <b>{MONEY.format(agent.laoCommission)}</b><RateNote commission={agent.laoCommission} settledGross={agent.laoSettledGross} baseRate={agent.laoCommissionRate} promotionDraws={agent.laoPromotionDraws} /></span><span className="total">รวม <b>{MONEY.format(agent.commission)}</b></span><small>เรตปกติ ไทย {agent.commissionRate.toFixed(0)}% · ลาว {agent.laoCommissionRate.toFixed(0)}%</small></dd></div>
+            <div className="agent-grid-commission"><dt>ค่าคอม Agent</dt><dd><span>หวยไทย <b>{MONEY.format(agent.thaiCommission)}</b><CommissionRateNote baseRates={agent.thaiBaseRates} promotionRates={agent.thaiPromotionRates} promotionDraws={agent.thaiPromotionDraws} fallbackRate={agent.commissionRate} /></span><span>หวยลาวและหวยลาวชุด <b>{MONEY.format(agent.laoCommission)}</b><CommissionRateNote baseRates={agent.laoBaseRates} promotionRates={agent.laoPromotionRates} promotionDraws={agent.laoPromotionDraws} fallbackRate={agent.laoCommissionRate} /></span><span className="total">รวม <b>{MONEY.format(agent.commission)}</b></span><small>เรตปกติ ไทย {agent.commissionRate.toFixed(0)}% · ลาว {agent.laoCommissionRate.toFixed(0)}%</small></dd></div>
             {/* มุมมองการ์ดเป็นค่าเริ่มต้นของหน้านี้ โปรโมชั่นจึงต้องอยู่ทั้งสองมุมมอง ไม่ใช่แค่ในตาราง */}
             {agent.promotion.state !== "NONE" && <div className="agent-grid-promotion"><dt>โปรโมชั่น</dt><dd><PromotionCell promotion={agent.promotion} promotionDraws={agent.thaiPromotionDraws + agent.laoPromotionDraws} /></dd></div>}
             <div><dt>ลูกค้า</dt><dd>{agent.customerCount.toLocaleString("th-TH")} คน</dd></div>
@@ -360,8 +335,8 @@ export function AgentTable({
                 <td className="num">{agent.billCount}</td>
                 <td className="num"><strong>{MONEY.format(agent.sales)}</strong></td>
                 <td className="num">{MONEY.format(agent.payout)}</td>
-                <td className="num">{MONEY.format(agent.thaiCommission)}<RateNote commission={agent.thaiCommission} settledGross={agent.thaiSettledGross} baseRate={agent.commissionRate} promotionDraws={agent.thaiPromotionDraws} /></td>
-                <td className="num">{MONEY.format(agent.laoCommission)}<RateNote commission={agent.laoCommission} settledGross={agent.laoSettledGross} baseRate={agent.laoCommissionRate} promotionDraws={agent.laoPromotionDraws} /></td>
+                <td className="num">{MONEY.format(agent.thaiCommission)}<CommissionRateNote baseRates={agent.thaiBaseRates} promotionRates={agent.thaiPromotionRates} promotionDraws={agent.thaiPromotionDraws} fallbackRate={agent.commissionRate} /></td>
+                <td className="num">{MONEY.format(agent.laoCommission)}<CommissionRateNote baseRates={agent.laoBaseRates} promotionRates={agent.laoPromotionRates} promotionDraws={agent.laoPromotionDraws} fallbackRate={agent.laoCommissionRate} /></td>
                 <td className="num"><strong>{MONEY.format(agent.commission)}</strong></td>
                 <td data-label="โปรโมชั่น"><PromotionCell promotion={agent.promotion} promotionDraws={agent.thaiPromotionDraws + agent.laoPromotionDraws} /></td>
                 <td className="agent-table-link"><Link href={agent.profileHref}>ดูรายละเอียด</Link></td>

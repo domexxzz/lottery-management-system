@@ -22,3 +22,8 @@
 .agent-profile-commission-breakdown small{padding:.08rem .35rem;border-radius:99px;color:#8b620a;background:#fff1c9;font-size:.54rem;font-weight:800}
 .agent-profile-commission-breakdown .total{padding-top:.24rem;border-top:1px dashed #d8e4e8;color:#17384f;font-weight:800}
 .agent-profile-commission-breakdown .total b{color:#0d7d89;font-size:.82rem}
+
+/* อัตราที่ใช้จริงต่องวด และสรุปว่าเข้าโปรโมชั่นกี่งวด */
+.agent-profile-rate{display:block;color:#7b8f99;font-size:.62rem;font-weight:700}
+.agent-profile-rate b{color:#12724f}
+.agent-profile-promotion-note{display:block;margin-top:.25rem;color:#12724f;font-size:.68rem;font-weight:700;font-style:normal}

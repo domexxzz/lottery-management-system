@@ -46,7 +46,7 @@ export async function loadCommissionPayoutReport(actor: Actor, query: Commission
   const laoDrawIds = scopedDraws.filter((draw) => draw.lotteryType === "LAO" || draw.lotteryType === "LAO_SET").map((draw) => draw.id);
   const baseWhere = { organizationId: actor.organizationId, ...drawWhere };
 
-  const [overall, thai, lao, statuses, promotionDraws] = await Promise.all([
+  const [overall, thai, lao, statuses, promotionDraws, rateGroups] = await Promise.all([
     prisma.settlement.groupBy({
       by: ["agentId"],
       where: baseWhere,
@@ -65,9 +65,27 @@ export async function loadCommissionPayoutReport(actor: Actor, query: Commission
      * ถ้าไม่บอก คนจ่ายจะเห็นแต่เรตปกติข้างยอดเงินแล้วคิดว่าระบบคำนวณผิด
      */
     prisma.settlement.groupBy({ by: ["agentId"], where: { ...baseWhere, commissionPromotionApplied: true }, _count: { _all: true } }),
+    /*
+     * อัตราที่ถูกใช้จริง แยกเรตปกติกับเรตโปรโมชั่น
+     *
+     * หน้านี้คือหน้าที่คนเอาไปจ่ายเงินจริง ถ้าบอกแต่ยอดรวมโดยไม่บอกว่าอัตราไหน
+     * คนจ่ายอธิบายให้ Agent ไม่ได้ว่าทำไมเดือนนี้ได้ไม่เท่าเดือนก่อน
+     */
+    prisma.settlement.groupBy({
+      by: ["agentId", "commissionRateSnapshot", "commissionPromotionApplied"],
+      where: baseWhere,
+      _count: { _all: true },
+    }),
   ]);
 
   const promotionByAgent = new Map(promotionDraws.map((row) => [row.agentId, row._count._all]));
+  const ratesByAgent = new Map<string, { baseRates: Set<number>; promotionRates: Set<number> }>();
+  for (const row of rateGroups) {
+    const entry = ratesByAgent.get(row.agentId) ?? { baseRates: new Set<number>(), promotionRates: new Set<number>() };
+    (row.commissionPromotionApplied ? entry.promotionRates : entry.baseRates).add(Number(row.commissionRateSnapshot));
+    ratesByAgent.set(row.agentId, entry);
+  }
+  const sortedRates = (values: Set<number> | undefined) => [...(values ?? [])].sort((a, b) => a - b);
   const agentIds = overall.map((row) => row.agentId);
   const agents = agentIds.length
     ? await prisma.agent.findMany({
@@ -99,6 +117,8 @@ export async function loadCommissionPayoutReport(actor: Actor, query: Commission
       laoRate: number(agent?.laoCommissionRate),
       drawCount: row._count._all,
       promotionDrawCount: promotionByAgent.get(row.agentId) ?? 0,
+      baseRates: sortedRates(ratesByAgent.get(row.agentId)?.baseRates),
+      promotionRates: sortedRates(ratesByAgent.get(row.agentId)?.promotionRates),
       gross: number(row._sum.gross),
       payout: number(row._sum.payout),
       thaiCommission: thaiByAgent.get(row.agentId) ?? 0,

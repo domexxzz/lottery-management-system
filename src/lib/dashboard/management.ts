@@ -1,9 +1,11 @@
-import type { BillStatus, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { BillStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { orgScope, type Actor } from "@/lib/auth/context";
 import { dashboardDrawLabel, resolveDashboardDrawScope } from "@/lib/dashboard/lottery-draw-filter";
 import { reportCategoryLabel } from "@/lib/reports/draw-groups";
-import { commissionRateForLottery } from "@/lib/agents/commission";
+import { commissionDecision } from "@/lib/agents/commission";
+import { drawDay } from "@/lib/draws/range";
 
 /**
  * ข้อมูลหน้าภาพรวมของ Owner/Admin
@@ -144,19 +146,38 @@ export async function loadManagementDashboard(actor: Actor, filters: DashboardFi
   ])];
   const agents = agentIds.length === 0 ? [] : await prisma.agent.findMany({
     where: { ...scope, id: { in: agentIds } },
-    select: { id: true, code: true, name: true, commissionRate: true, laoCommissionRate: true },
+    select: {
+      id: true, code: true, name: true, commissionRate: true, laoCommissionRate: true,
+      commissionPromotionStartsOn: true,
+      commissionPromotionEndsOn: true,
+      commissionPromotionThaiMinGross: true,
+      commissionPromotionLaoMinGross: true,
+      commissionPromotionThaiRate: true,
+      commissionPromotionLaoRate: true,
+    },
   });
   const agentById = new Map(agents.map((agent) => [agent.id, agent]));
+
+  /** อัตราของคู่ Agent × งวด คิดโปรโมชั่นจากยอดของงวดนั้น ไม่ใช่เรตปกติเสมอ */
+  const rateOf = (agentId: string, drawId: string, drawGross: number): number => {
+    const agent = agentById.get(agentId);
+    const draw = physicalDrawById.get(drawId);
+    if (!agent || !draw) return 0;
+    return Number(commissionDecision({
+      agent,
+      lotteryType: draw.lotteryType,
+      drawDay: drawDay(draw),
+      gross: new Prisma.Decimal(drawGross),
+    }).rate);
+  };
 
   const gross = num(totals._sum.totalStake);
   const payout = num(totals._sum.totalPayout);
   const physicalDrawById = new Map(physicalDraws.map((draw) => [draw.id, draw]));
   // งวดที่ยังไม่ Settlement ประมาณค่าคอมแยกตามประเภทหวยของแต่ละงวด
   const commission = perAgentDraw.reduce((sum, row) => {
-    const agent = agentById.get(row.agentId);
-    const draw = physicalDrawById.get(row.drawId);
-    if (!agent || !draw) return sum;
-    return sum + num(row._sum.totalStake) * Number(commissionRateForLottery(agent, draw.lotteryType)) / 100;
+    const rowGross = num(row._sum.totalStake);
+    return sum + rowGross * rateOf(row.agentId, row.drawId, rowGross) / 100;
   }, 0);
   // ลูกค้าที่ถูกรางวัล นับตามชื่อที่ตัดช่องว่างและไม่สนตัวพิมพ์ บิลที่ไม่มีชื่อนับแยกทีละใบ
   const winnerKeys = new Set<string>();
@@ -184,10 +205,14 @@ export async function loadManagementDashboard(actor: Actor, filters: DashboardFi
     let outcomeCommission = 0;
     for (const row of rows) {
       const rowGross = num(row._sum.totalStake);
-      const agent = agentById.get(row.agentId);
-      const draw = physicalDrawById.get(row.drawId);
+      /*
+       * งวดที่ปิดบัญชีแล้วใช้เรตที่บันทึกไว้ งวดที่ยังไม่ปิดคิดโปรโมชั่นให้ด้วย
+       *
+       * เดิมงวดที่ยังไม่ปิดใช้เรตปกติเสมอ ภาพรวมหน้าแรกจึงต่ำกว่าที่ต้องจ่ายจริง
+       * ทุกครั้งที่มี Agent ทำยอดถึงเกณฑ์ในงวดที่ยังไม่ออกผล
+       */
       const rate = settledRateByAgentDraw.get(`${row.agentId}:${row.drawId}`)
-        ?? (agent && draw ? Number(commissionRateForLottery(agent, draw.lotteryType)) : 0);
+        ?? rateOf(row.agentId, row.drawId, rowGross);
       billCount += row._count._all;
       outcomeGross += rowGross;
       outcomePayout += num(row._sum.totalPayout);

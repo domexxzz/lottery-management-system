@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { CommissionRateNote } from "@/components/CommissionRateNote";
 import { DashboardIcon } from "@/app/DashboardIcon";
 import { DashboardLotteryDrawFilter } from "@/app/DashboardLotteryDrawFilter";
 import { getActor } from "@/lib/auth/context";
@@ -41,6 +42,8 @@ export default async function CommissionPayoutPage({ searchParams }: {
     ? { ...query, period: "range", dateFrom: selectedFrom, dateTo: selectedTo }
     : { ...query, period: "month", date: selectedMonth };
   const report = await loadCommissionPayoutReport(actor, effectiveQuery);
+
+  const promotionAgents = report.rows.filter((row) => row.promotionDrawCount > 0).length;
 
   return <main className="commission-page">
     <header className="commission-head">
@@ -84,14 +87,15 @@ export default async function CommissionPayoutPage({ searchParams }: {
     <section className="commission-list">
       <header><div><p>{report.checklistEnabled ? "MONTHLY COMMISSION CHECKLIST" : "COMMISSION PAYABLE"}</p><h2>{report.checklistEnabled ? "เช็กลิสต์จ่ายค่าคอมรายเดือน" : "ต้องจ่ายให้ Agent คนไหนเท่าไหร่"}</h2></div><span>{COUNT.format(report.rows.length)} Agent</span></header>
       {report.rows.length === 0 ? <p className="commission-empty">ยังไม่มี Settlement ที่คำนวณแล้วในขอบเขตนี้</p> : <div className="commission-table-wrap"><table>
-        <thead><tr><th>Agent</th><th className="num">งวด</th><th className="num">ยอดขาย</th><th className="num">จ่ายรางวัล</th><th className="num">คอมหวยไทย</th><th className="num">คอมหวยลาวและชุด</th><th className="num">ต้องจ่ายรวม</th><th className="num">สุทธิธุรกิจ</th><th>{report.checklistEnabled ? "เช็กการจ่าย" : "สถานะ"}</th></tr></thead>
+        <thead><tr><th>Agent</th><th className="num">งวด</th><th className="num">ยอดขาย</th><th className="num">จ่ายรางวัล</th><th className="num">คอมหวยไทย</th><th className="num">คอมหวยลาวและชุด</th><th className="num">อัตราที่ใช้</th><th className="num">ต้องจ่ายรวม</th><th className="num">สุทธิธุรกิจ</th><th>{report.checklistEnabled ? "เช็กการจ่าย" : "สถานะ"}</th></tr></thead>
         <tbody>{report.rows.map((row) => { const status = statusOf(row); return <tr key={row.agentId}>
           <td data-label="Agent"><Link href={`/agents/${row.agentId}`}><strong>{row.code}</strong><span>{row.name}</span></Link></td>
-          <td data-label="งวด" className="num">{COUNT.format(row.drawCount)}{row.promotionDrawCount > 0 && <small className="commission-promotion-note">ใช้เรตโปรฯ {COUNT.format(row.promotionDrawCount)} งวด</small>}</td>
+          <td data-label="งวด" className="num">{COUNT.format(row.drawCount)}{row.promotionDrawCount > 0 && <small className="commission-promotion-note">เข้าโปรฯ {COUNT.format(row.promotionDrawCount)} งวด</small>}</td>
           <td data-label="ยอดขาย" className="num">{MONEY.format(row.gross)}</td>
           <td data-label="จ่ายรางวัล" className="num">{MONEY.format(row.payout)}</td>
-          <td data-label="คอมหวยไทย" className="num">{MONEY.format(row.thaiCommission)}<small>{row.thaiRate.toFixed(0)}%</small></td>
-          <td data-label="คอมหวยลาวและชุด" className="num">{MONEY.format(row.laoCommission)}<small>{row.laoRate.toFixed(0)}%</small></td>
+          <td data-label="คอมหวยไทย" className="num">{MONEY.format(row.thaiCommission)}</td>
+          <td data-label="คอมหวยลาวและชุด" className="num">{MONEY.format(row.laoCommission)}</td>
+          <td data-label="อัตราที่ใช้" className="num"><CommissionRateNote baseRates={row.baseRates} promotionRates={row.promotionRates} promotionDraws={row.promotionDrawCount} fallbackRate={row.thaiRate} /></td>
           <td data-label="ต้องจ่ายรวม" className="num commission-payable"><strong>{MONEY.format(row.commission)}</strong><small>บาท</small></td>
           <td data-label="สุทธิธุรกิจ" className={`num ${row.net < 0 ? "is-loss" : "is-profit"}`}>{row.net < 0 ? "−" : "+"}{MONEY.format(Math.abs(row.net))}</td>
           <td data-label={report.checklistEnabled ? "เช็กการจ่าย" : "สถานะ"}>{report.checklistEnabled && report.period.value
@@ -103,7 +107,7 @@ export default async function CommissionPayoutPage({ searchParams }: {
             : <span className={`commission-status ${status.tone}`}>{status.label}</span>}
           </td>
         </tr>; })}</tbody>
-        <tfoot><tr><th colSpan={2}>รวม {COUNT.format(report.rows.length)} Agent</th><td className="num">{MONEY.format(report.totals.gross)}</td><td className="num">{MONEY.format(report.totals.payout)}</td><td className="num">{MONEY.format(report.totals.thaiCommission)}</td><td className="num">{MONEY.format(report.totals.laoCommission)}</td><td className="num commission-payable">{MONEY.format(report.totals.commission)}</td><td className={`num ${report.totals.net < 0 ? "is-loss" : "is-profit"}`}>{report.totals.net < 0 ? "−" : "+"}{MONEY.format(Math.abs(report.totals.net))}</td><td /></tr></tfoot>
+        <tfoot><tr><th colSpan={2}>รวม {COUNT.format(report.rows.length)} Agent</th><td className="num">{MONEY.format(report.totals.gross)}</td><td className="num">{MONEY.format(report.totals.payout)}</td><td className="num">{MONEY.format(report.totals.thaiCommission)}</td><td className="num">{MONEY.format(report.totals.laoCommission)}</td><td className="num">{promotionAgents > 0 ? `${COUNT.format(promotionAgents)} คนเข้าโปรฯ` : "—"}</td><td className="num commission-payable">{MONEY.format(report.totals.commission)}</td><td className={`num ${report.totals.net < 0 ? "is-loss" : "is-profit"}`}>{report.totals.net < 0 ? "−" : "+"}{MONEY.format(Math.abs(report.totals.net))}</td><td /></tr></tfoot>
       </table></div>}
       <p className="commission-note">การติ๊ก “จ่ายแล้ว” คือการบันทึกเช็กลิสต์และยอด snapshot เพื่อใช้ตรวจสอบย้อนหลัง ระบบไม่ได้โอนเงินจริงหรือตัดเงินให้อัตโนมัติ</p>
     </section>

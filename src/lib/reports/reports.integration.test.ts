@@ -9,6 +9,8 @@ import { byAgent, byDraw, byPrizeType, chartMatrix, drawSummary, searchBills } f
 import { getAgentReport, getSimpleAgentReport } from "@/lib/reports/agent-report";
 import { sumMoney } from "@/lib/money";
 import { loadWinningBillsReport } from "@/lib/reports/winning-bills";
+import { loadAccountingReport } from "@/lib/reports/accounting";
+import { parseAccountingQuery } from "@/lib/reports/accounting-period";
 import { parseWinningBillsQuery } from "@/lib/reports/winning-bills-query";
 
 /**
@@ -465,5 +467,50 @@ describe("Agent เห็นเป้าโปรโมชั่นของต�
 
     const report = await getSimpleAgentReport(f.actors.AGENT1);
     expect(report.promotionProgress).toHaveLength(0);
+  });
+});
+
+describe("ทุกหน้าที่แสดงค่าคอมต้องคิดโปรโมชั่นเหมือนกัน", () => {
+  async function promotionCoveringToday(minGross: string, rate: string) {
+    const today = new Date(new Date().getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
+    await prisma.agent.update({
+      where: { id: f.agents.agent1.id },
+      data: {
+        commissionPromotionStartsOn: new Date(`${today}T00:00:00.000Z`),
+        commissionPromotionEndsOn: new Date(`${today}T00:00:00.000Z`),
+        commissionPromotionThaiMinGross: minGross,
+        commissionPromotionThaiRate: rate,
+      },
+    });
+  }
+
+  async function sell(stake: string) {
+    const bill = await createDraftBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ลูกค้า" });
+    await replaceDraftItems(f.actors.AGENT1, bill.billId, [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake }]);
+    await confirmBill(f.actors.AGENT1, bill.billId);
+  }
+
+  test("สมุดบัญชีคิดเรตโปรโมชั่นให้งวดที่ยังไม่ปิดบัญชี และบอกว่าเข้าโปรฯ", async () => {
+    await promotionCoveringToday("600", "40");
+    await sell("800");
+
+    const accounting = await loadAccountingReport(f.actors.OWNER, parseAccountingQuery({ period: "draw" }));
+    const line = accounting.draws.flatMap((draw) => draw.agents).find((row) => row.agentId === f.agents.agent1.id)!;
+    expect(line.promotionApplied).toBe(true);
+    expect(line.commissionRate).toBe(40);
+    expect(line.baseCommissionRate).toBe(25);
+    // 800 × 40% ไม่ใช่ 800 × 25%
+    expect(line.commission).toBe(320);
+  });
+
+  test("ยอดไม่ถึงเกณฑ์ สมุดบัญชียังใช้เรตปกติและไม่บอกว่าเข้าโปรฯ", async () => {
+    await promotionCoveringToday("600", "40");
+    await sell("400");
+
+    const accounting = await loadAccountingReport(f.actors.OWNER, parseAccountingQuery({ period: "draw" }));
+    const line = accounting.draws.flatMap((draw) => draw.agents).find((row) => row.agentId === f.agents.agent1.id)!;
+    expect(line.promotionApplied).toBe(false);
+    expect(line.commissionRate).toBe(25);
+    expect(line.commission).toBe(100);
   });
 });

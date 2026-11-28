@@ -295,6 +295,8 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                     code: line.code,
                     name: line.name,
                     commissionRate: line.commissionRate,
+                    baseCommissionRate: line.baseCommissionRate,
+                    promotionApplied: line.promotionApplied,
                     gross: line.gross,
                     commission: line.commission,
                     estimated: line.estimated,

@@ -17,5 +17,8 @@ export const AGENT_OVERVIEW_EXPORT_COLUMNS = [
   { header: "ค่าคอมหวยไทย", type: "money", width: 18 },
   { header: "ค่าคอมหวยลาวและหวยลาวชุด", type: "money", width: 25 },
   { header: "ค่าคอมมิชชันรวม", type: "money", width: 18 },
+  /* บอกด้วยว่ายอดนี้มีงวดที่คิดด้วยเรตโปรโมชั่นปนอยู่กี่งวด และเป็นเรตเท่าไหร่ */
+  { header: "งวดที่เข้าโปรโมชั่น", type: "integer", width: 20 },
+  { header: "อัตราโปรโมชั่นที่ใช้จริง", type: "text", width: 24 },
   { header: "ยอดสุทธิ", type: "money", width: 18 },
 ] as const satisfies readonly TableWorkbookColumn[];

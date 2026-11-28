@@ -64,7 +64,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
   const nodes: AgentTableRow[] = mapData.agents
     .map((agent) => {
       const promotion = promotionStatus(agent, promotionToday);
-      const stats = performance.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, thaiCommission: 0, laoCommission: 0, thaiSettledGross: 0, laoSettledGross: 0, thaiPromotionDraws: 0, laoPromotionDraws: 0, settledDraws: 0, commission: 0, net: 0 };
+      const stats = performance.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, thaiCommission: 0, laoCommission: 0, thaiBaseRates: [], thaiPromotionRates: [], laoBaseRates: [], laoPromotionRates: [], thaiPromotionDraws: 0, laoPromotionDraws: 0, settledDraws: 0, commission: 0, net: 0 };
       const customers = customerRows.get(agent.id) ?? [];
       const drawQuery = currentDraw ? `?drawId=${currentDraw.id}` : "";
       return {
@@ -90,8 +90,10 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         payout: stats.payout,
         thaiCommission: stats.thaiCommission,
         laoCommission: stats.laoCommission,
-        thaiSettledGross: stats.thaiSettledGross,
-        laoSettledGross: stats.laoSettledGross,
+        thaiBaseRates: stats.thaiBaseRates,
+        thaiPromotionRates: stats.thaiPromotionRates,
+        laoBaseRates: stats.laoBaseRates,
+        laoPromotionRates: stats.laoPromotionRates,
         thaiPromotionDraws: stats.thaiPromotionDraws,
         laoPromotionDraws: stats.laoPromotionDraws,
         settledDraws: stats.settledDraws,

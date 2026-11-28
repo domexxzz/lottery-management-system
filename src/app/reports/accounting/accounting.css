@@ -468,3 +468,7 @@
   .acc-step-title small { font-size:.75rem }
   .accounting-page .acc-pair-options button,.accounting-page .acc-method-options button { min-height:60px }
 }
+
+/* อัตราค่าคอมที่ใช้จริงต่อบรรทัด บอกด้วยว่าบรรทัดไหนเข้าโปรโมชั่น */
+.accounting-rate{display:block;color:#7b8f99;font-size:.62rem;font-weight:700}
+.accounting-rate b{color:#12724f}

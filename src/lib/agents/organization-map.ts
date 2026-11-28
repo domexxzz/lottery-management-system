@@ -31,6 +31,11 @@ function number(value: MoneyValue): number {
   return Number(value ?? 0);
 }
 
+/** อัตราที่ไม่ซ้ำกัน เรียงจากน้อยไปมาก เพื่อให้ข้อความที่แสดงคงที่ */
+function rates(values: MoneyValue[] | null): number[] {
+  return [...new Set((values ?? []).map((value) => Number(value ?? 0)))].sort((a, b) => a - b);
+}
+
 type StatRow = {
   agentId: string;
   sales: MoneyValue;
@@ -40,13 +45,24 @@ type StatRow = {
   laoCommission: MoneyValue;
   commission: MoneyValue;
   net: MoneyValue;
-  /** ยอดขายเฉพาะงวดที่คำนวณ Settlement แล้ว ใช้เป็นตัวหารของอัตราคอมที่ได้จริง */
+  /** ยอดขายเฉพาะงวดที่คำนวณ Settlement แล้ว */
   thaiSettledGross: MoneyValue;
   laoSettledGross: MoneyValue;
   /** จำนวนงวดที่ยอดถึงเกณฑ์โปรโมชั่นและได้เรตพิเศษจริง */
   thaiPromotionDraws: number;
   laoPromotionDraws: number;
   settledDraws: number;
+  /**
+   * อัตราที่ใช้จริง แยกเป็นเรตปกติกับเรตโปรโมชั่น
+   *
+   * เก็บเป็นรายการของอัตราที่ไม่ซ้ำกัน ไม่ใช่ค่าเฉลี่ย เพราะค่าเฉลี่ยถ่วงน้ำหนัก
+   * เป็นตัวเลขที่ไม่ปรากฏในข้อตกลงกับใครเลยและกระทบยอดด้วยมือไม่ได้
+   * ตั้ง 32 ไว้ก็ต้องเห็น 32 ไม่ใช่ 31.97
+   */
+  thaiBaseRates: number[];
+  thaiPromotionRates: number[];
+  laoBaseRates: number[];
+  laoPromotionRates: number[];
 };
 
 type CustomerRow = {
@@ -105,6 +121,10 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
                COUNT(*) FILTER (WHERE s."commissionPromotionApplied" AND d."lotteryType" = 'THAI_GOVERNMENT')::int AS "thaiPromotionDraws",
                COUNT(*) FILTER (WHERE s."commissionPromotionApplied" AND d."lotteryType" IN ('LAO', 'LAO_SET'))::int AS "laoPromotionDraws",
                COUNT(*)::int AS "settledDraws",
+               COALESCE(ARRAY_AGG(DISTINCT s."commissionRateSnapshot") FILTER (WHERE NOT s."commissionPromotionApplied" AND d."lotteryType" = 'THAI_GOVERNMENT'), '{}') AS "thaiBaseRates",
+               COALESCE(ARRAY_AGG(DISTINCT s."commissionRateSnapshot") FILTER (WHERE s."commissionPromotionApplied" AND d."lotteryType" = 'THAI_GOVERNMENT'), '{}') AS "thaiPromotionRates",
+               COALESCE(ARRAY_AGG(DISTINCT s."commissionRateSnapshot") FILTER (WHERE NOT s."commissionPromotionApplied" AND d."lotteryType" IN ('LAO', 'LAO_SET')), '{}') AS "laoBaseRates",
+               COALESCE(ARRAY_AGG(DISTINCT s."commissionRateSnapshot") FILTER (WHERE s."commissionPromotionApplied" AND d."lotteryType" IN ('LAO', 'LAO_SET')), '{}') AS "laoPromotionRates",
                COALESCE(SUM(s.commission), 0) AS commission,
                COALESCE(SUM(s.net), 0) AS net
         FROM ${table("settlements")} s
@@ -124,6 +144,10 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
              COALESCE(sa."thaiPromotionDraws", 0)::int AS "thaiPromotionDraws",
              COALESCE(sa."laoPromotionDraws", 0)::int AS "laoPromotionDraws",
              COALESCE(sa."settledDraws", 0)::int AS "settledDraws",
+             COALESCE(sa."thaiBaseRates", '{}') AS "thaiBaseRates",
+             COALESCE(sa."thaiPromotionRates", '{}') AS "thaiPromotionRates",
+             COALESCE(sa."laoBaseRates", '{}') AS "laoBaseRates",
+             COALESCE(sa."laoPromotionRates", '{}') AS "laoPromotionRates",
              COALESCE(sa.commission, 0) AS commission,
              COALESCE(sa.net, 0) AS net
       FROM ${table("agents")} a
@@ -178,6 +202,10 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
       thaiPromotionDraws: row.thaiPromotionDraws,
       laoPromotionDraws: row.laoPromotionDraws,
       settledDraws: row.settledDraws,
+      thaiBaseRates: rates(row.thaiBaseRates),
+      thaiPromotionRates: rates(row.thaiPromotionRates),
+      laoBaseRates: rates(row.laoBaseRates),
+      laoPromotionRates: rates(row.laoPromotionRates),
       commission: number(row.commission),
       net: number(row.net),
     })),

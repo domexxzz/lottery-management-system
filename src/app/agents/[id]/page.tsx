@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { visibleBillNumber } from "@/lib/bills/numbering";
 import { notFound, redirect } from "next/navigation";
-import type { BillStatus, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { BillStatus } from "@prisma/client";
 import { getActor, orgScope } from "@/lib/auth/context";
 import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
@@ -9,7 +10,9 @@ import { BET_STATUS_LABEL, betStatusOf } from "@/lib/bills/betting";
 import { customerProfileKey } from "@/lib/customers/profile-key";
 import { DashboardIcon as Icon } from "@/app/DashboardIcon";
 import { AgentProfileFilter } from "./AgentProfileFilter";
-import { commissionRateForLottery } from "@/lib/agents/commission";
+import { drawCommission, summarizeCommissionRates, type DrawCommission } from "@/lib/agents/commission-basis";
+import { CommissionRateNote } from "@/components/CommissionRateNote";
+import { drawDay } from "@/lib/draws/range";
 import "./profile.css";
 
 export const dynamic = "force-dynamic";
@@ -45,12 +48,18 @@ export default async function AgentProfilePage({
         status: true,
         commissionRate: true,
         laoCommissionRate: true,
+        commissionPromotionStartsOn: true,
+        commissionPromotionEndsOn: true,
+        commissionPromotionThaiMinGross: true,
+        commissionPromotionLaoMinGross: true,
+        commissionPromotionThaiRate: true,
+        commissionPromotionLaoRate: true,
         creditLimit: true,
         perNumberLimit: true,
         user: { select: { id: true, login: true, lastLoginAt: true } },
       },
     }),
-    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true, cutoffAt: true, lotteryType: true } }),
+    prisma.draw.findMany({ where: scope, orderBy: { cutoffAt: "desc" }, select: { id: true, name: true, status: true, cutoffAt: true, drawDate: true, lotteryType: true } }),
   ]);
   if (!agent) notFound();
 
@@ -80,7 +89,7 @@ export default async function AgentProfilePage({
     prisma.bill.groupBy({ by: ["drawId"], where: billWhere, _count: { _all: true }, _sum: { totalStake: true, totalPayout: true } }),
     prisma.billItem.groupBy({ by: ["prizeTypeId"], where: { bill: billWhere }, _count: { _all: true }, _sum: { stake: true, payout: true } }),
     prisma.billItem.count({ where: { bill: billWhere, isWinner: true } }),
-    prisma.settlement.findMany({ where: settlementWhere, select: { drawId: true, gross: true, payout: true, commission: true, net: true, status: true, calculatedAt: true } }),
+    prisma.settlement.findMany({ where: settlementWhere, select: { drawId: true, gross: true, payout: true, commission: true, net: true, status: true, calculatedAt: true, commissionRateSnapshot: true, commissionBaseRateSnapshot: true, commissionPromotionApplied: true } }),
   ]);
 
   const gross = Number(billTotals._sum.totalStake ?? 0);
@@ -94,18 +103,32 @@ export default async function AgentProfilePage({
   const winnerRate = billCount > 0 ? winnerCount / billCount * 100 : 0;
   const drawById = new Map(draws.map((draw) => [draw.id, draw]));
   const settlementByDraw = new Map(settlements.map((row) => [row.drawId, row]));
-  // ค่าคอมคิดจากยอดขาย (COMMISSION_BASE = GROSS) งวดที่คำนวณแล้วใช้ยอดจริงจาก Settlement
-  // งวดที่ยังไม่คำนวณประมาณจาก % ค่าคอมของ Agent จึงรู้ยอดสุทธิได้ตั้งแต่ก่อนออกผล
+  /*
+   * ค่าคอมคิดจากยอดขาย (COMMISSION_BASE = GROSS)
+   *
+   * งวดที่คำนวณแล้วใช้ยอดจริงจาก Settlement ส่วนงวดที่ยังไม่คำนวณประมาณจากกฎเดียวกัน
+   * ของเดิมประมาณด้วยเรตปกติเสมอ งวดที่ยอดถึงเกณฑ์โปรโมชั่นแล้วจึงแสดงต่ำกว่าความจริง
+   */
   const moneyOf = (drawId: string, drawGross: number, drawPayout: number) => {
     const settlement = settlementByDraw.get(drawId);
     const draw = drawById.get(drawId);
-    const rate = draw ? Number(commissionRateForLottery(agent, draw.lotteryType)) : commissionRate;
-    const drawCommission = settlement ? Number(settlement.commission) : Math.round(drawGross * rate) / 100;
-    const drawNet = drawGross - drawCommission;
-    return { commission: drawCommission, commissionRate: rate, estimated: !settlement, net: drawNet, payout: drawPayout, profit: drawNet - drawPayout };
+    const basis: DrawCommission = drawCommission({
+      agent,
+      lotteryType: draw?.lotteryType ?? "THAI_GOVERNMENT",
+      drawDay: draw ? drawDay(draw) : "",
+      gross: new Prisma.Decimal(drawGross),
+      payout: new Prisma.Decimal(drawPayout),
+      settlement,
+    });
+    const amount = Number(basis.commission);
+    const drawNet = drawGross - amount;
+    return { commission: amount, basis, estimated: basis.estimated, net: drawNet, payout: drawPayout, profit: drawNet - drawPayout };
   };
   const performanceRows = billsByDraw.map((row) => ({ draw: drawById.get(row.drawId), bills: row._count._all, gross: Number(row._sum.totalStake ?? 0), payout: Number(row._sum.totalPayout ?? 0), settlement: settlementByDraw.get(row.drawId), money: moneyOf(row.drawId, Number(row._sum.totalStake ?? 0), Number(row._sum.totalPayout ?? 0)) })).filter((row) => row.draw).sort((a, b) => b.draw!.cutoffAt.getTime() - a.draw!.cutoffAt.getTime());
   // ยอดรวมของทุกงวดในขอบเขตที่เลือก: ยอดสุทธิ = ยอดขาย − ค่าคอม · กำไร/ขาดทุน = ยอดสุทธิ − จ่ายรางวัล
+  const thaiRates = summarizeCommissionRates(performanceRows.filter((row) => row.draw!.lotteryType === "THAI_GOVERNMENT").map((row) => row.money.basis));
+  const laoRates = summarizeCommissionRates(performanceRows.filter((row) => row.draw!.lotteryType !== "THAI_GOVERNMENT").map((row) => row.money.basis));
+  const promotionDraws = thaiRates.promotionDraws + laoRates.promotionDraws;
   const commissionByLottery = performanceRows.reduce((sum, row) => {
     if (row.draw!.lotteryType === "THAI_GOVERNMENT") sum.thai += row.money.commission;
     else sum.lao += row.money.commission;
@@ -158,7 +181,7 @@ export default async function AgentProfilePage({
 
     <section className="agent-profile-kpis" aria-label={`ตัวเลขสรุป ${selectedLabel}`}>
       <article><span><Icon name="bill" /></span><div><small>{selectedDraw ? "ยอดขายงวดนี้" : "ยอดขายรวม"}</small><strong>{MONEY.format(gross)}</strong><em>เงินที่ลูกค้าแทงทั้งหมด · {billCount} บิล · เฉลี่ย {MONEY.format(averageBill)} บาท/บิล</em></div></article>
-      <article className="agent-profile-commission-card"><span><Icon name="agent" /></span><div><small>ค่าคอม Agent</small><strong>{MONEY.format(commission)} <small>บาท</small></strong><div className="agent-profile-commission-breakdown"><span>หวยไทย <b>{MONEY.format(commissionByLottery.thai)}</b><small>{commissionRate.toFixed(0)}%</small></span><span>หวยลาวและหวยลาวชุด <b>{MONEY.format(commissionByLottery.lao)}</b><small>{laoCommissionRate.toFixed(0)}%</small></span><span className="total">ค่าคอมรวม <b>{MONEY.format(commission)}</b></span></div>{hasEstimatedCommission && <em>งวดที่ยังไม่ออกผลเป็นยอดประมาณตามประเภทหวย</em>}</div></article>
+      <article className="agent-profile-commission-card"><span><Icon name="agent" /></span><div><small>ค่าคอม Agent</small><strong>{MONEY.format(commission)} <small>บาท</small></strong><div className="agent-profile-commission-breakdown"><span>หวยไทย <b>{MONEY.format(commissionByLottery.thai)}</b><CommissionRateNote baseRates={thaiRates.baseRates} promotionRates={thaiRates.promotionRates} promotionDraws={thaiRates.promotionDraws} fallbackRate={commissionRate} estimated={thaiRates.estimated} /></span><span>หวยลาวและหวยลาวชุด <b>{MONEY.format(commissionByLottery.lao)}</b><CommissionRateNote baseRates={laoRates.baseRates} promotionRates={laoRates.promotionRates} promotionDraws={laoRates.promotionDraws} fallbackRate={laoCommissionRate} estimated={laoRates.estimated} /></span><span className="total">ค่าคอมรวม <b>{MONEY.format(commission)}</b></span></div>{promotionDraws > 0 && <em className="agent-profile-promotion-note">เข้าเกณฑ์โปรโมชั่นแล้ว {promotionDraws} งวด · คิดค่าคอมด้วยอัตราโปรโมชั่นให้แล้ว</em>}{hasEstimatedCommission && <em>งวดที่ยังไม่ออกผลเป็นยอดประมาณ คิดเรตโปรโมชั่นให้ด้วยเมื่อยอดถึงเกณฑ์</em>}</div></article>
       <article><span><Icon name="report" /></span><div><small>ยอดสุทธิ</small><strong>{MONEY.format(net)}</strong><em>ยอดขาย − ค่าคอม (ยังไม่หักค่ารางวัล)</em></div></article>
       <article><span><Icon name="draw" /></span><div><small>จ่ายรางวัล</small><strong>{MONEY.format(payout)}</strong><em>เงินที่ต้องจ่ายลูกค้าที่ถูกรางวัล{hasUnsettled ? " · งวดที่ยังไม่ออกผลยังเป็น 0" : ""}</em></div></article>
       <article><span><Icon name="winner" /></span><div><small>ลูกค้าถูกรางวัล</small><strong>{winnerCount} คน</strong><em>{winningItems} รายการที่ถูก · {winnerRate.toFixed(1)}% ของบิล</em></div></article>
@@ -166,7 +189,7 @@ export default async function AgentProfilePage({
     </section>
 
     <section className="agent-profile-grid">
-      <article className="agent-profile-panel performance-panel"><header><div><p>Round Performance</p><h2>ผลงานแยกตามงวด</h2></div><span>{performanceRows.length} งวด</span></header>{performanceRows.length === 0 ? <p className="profile-empty">ยังไม่มีข้อมูลในงวดที่เลือก</p> : <div className="profile-table-wrap"><table><thead><tr><th>งวด</th><th className="num">บิล</th><th className="num">ยอดขาย</th><th className="num">ค่าคอม</th><th className="num">ยอดสุทธิ</th><th className="num">จ่ายรางวัล</th><th className="num">กำไร/ขาดทุน</th><th>Settlement</th></tr></thead><tbody>{performanceRows.map((row) => <tr key={row.draw!.id}><td><Link href={`/draws/${row.draw!.id}`}>{row.draw!.name}</Link><small>{DATE_TIME.format(row.draw!.cutoffAt)}</small></td><td className="num">{row.bills}</td><td className="num">{MONEY.format(row.gross)}</td><td className="num">{MONEY.format(row.money.commission)}{row.money.estimated && <small>ตาม %</small>}</td><td className="num">{MONEY.format(row.money.net)}</td><td className="num">{row.settlement ? MONEY.format(row.payout) : "รอผล"}</td><td className={`num ${row.money.profit < 0 ? "negative-value" : "positive-value"}`}>{row.settlement ? `${row.money.profit < 0 ? "−" : "+"}${MONEY.format(Math.abs(row.money.profit))}` : "รอผล"}</td><td><b className={`profile-settlement ${row.settlement ? "ready" : "pending"}`}>{row.settlement ? SETTLEMENT_STATUS[row.settlement.status] : "ยังไม่คำนวณ"}</b></td></tr>)}</tbody></table></div>}</article>
+      <article className="agent-profile-panel performance-panel"><header><div><p>Round Performance</p><h2>ผลงานแยกตามงวด</h2></div><span>{performanceRows.length} งวด</span></header>{performanceRows.length === 0 ? <p className="profile-empty">ยังไม่มีข้อมูลในงวดที่เลือก</p> : <div className="profile-table-wrap"><table><thead><tr><th>งวด</th><th className="num">บิล</th><th className="num">ยอดขาย</th><th className="num">ค่าคอม</th><th className="num">ยอดสุทธิ</th><th className="num">จ่ายรางวัล</th><th className="num">กำไร/ขาดทุน</th><th>Settlement</th></tr></thead><tbody>{performanceRows.map((row) => <tr key={row.draw!.id}><td><Link href={`/draws/${row.draw!.id}`}>{row.draw!.name}</Link><small>{DATE_TIME.format(row.draw!.cutoffAt)}</small></td><td className="num">{row.bills}</td><td className="num">{MONEY.format(row.gross)}</td><td className="num">{MONEY.format(row.money.commission)}<small className="agent-profile-rate">{Number(row.money.basis.rate).toLocaleString("th-TH", { maximumFractionDigits: 2 })}%{row.money.basis.promotionApplied && <b> โปรฯ</b>}{row.money.estimated && " ประมาณการ"}</small></td><td className="num">{MONEY.format(row.money.net)}</td><td className="num">{row.settlement ? MONEY.format(row.payout) : "รอผล"}</td><td className={`num ${row.money.profit < 0 ? "negative-value" : "positive-value"}`}>{row.settlement ? `${row.money.profit < 0 ? "−" : "+"}${MONEY.format(Math.abs(row.money.profit))}` : "รอผล"}</td><td><b className={`profile-settlement ${row.settlement ? "ready" : "pending"}`}>{row.settlement ? SETTLEMENT_STATUS[row.settlement.status] : "ยังไม่คำนวณ"}</b></td></tr>)}</tbody></table></div>}</article>
 
       <article className="agent-profile-panel prize-panel"><header><div><p>Sales Mix</p><h2>ประเภทรางวัลที่ขายดี</h2></div><span>Top 5</span></header>{topPrizes.length === 0 ? <p className="profile-empty">ยังไม่มีรายการขาย</p> : <div className="profile-prize-list">{topPrizes.map((row, index) => <div key={row.prize!.id}><b>{index + 1}</b><div><strong>{row.prize!.code}. {row.prize!.name}</strong><span><i style={{ width: `${row.stake / maxPrizeStake * 100}%` }} /></span><small>{row.count} รายการ · จ่าย {MONEY.format(row.payout)}</small></div><em>{MONEY.format(row.stake)}</em></div>)}</div>}</article>
     </section>

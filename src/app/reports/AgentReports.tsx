@@ -4,6 +4,7 @@ import type { Actor } from "@/lib/auth/context";
 import { publicSlipCode, visibleBillNumber } from "@/lib/bills/numbering";
 import { betStatusOf, lotteryLabel } from "@/lib/bills/betting";
 import { getSimpleAgentReport, type SimpleAgentBillFilter } from "@/lib/reports/agent-report";
+import { CommissionRateNote } from "@/components/CommissionRateNote";
 import { DashboardFilters } from "../DashboardFilters";
 import { dashboardDrawLabel } from "@/lib/dashboard/lottery-draw-filter";
 import { reportCategoryLabel } from "@/lib/reports/draw-groups";
@@ -87,7 +88,7 @@ export async function AgentReports({ actor, selectedDrawId, billStatus = "ALL", 
         <div className="agent-bill-overview-heading"><span>ข้อมูลที่กำลังดู</span><h2>{scopeLabel}</h2><p>{report.rounds.length.toLocaleString("th-TH")} งวด · เฉพาะบิลที่ยืนยันแล้ว</p></div>
         <div><span>ยอดขาย</span><strong>{MONEY.format(Number(report.totals.gross))}</strong><small>บาท</small></div>
         <div><span>จ่ายรางวัล</span><strong>{MONEY.format(Number(report.totals.payout))}</strong><small>บาท · งวดที่ออกผลแล้ว</small></div>
-        <div><span>ค่าคอมของฉัน</span><strong>{MONEY.format(Number(report.totals.commission))}</strong><small>บาท · {report.totals.commissionFinal ? "คำนวณแล้ว" : "รวมยอดประมาณการของงวดที่รอผล"}</small></div>
+        <div><span>ค่าคอมของฉัน</span><strong>{MONEY.format(Number(report.totals.commission))}</strong><small>บาท · {report.totals.commissionFinal ? "คำนวณแล้ว" : "รวมยอดประมาณการของงวดที่รอผล"}</small><CommissionRateNote baseRates={report.commissionRates.baseRates} promotionRates={report.commissionRates.promotionRates} promotionDraws={report.commissionRates.promotionDraws} fallbackRate={Number(report.agent.commissionRate)} estimated={report.commissionRates.estimated} /></div>
       </section>
       <section className="agent-bill-history" aria-labelledby="agent-bill-history-heading">
         <header><div><h2 id="agent-bill-history-heading">รายการบิลตามตัวกรอง</h2><p>เลือกสถานะ แล้วกด “ดูบิล” เพื่อดูเลขและรายการแทง · บิลหลายประเภทแสดงรวมทั้งใบ</p></div><Link href={selectedDraw ? `/bills?draw=${encodeURIComponent(selectedDraw.id)}&scope=all&all=1` : "/bills?scope=all&all=1"}>ไปหน้ารายการบิลทั้งหมด →</Link></header>

@@ -1,5 +1,7 @@
 "use client";
 
+import { CommissionRateNote } from "@/components/CommissionRateNote";
+
 import Link from "next/link";
 import { Fragment, useState } from "react";
 import { LotteryFlag } from "../../bills/ThaiFlag";
@@ -28,6 +30,8 @@ export type DrawTableRow = {
     code: string;
     name: string;
     commissionRate: number;
+    baseCommissionRate: number;
+    promotionApplied: boolean;
     gross: number;
     commission: number;
     estimated: boolean;
@@ -43,6 +47,9 @@ export type AgentTableRow = {
   code: string;
   name: string;
   commissionRate: number;
+  baseRates: number[];
+  promotionRates: number[];
+  promotionDraws: number;
   draws: number;
   bills: number;
   winners: number;
@@ -116,7 +123,7 @@ export function DrawTable({ rows, totals }: {
                             <tr key={line.agentId}>
                               <td data-label="Agent"><Link href={`/agents/${line.agentId}?drawId=${row.drawId}`}>{line.code} · {line.name}</Link></td>
                               <td data-label="ยอดขาย" className="num">{baht(line.gross)}</td>
-                              <td data-label="ค่าคอม" className="num">{baht(line.commission)}{line.estimated && <small>ตาม {line.commissionRate.toFixed(0)}%</small>}</td>
+                              <td data-label="ค่าคอม" className="num">{baht(line.commission)}<small className="accounting-rate">{line.commissionRate.toLocaleString("th-TH", { maximumFractionDigits: 2 })}%{line.promotionApplied && <b> โปรฯ</b>}{line.estimated && " ประมาณการ"}</small></td>
                               <td data-label="หลังหักคอม" className="num">{baht(line.net)}</td>
                               <td data-label="จ่ายรางวัล" className="num">{line.profit === null ? "รอผล" : baht(line.payout)}</td>
                               <td data-label="กำไร / ขาดทุน" className={`num ${line.profit === null ? "" : tone(line.profit)}`}>{line.profit === null ? "รอผล" : signed(line.profit)}</td>
@@ -199,7 +206,7 @@ export function AgentTable({ rows }: { rows: AgentTableRow[] }) {
                       <button type="button" className="acc-row-toggle" aria-expanded={open} onClick={() => setOpenId(open ? null : row.agentId)}>
                         <span>
                           <strong>{row.code} {row.name}{badge && <em className={`acc-badge ${row.profit < 0 ? "is-loss" : "is-profit"}`}>{badge}</em>}</strong>
-                          <small>{COUNT_FORMAT.format(row.draws)} งวด · {COUNT_FORMAT.format(row.bills)} บิล · คอม {row.commissionRate.toFixed(0)}%{row.pendingDraws > 0 ? ` · รอผล ${row.pendingDraws} งวด` : ""}</small>
+                          <small>{COUNT_FORMAT.format(row.draws)} งวด · {COUNT_FORMAT.format(row.bills)} บิล{row.pendingDraws > 0 ? ` · รอผล ${row.pendingDraws} งวด` : ""}</small><CommissionRateNote baseRates={row.baseRates} promotionRates={row.promotionRates} promotionDraws={row.promotionDraws} fallbackRate={row.commissionRate} />
                         </span>
                         <i aria-hidden="true">{open ? "▴" : "▾"}</i>
                       </button>

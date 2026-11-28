@@ -46,8 +46,16 @@ export async function GET(request: Request) {
       customerCounts.set(customer.agentId, customer.customerCount);
     }
     const rows = mapData.agents.map((agent) => {
-      const value = stats.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, thaiCommission: 0, laoCommission: 0, commission: 0, net: 0 };
-      return { ...agent, ...value, customerCount: customerCounts.get(agent.id) ?? 0, customers: customers.get(agent.id) ?? [] };
+      const value = stats.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, thaiCommission: 0, laoCommission: 0, commission: 0, net: 0, thaiPromotionDraws: 0, laoPromotionDraws: 0, thaiPromotionRates: [] as number[], laoPromotionRates: [] as number[] };
+      const promotionRates = [...new Set([...value.thaiPromotionRates, ...value.laoPromotionRates])].sort((a, b) => a - b);
+      return {
+        ...agent,
+        ...value,
+        promotionDraws: value.thaiPromotionDraws + value.laoPromotionDraws,
+        promotionRates: promotionRates.length ? promotionRates.map((rate) => `${rate}%`).join(" · ") : "—",
+        customerCount: customerCounts.get(agent.id) ?? 0,
+        customers: customers.get(agent.id) ?? [],
+      };
     }).filter((agent) => {
       if (status && agent.status !== status) return false;
       if (!query) return true;
@@ -86,7 +94,7 @@ export async function GET(request: Request) {
         { label: "ยอดสุทธิรวม", value: rows.reduce((sum, row) => sum + row.net, 0), type: "money", unit: "บาท" },
       ],
       columns: AGENT_OVERVIEW_EXPORT_COLUMNS,
-      rows: rows.map((row) => [row.code, row.name, row.status, Number(row.commissionRate) / 100, Number(row.laoCommissionRate) / 100, row.customerCount, row.billCount, row.sales, row.payout, row.thaiCommission, row.laoCommission, row.commission, row.net]),
+      rows: rows.map((row) => [row.code, row.name, row.status, Number(row.commissionRate) / 100, Number(row.laoCommissionRate) / 100, row.customerCount, row.billCount, row.sales, row.payout, row.thaiCommission, row.laoCommission, row.commission, row.net, row.promotionDraws, row.promotionRates]),
     };
     const output = createReportDownload(report, params.get("format") === "xlsx" ? "xlsx" : "csv");
     return new NextResponse(output.body, { headers: output.headers });

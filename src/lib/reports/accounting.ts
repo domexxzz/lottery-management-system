@@ -3,7 +3,8 @@ import { databaseSchema, prisma } from "@/lib/db";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { resolveRange, type AccountingQuery, type ResolvedRange } from "./accounting-period";
 import { groupReportDraws, type ReportCategory } from "./draw-groups";
-import { commissionRateForLottery } from "@/lib/agents/commission";
+import { drawCommission } from "@/lib/agents/commission-basis";
+import { drawDay } from "@/lib/draws/range";
 
 /**
  * สรุปบัญชีรายงวด สำหรับ Owner/Admin ทำบัญชี
@@ -31,6 +32,10 @@ export type AccountingAgentLine = {
   code: string;
   name: string;
   commissionRate: number;
+  /** อัตราปกติก่อนคิดโปรโมชั่น ใช้อธิบายส่วนต่างเมื่อเข้าโปรฯ */
+  baseCommissionRate: number;
+  /** true = งวดนี้ยอดถึงเกณฑ์โปรโมชั่นและได้เรตพิเศษ */
+  promotionApplied: boolean;
   bills: number;
   winners: number;
   gross: number;
@@ -69,6 +74,14 @@ export type AccountingAgentSummary = {
   code: string;
   name: string;
   commissionRate: number;
+  /**
+   * อัตราที่ถูกใช้จริงในช่วงนี้ แยกเรตปกติกับเรตโปรโมชั่น
+   *
+   * เก็บเป็นรายการไม่ซ้ำกัน ไม่ใช่ค่าเฉลี่ย ตั้งโปรโมชั่น 32% ก็ต้องเห็น 32%
+   */
+  baseRates: number[];
+  promotionRates: number[];
+  promotionDraws: number;
   draws: number;
   bills: number;
   winners: number;
@@ -190,15 +203,28 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
     }),
     prisma.agent.findMany({
       where: { ...orgScope(actor), id: { in: agentIds } },
-      select: { id: true, code: true, name: true, commissionRate: true, laoCommissionRate: true },
+      select: {
+        id: true, code: true, name: true, commissionRate: true, laoCommissionRate: true,
+        commissionPromotionStartsOn: true,
+        commissionPromotionEndsOn: true,
+        commissionPromotionThaiMinGross: true,
+        commissionPromotionLaoMinGross: true,
+        commissionPromotionThaiRate: true,
+        commissionPromotionLaoRate: true,
+      },
     }),
     prisma.settlement.findMany({
       where: { ...orgScope(actor), drawId: { in: drawIds }, agentId: { in: agentIds } },
-      select: { drawId: true, agentId: true, commission: true },
+      select: {
+        drawId: true, agentId: true, commission: true,
+        commissionRateSnapshot: true,
+        commissionBaseRateSnapshot: true,
+        commissionPromotionApplied: true,
+      },
     }),
   ]);
   const agentById = new Map(agents.map((agent) => [agent.id, agent]));
-  const commissionByKey = new Map(settlements.map((row) => [`${row.drawId}:${row.agentId}`, money(row.commission)]));
+  const settlementByKey = new Map(settlements.map((row) => [`${row.drawId}:${row.agentId}`, row]));
   // จัดกลุ่มครั้งเดียว ป้องกัน O(จำนวนงวด × จำนวนแถว) เมื่อเลือก "ทั้งหมด"
   const rowsByDraw = new Map<string, typeof rows>();
   for (const row of rows) {
@@ -212,10 +238,22 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
     const lines: AccountingAgentLine[] = (rowsByDraw.get(draw.id) ?? [])
       .map((row) => {
         const agent = agentById.get(row.agentId)!;
-        const rate = money(commissionRateForLottery(agent, draw.lotteryType));
         const gross = money(row.gross);
-        const actual = commissionByKey.get(`${draw.id}:${row.agentId}`);
-        const commission = actual ?? round2(gross * rate / 100);
+        /*
+         * ของเดิมประมาณค่าคอมของงวดที่ยังไม่คำนวณด้วยเรตปกติเสมอ
+         * งวดที่ยอดถึงเกณฑ์โปรโมชั่นแล้วจึงแสดงต่ำกว่าที่ต้องจ่ายจริง
+         * และสมุดบัญชีก็ไม่มีอะไรบอกว่างวดไหนใช้เรตพิเศษ
+         */
+        const basis = drawCommission({
+          agent,
+          lotteryType: draw.lotteryType,
+          drawDay: drawDay(draw),
+          gross: new Prisma.Decimal(gross),
+          payout: new Prisma.Decimal(money(row.payout)),
+          settlement: settlementByKey.get(`${draw.id}:${row.agentId}`),
+        });
+        const rate = money(basis.rate);
+        const commission = round2(money(basis.commission));
         const net = round2(gross - commission);
         const payout = settled ? money(row.payout) : 0;
         return {
@@ -223,11 +261,13 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
           code: agent.code,
           name: agent.name,
           commissionRate: rate,
+          baseCommissionRate: money(basis.baseRate),
+          promotionApplied: basis.promotionApplied,
           bills: row.bills,
           winners: settled ? row.winners : 0,
           gross,
           commission,
-          estimated: actual === undefined,
+          estimated: basis.estimated,
           net,
           payout,
           profit: settled ? round2(net - payout) : null,
@@ -308,9 +348,13 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
     for (const line of draw.agents) {
       const current = byAgent.get(line.agentId) ?? {
         agentId: line.agentId, code: line.code, name: line.name, commissionRate: line.commissionRate,
+        baseRates: [], promotionRates: [], promotionDraws: 0,
         draws: 0, bills: 0, winners: 0, gross: 0, commission: 0, net: 0, payout: 0, profit: 0, pendingDraws: 0,
         settledGross: 0, settledCommission: 0,
       };
+      const rateList = line.promotionApplied ? current.promotionRates : current.baseRates;
+      if (!rateList.includes(line.commissionRate)) rateList.push(line.commissionRate);
+      if (line.promotionApplied) current.promotionDraws += 1;
       current.draws += 1;
       current.bills += line.bills;
       current.winners += line.winners;
@@ -324,6 +368,8 @@ export async function loadAccountingReport(actor: Actor, query: AccountingQuery,
         current.settledGross = round2(current.settledGross + line.gross);
         current.settledCommission = round2(current.settledCommission + line.commission);
       }
+      current.baseRates.sort((a, b) => a - b);
+      current.promotionRates.sort((a, b) => a - b);
       byAgent.set(line.agentId, current);
     }
   }

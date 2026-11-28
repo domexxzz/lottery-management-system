@@ -1,7 +1,8 @@
 import { Prisma, type LotteryType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
-import { commissionRateForLottery } from "@/lib/agents/commission";
+import { commissionDecision } from "@/lib/agents/commission";
+import { drawDay } from "@/lib/draws/range";
 import { commissionOf } from "@/lib/money";
 import type { WinningBillsQuery } from "./winning-bills-query";
 
@@ -80,29 +81,55 @@ export async function loadWinningBillsReport(actor: Actor, query: WinningBillsQu
 
   const agentIds = [...new Set(groups.map((row) => row.agentId))];
   const drawIds = [...new Set(groups.map((row) => row.drawId))];
-  const [agents, draws, settlements] = groups.length === 0 ? [[], [], []] : await Promise.all([
+  const [agents, draws, settlements, drawTotals] = groups.length === 0 ? [[], [], [], []] : await Promise.all([
     prisma.agent.findMany({
       where: { ...orgScope(actor), id: { in: agentIds } },
-      select: { id: true, code: true, name: true, commissionRate: true, laoCommissionRate: true },
+      select: {
+        id: true, code: true, name: true, commissionRate: true, laoCommissionRate: true,
+        commissionPromotionStartsOn: true,
+        commissionPromotionEndsOn: true,
+        commissionPromotionThaiMinGross: true,
+        commissionPromotionLaoMinGross: true,
+        commissionPromotionThaiRate: true,
+        commissionPromotionLaoRate: true,
+      },
     }),
     prisma.draw.findMany({
       where: { ...orgScope(actor), id: { in: drawIds } },
-      select: { id: true, lotteryType: true },
+      select: { id: true, lotteryType: true, drawDate: true, cutoffAt: true },
     }),
     prisma.settlement.findMany({
       where: { ...orgScope(actor), agentId: { in: agentIds }, drawId: { in: drawIds } },
       select: { agentId: true, drawId: true, commissionRateSnapshot: true },
     }),
+    /*
+     * ยอดขายทั้งงวดของ Agent ไม่ใช่เฉพาะบิลที่ถูกรางวัล
+     *
+     * เกณฑ์โปรโมชั่นวัดจากยอดทั้งงวด การใช้ยอดของบิลที่ถูกรางวัลอย่างเดียว
+     * จะสรุปว่าไม่เข้าเกณฑ์เกือบทุกครั้ง ทั้งที่ยอดจริงของงวดนั้นถึงไปแล้ว
+     */
+    prisma.bill.groupBy({
+      by: ["agentId", "drawId"],
+      where: { ...orgScope(actor), agentId: { in: agentIds }, drawId: { in: drawIds }, status: { in: ["CONFIRMED", "LOCKED", "SETTLED"] } },
+      _sum: { totalStake: true },
+    }),
   ]);
   const agentById = new Map(agents.map((agent) => [agent.id, agent]));
   const drawById = new Map(draws.map((draw) => [draw.id, draw]));
   const rateByKey = new Map(settlements.map((row) => [`${row.agentId}:${row.drawId}`, row.commissionRateSnapshot]));
+  const drawGrossByKey = new Map(drawTotals.map((row) => [`${row.agentId}:${row.drawId}`, row._sum.totalStake ?? new Prisma.Decimal(0)]));
   const rateFor = (agentId: string, drawId: string) => {
     const settled = rateByKey.get(`${agentId}:${drawId}`);
     if (settled) return settled;
     const agent = agentById.get(agentId);
     const draw = drawById.get(drawId);
-    return agent && draw ? commissionRateForLottery(agent, draw.lotteryType) : new Prisma.Decimal(0);
+    if (!agent || !draw) return new Prisma.Decimal(0);
+    return commissionDecision({
+      agent,
+      lotteryType: draw.lotteryType,
+      drawDay: drawDay(draw),
+      gross: drawGrossByKey.get(`${agentId}:${drawId}`) ?? new Prisma.Decimal(0),
+    }).rate;
   };
 
   const summaryByAgent = new Map<string, { agentId: string; code: string; name: string; billCount: number; gross: number; payout: number; commission: number }>();
