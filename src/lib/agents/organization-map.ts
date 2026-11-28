@@ -88,7 +88,7 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
       },
       orderBy: { code: "asc" },
       select: {
-        id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true,
+        id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true, commissionRateUpdatedAt: true,
         commissionPromotionStartsOn: true,
         commissionPromotionEndsOn: true,
         commissionPromotionThaiMinGross: true,

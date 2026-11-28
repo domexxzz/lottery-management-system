@@ -372,6 +372,10 @@ export async function updateManagedUser(actor: Actor, userId: string, input: Upd
           name: agentName,
           commissionRate: commissionRate!,
           laoCommissionRate: laoCommissionRate!,
+          ...(user.agent && (
+            !user.agent.commissionRate.equals(commissionRate!)
+            || !user.agent.laoCommissionRate.equals(laoCommissionRate!)
+          ) ? { commissionRateUpdatedAt: new Date() } : {}),
           commissionPromotionStartsOn: promotion!.startsOn,
           commissionPromotionEndsOn: promotion!.endsOn,
           commissionPromotionThaiMinGross: promotion!.thaiMinGross,

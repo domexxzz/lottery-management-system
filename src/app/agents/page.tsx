@@ -74,6 +74,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         status: agent.status,
         commissionRate: Number(agent.commissionRate),
         laoCommissionRate: Number(agent.laoCommissionRate),
+        commissionRateUpdatedAt: agent.commissionRateUpdatedAt.toISOString(),
         promotion: {
           state: promotion.state,
           startsOn: promotion.startsOn,
