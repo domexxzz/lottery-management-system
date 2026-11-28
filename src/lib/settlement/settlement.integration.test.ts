@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
+import { getOrganizationMapData } from "@/lib/agents/organization-map";
 import { confirmBill, createDraftBill, replaceDraftItems, softDeleteBillBeforeCutoff } from "@/lib/bills/service";
 import { lockDrawManually } from "@/lib/draws/service";
 import { approveResult, enterResult, proposeResultCorrection } from "@/lib/results/service";
@@ -84,6 +85,20 @@ describe("เส้นทางเงินเต็มเส้น", () => {
     // เก็บเหตุผลไว้ด้วย เพื่อให้ตอบได้ว่าทำไมงวดนี้ได้ 35% ไม่ใช่ 25% ตามเรตปกติของ Agent รายนี้
     expect(settlement.commissionPromotionApplied).toBe(true);
     expect(settlement.commissionBaseRateSnapshot?.toString()).toBe("25");
+
+    /*
+     * ภาพรวม Agent ต้องบอกได้ว่ามีงวดที่เข้าเกณฑ์กี่งวด และอัตราที่ได้จริงเท่าไหร่
+     *
+     * เกณฑ์คิดทีละงวด การเอายอดขายรวมหลายงวดไปเทียบเกณฑ์จะตอบผิด
+     * จำนวนงวดที่เข้าโปรฯ จึงต้องมาจากธงที่ Settlement เก็บไว้เท่านั้น
+     */
+    const overview = await getOrganizationMapData(f.actors.OWNER);
+    const stats = overview.stats.find((row) => row.agentId === f.agents.agent1.id)!;
+    expect(stats.thaiPromotionDraws).toBe(1);
+    expect(stats.laoPromotionDraws).toBe(0);
+    expect(stats.thaiSettledGross).toBe(1000);
+    // 350 / 1000 = 35% ซึ่งเป็นเรตโปรฯ ไม่ใช่เรตปกติ 25% ที่ตั้งไว้ในโปรไฟล์
+    expect(stats.thaiCommission / stats.thaiSettledGross * 100).toBeCloseTo(35, 6);
   });
 
   test("เลขวิ่งที่ออกซ้ำหลายหลักจ่ายเพียงครั้งเดียว", async () => {

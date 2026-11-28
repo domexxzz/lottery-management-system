@@ -40,6 +40,13 @@ type StatRow = {
   laoCommission: MoneyValue;
   commission: MoneyValue;
   net: MoneyValue;
+  /** ยอดขายเฉพาะงวดที่คำนวณ Settlement แล้ว ใช้เป็นตัวหารของอัตราคอมที่ได้จริง */
+  thaiSettledGross: MoneyValue;
+  laoSettledGross: MoneyValue;
+  /** จำนวนงวดที่ยอดถึงเกณฑ์โปรโมชั่นและได้เรตพิเศษจริง */
+  thaiPromotionDraws: number;
+  laoPromotionDraws: number;
+  settledDraws: number;
 };
 
 type CustomerRow = {
@@ -82,10 +89,22 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
         WHERE ${billWhere(actor, draws)}
         GROUP BY b."agentId"
       ), settlement_agg AS (
+        /*
+         * ยอดขายและจำนวนงวดที่เข้าโปรโมชั่นต้องนับจากฝั่ง Settlement ไม่ใช่ฝั่งบิล
+         *
+         * เกณฑ์โปรโมชั่นคิดทีละงวด ส่วนยอดขายในตารางเป็นผลรวมหลายงวด
+         * เอายอดรวมไปเทียบเกณฑ์ตรง ๆ จะบอกว่าเข้าโปรฯ ทั้งที่ไม่มีงวดไหนถึงเลย
+         * ธงที่ Settlement เก็บไว้ตอนคำนวณจึงเป็นคำตอบเดียวที่เชื่อได้
+         */
         SELECT s."agentId",
                COALESCE(SUM(s.payout), 0) AS payout,
                COALESCE(SUM(CASE WHEN d."lotteryType" = 'THAI_GOVERNMENT' THEN s.commission ELSE 0 END), 0) AS "thaiCommission",
                COALESCE(SUM(CASE WHEN d."lotteryType" IN ('LAO', 'LAO_SET') THEN s.commission ELSE 0 END), 0) AS "laoCommission",
+               COALESCE(SUM(CASE WHEN d."lotteryType" = 'THAI_GOVERNMENT' THEN s.gross ELSE 0 END), 0) AS "thaiSettledGross",
+               COALESCE(SUM(CASE WHEN d."lotteryType" IN ('LAO', 'LAO_SET') THEN s.gross ELSE 0 END), 0) AS "laoSettledGross",
+               COUNT(*) FILTER (WHERE s."commissionPromotionApplied" AND d."lotteryType" = 'THAI_GOVERNMENT')::int AS "thaiPromotionDraws",
+               COUNT(*) FILTER (WHERE s."commissionPromotionApplied" AND d."lotteryType" IN ('LAO', 'LAO_SET'))::int AS "laoPromotionDraws",
+               COUNT(*)::int AS "settledDraws",
                COALESCE(SUM(s.commission), 0) AS commission,
                COALESCE(SUM(s.net), 0) AS net
         FROM ${table("settlements")} s
@@ -100,6 +119,11 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
              COALESCE(sa.payout, 0) AS payout,
              COALESCE(sa."thaiCommission", 0) AS "thaiCommission",
              COALESCE(sa."laoCommission", 0) AS "laoCommission",
+             COALESCE(sa."thaiSettledGross", 0) AS "thaiSettledGross",
+             COALESCE(sa."laoSettledGross", 0) AS "laoSettledGross",
+             COALESCE(sa."thaiPromotionDraws", 0)::int AS "thaiPromotionDraws",
+             COALESCE(sa."laoPromotionDraws", 0)::int AS "laoPromotionDraws",
+             COALESCE(sa."settledDraws", 0)::int AS "settledDraws",
              COALESCE(sa.commission, 0) AS commission,
              COALESCE(sa.net, 0) AS net
       FROM ${table("agents")} a
@@ -149,6 +173,11 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
       payout: number(row.payout),
       thaiCommission: number(row.thaiCommission),
       laoCommission: number(row.laoCommission),
+      thaiSettledGross: number(row.thaiSettledGross),
+      laoSettledGross: number(row.laoSettledGross),
+      thaiPromotionDraws: row.thaiPromotionDraws,
+      laoPromotionDraws: row.laoPromotionDraws,
+      settledDraws: row.settledDraws,
       commission: number(row.commission),
       net: number(row.net),
     })),
