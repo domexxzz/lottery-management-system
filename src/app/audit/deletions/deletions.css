@@ -1,0 +1,99 @@
+/*
+ * ประวัติการลบงวดและบิล
+ *
+ * แถวเป็น grid สี่ช่องคงที่ เมื่อไร · อะไร · ใคร · หายไปด้วยอะไร
+ * ลำดับนี้ตรงกับลำดับที่คนถามเวลามาตามเรื่อง "ยอดหายไปไหน"
+ */
+
+.deletion-page .page-hero-copy .back-link { display: inline-block; margin-bottom: .3rem; color: #0b7184; font-size: .7rem; font-weight: 700; text-decoration: none; }
+
+/* ---------- ตัวกรอง ---------- */
+
+.deletion-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: .75rem;
+  margin: 1rem 0;
+  padding: .85rem 1rem;
+  border: 1px solid #dfe8ed;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.deletion-filters > label { display: grid; gap: .25rem; min-width: 190px; color: #526b79; font-size: .68rem; font-weight: 700; }
+.deletion-filters.is-loading { opacity: .65; }
+.deletion-filter-loading { color: #718096; font-size: .7rem; }
+
+.deletion-page .deletion-filter-clear {
+  min-height: 38px;
+  padding: .4rem .9rem;
+  border: 1px solid #d5e0e8;
+  border-radius: 999px;
+  background: #fff;
+  color: #2a5a7a;
+  font-size: .7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* ---------- สรุป ---------- */
+
+.deletion-summary { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 1rem; }
+.deletion-summary article { padding: .7rem .9rem; border: 1px solid #dfe8ed; border-radius: 12px; background: #fff; }
+.deletion-summary span { display: block; color: #718096; font-size: .65rem; }
+.deletion-summary strong { color: #172f46; font-size: 1.35rem; }
+
+/* ---------- รายการ ---------- */
+
+.deletion-list { display: grid; gap: .6rem; }
+
+.deletion-row {
+  display: grid;
+  gap: .8rem;
+  grid-template-columns: minmax(150px, .8fr) minmax(0, 1.6fr) minmax(160px, 1fr) minmax(160px, 1fr);
+  padding: .85rem 1rem;
+  border: 1px solid #dfe8ed;
+  border-left: 4px solid #c9d6de;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.deletion-row.is-draw { border-left-color: #c0485a; }
+.deletion-row.is-bill { border-left-color: #d9922f; }
+
+.deletion-when { display: grid; gap: .3rem; align-content: start; }
+.deletion-when time { color: #526b79; font-size: .68rem; }
+
+.deletion-kind { display: inline-block; width: fit-content; padding: .15rem .5rem; border-radius: 999px; font-size: .62rem; font-weight: 800; }
+.deletion-kind.draw { background: #fdecee; color: #a32638; }
+.deletion-kind.bill { background: #fdf3e2; color: #8a5a09; }
+
+.deletion-what { min-width: 0; display: grid; gap: .2rem; align-content: start; }
+.deletion-what strong { color: #172f46; font-size: .9rem; overflow-wrap: anywhere; }
+.deletion-what small { color: #7b8f99; font-size: .64rem; overflow-wrap: anywhere; }
+.deletion-what code { font-size: .6rem; }
+.deletion-reason { margin: .25rem 0 0; padding: .3rem .5rem; border-radius: 8px; background: #f3f7f9; color: #52707f; font-size: .66rem; }
+
+.deletion-who, .deletion-impact { display: grid; gap: .15rem; align-content: start; }
+.deletion-who > span, .deletion-impact > span { color: #8a99a3; font-size: .6rem; font-weight: 700; text-transform: uppercase; }
+.deletion-who strong { color: #172f46; font-size: .82rem; }
+.deletion-who small { color: #7b8f99; font-size: .64rem; }
+.deletion-unknown { color: #a32638 !important; }
+.deletion-ip { color: #9fb0b9 !important; font-size: .6rem !important; }
+
+.deletion-impact ul { display: grid; gap: .1rem; margin: 0; padding: 0; list-style: none; }
+.deletion-impact li { color: #52707f; font-size: .68rem; }
+.deletion-impact b { color: #172f46; }
+.deletion-impact small { color: #9fb0b9; font-size: .64rem; }
+
+.deletion-note { margin-top: 1rem; padding: .7rem .9rem; border-radius: 10px; background: #f1f7f8; color: #59717f; font-size: .66rem; line-height: 1.6; }
+
+@media (max-width: 900px) {
+  .deletion-row { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 560px) {
+  .deletion-row { grid-template-columns: 1fr; }
+  .deletion-filters > label { min-width: 0; width: 100%; }
+}

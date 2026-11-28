@@ -23,6 +23,14 @@ export const PERMISSIONS = [
   "commission.markPaid",
   "audit.viewAll",
   "audit.viewOwn",
+  /*
+   * ดูประวัติการลบงวดและบิล แยกจาก audit.viewAll
+   *
+   * การลบงวดคือการลบบิล รายการแทง ผลรางวัล และ Settlement ทิ้งถาวรพร้อมกัน
+   * ส่วน Admin ก็ลบบิลได้ด้วย คนที่ตรวจว่าใครลบอะไรจึงต้องไม่ใช่คนกลุ่มเดียว
+   * กับคนที่ลบได้ ไม่งั้นคนลบตรวจตัวเองอยู่คนเดียว
+   */
+  "audit.viewDeletions",
   "agent.manage",
   "draw.manage",
   "draw.delete",
@@ -67,6 +75,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "commission.markPaid",
     "audit.viewAll",
     "audit.viewOwn",
+    "audit.viewDeletions",
     "agent.manage",
     "draw.manage",
     "draw.delete",

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { freshFixtures, type Fixtures } from "@/test/fixtures";
 import { createDraftBill, replaceDraftItems, softDeleteBillBeforeCutoff } from "@/lib/bills/service";
 import { deleteDrawPermanently } from "@/lib/draws/service";
+import { listDeletionLog } from "@/lib/audit/deletions";
 import type { PrivateObjectStorage } from "@/lib/storage/types";
 
 let f: Fixtures;
@@ -106,5 +107,71 @@ describe("การลบบิลแบบเก็บประวัติ", (
     expect(outcome.billsDeleted).toBe(0);
     expect(await prisma.draw.findUnique({ where: { id: emptyDraw.id } })).toBeNull();
     expect(await prisma.auditEvent.count({ where: { entityType: "Draw", entityId: emptyDraw.id, action: "DELETE" } })).toBe(1);
+  });
+});
+
+describe("ประวัติการลบ — Owner เท่านั้น", () => {
+  const storage = {
+    delete: async () => {},
+  } as unknown as PrivateObjectStorage;
+
+  test("บันทึกว่าใครลบบิล และพาอะไรหายไปด้วย", async () => {
+    const billId = await draftBill();
+    await softDeleteBillBeforeCutoff(f.actors.AGENT1, billId);
+
+    const log = await listDeletionLog(f.actors.OWNER);
+    expect(log).toHaveLength(1);
+    const entry = log[0]!;
+    expect(entry.kind).toBe("BILL");
+    expect(entry.entityId).toBe(billId);
+    expect(entry.title).toBe("บิลที่ต้องการลบ");
+    expect(entry.actorName).toBe(f.users.agentUser1.displayName);
+    expect(entry.actorRole).toBe("AGENT");
+    expect(entry.impact.some((item) => item.label === "รายการแทง")).toBe(true);
+  });
+
+  test("ลบงวดบันทึกจำนวนบิลและรายการที่หายไปด้วย", async () => {
+    const billId = await draftBill();
+    expect(billId).toBeTruthy();
+    await deleteDrawPermanently(f.actors.OWNER, f.draw.id, storage);
+
+    const log = await listDeletionLog(f.actors.OWNER);
+    const drawEntry = log.find((entry) => entry.kind === "DRAW")!;
+    expect(drawEntry.title).toBe("งวดทดสอบ");
+    expect(drawEntry.actorName).toBe(f.users.owner.displayName);
+    const bills = drawEntry.impact.find((item) => item.label === "บิล");
+    expect(bills?.value).toBe("1");
+  });
+
+  test("กรองตามประเภทได้ ลบบิลกับลบงวดแยกกัน", async () => {
+    const billId = await draftBill();
+    await softDeleteBillBeforeCutoff(f.actors.AGENT1, billId);
+    await deleteDrawPermanently(f.actors.OWNER, f.draw.id, storage);
+
+    expect(await listDeletionLog(f.actors.OWNER, { kind: "ALL" })).toHaveLength(2);
+    expect(await listDeletionLog(f.actors.OWNER, { kind: "BILL" })).toHaveLength(1);
+    expect((await listDeletionLog(f.actors.OWNER, { kind: "DRAW" }))[0]!.kind).toBe("DRAW");
+  });
+
+  test("Admin และ Agent เปิดดูไม่ได้ เพราะเป็นคนที่ลบได้เอง", async () => {
+    await expect(listDeletionLog(f.actors.ADMIN)).rejects.toThrow();
+    await expect(listDeletionLog(f.actors.AGENT1)).rejects.toThrow();
+  });
+
+  test("ไม่เห็นการลบขององค์กรอื่น", async () => {
+    const otherOrg = await prisma.organization.create({ data: { name: "องค์กรอื่น", timezone: "Asia/Bangkok" } });
+    await prisma.auditEvent.create({
+      data: {
+        organizationId: otherOrg.id,
+        actorId: null,
+        action: "DELETE",
+        entityType: "Draw",
+        entityId: "draw-of-another-org",
+        before: { name: "งวดองค์กรอื่น", bills: 99 },
+      },
+    });
+
+    const log = await listDeletionLog(f.actors.OWNER);
+    expect(log.every((entry) => entry.entityId !== "draw-of-another-org")).toBe(true);
   });
 });
