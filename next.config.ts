@@ -24,6 +24,15 @@ const nextConfig: NextConfig = {
   // ด้วย FATAL ERROR: Zone Allocation failed
   experimental: {
     cpus: 4,
+
+    /*
+     * ให้ next เตือนเฉพาะการอัปเกรดที่เป็นเรื่องความปลอดภัย
+     *
+     * ตั้งไว้ตามที่ `next upgrade --agent=security` กำหนด เพื่อให้ CLI รู้ว่า
+     * รอบนี้จัดการแล้ว และคราวหน้าจะเตือนก็ต่อเมื่อมี advisory ใหม่เท่านั้น
+     * ไม่ใช่ทุกครั้งที่มีเวอร์ชันใหม่ออก
+     */
+    agentUpgrade: "security",
   },
   async headers() {
     // Security headers ขั้นต้น ส่วนที่เหลืออยู่ใน LOT-16 (P5-3)
