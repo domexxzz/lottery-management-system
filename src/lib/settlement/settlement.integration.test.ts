@@ -81,6 +81,9 @@ describe("เส้นทางเงินเต็มเส้น", () => {
     });
     expect(settlement.commissionRateSnapshot.toString()).toBe("35");
     expect(settlement.commission.toFixed(2)).toBe("350.00");
+    // เก็บเหตุผลไว้ด้วย เพื่อให้ตอบได้ว่าทำไมงวดนี้ได้ 35% ไม่ใช่ 25% ตามเรตปกติของ Agent รายนี้
+    expect(settlement.commissionPromotionApplied).toBe(true);
+    expect(settlement.commissionBaseRateSnapshot?.toString()).toBe("25");
   });
 
   test("เลขวิ่งที่ออกซ้ำหลายหลักจ่ายเพียงครั้งเดียว", async () => {

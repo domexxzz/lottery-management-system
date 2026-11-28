@@ -389,3 +389,81 @@ describe("ค้นหาบิล", () => {
     expect(found.every((b) => b.agent.code === "A001")).toBe(true);
   });
 });
+
+describe("Agent เห็นเป้าโปรโมชั่นของตัวเอง", () => {
+  /** ตั้งโปรโมชั่นให้ครอบวันของงวดทดสอบซึ่งเป็นวันนี้เสมอ */
+  async function promotionCoveringToday(minGross: string) {
+    const today = new Date(new Date().getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
+    await prisma.agent.update({
+      where: { id: f.agents.agent1.id },
+      data: {
+        commissionPromotionStartsOn: new Date(`${today}T00:00:00.000Z`),
+        commissionPromotionEndsOn: new Date(`${today}T00:00:00.000Z`),
+        commissionPromotionThaiMinGross: minGross,
+        commissionPromotionThaiRate: "40",
+      },
+    });
+  }
+
+  async function sell(stake: string) {
+    const bill = await createDraftBill(f.actors.AGENT1, { drawId: f.draw.id, title: "ลูกค้า" });
+    await replaceDraftItems(f.actors.AGENT1, bill.billId, [{ prizeTypeId: f.prizeTypes.threeTop.id, number: "123", stake }]);
+    await confirmBill(f.actors.AGENT1, bill.billId);
+  }
+
+  test("บอกว่าขาดอีกเท่าไหร่ถึงจะได้เรตพิเศษ", async () => {
+    await promotionCoveringToday("1000");
+    await sell("400");
+
+    const report = await getSimpleAgentReport(f.actors.AGENT1);
+    expect(report.promotionProgress).toHaveLength(1);
+    const target = report.promotionProgress[0]!;
+    expect(target.gross.toFixed(2)).toBe("400.00");
+    expect(target.minGross.toFixed(2)).toBe("1000.00");
+    expect(target.remaining.toFixed(2)).toBe("600.00");
+    expect(target.reached).toBe(false);
+    expect(target.promotionRate.toString()).toBe("40");
+    expect(target.baseRate.toString()).toBe("25");
+  });
+
+  test("ถึงเป้าแล้วบอกว่าถึงแล้ว และยอดที่ขาดเป็นศูนย์ ไม่ใช่ติดลบ", async () => {
+    await promotionCoveringToday("600");
+    await sell("800");
+
+    const report = await getSimpleAgentReport(f.actors.AGENT1);
+    const target = report.promotionProgress[0]!;
+    expect(target.reached).toBe(true);
+    expect(target.remaining.toFixed(2)).toBe("0.00");
+  });
+
+  test("ค่าคอมประมาณการของงวดที่ยังไม่ปิดบัญชีคิดเรตโปรโมชั่นด้วย ไม่ใช่เรตปกติเสมอ", async () => {
+    await promotionCoveringToday("600");
+    await sell("800");
+
+    const report = await getSimpleAgentReport(f.actors.AGENT1);
+    const round = report.rounds.find((item) => item.drawId === f.draw.id)!;
+    expect(round.commissionFinal).toBe(false);
+    expect(round.promotionApplied).toBe(true);
+    expect(round.commissionRate.toString()).toBe("40");
+    // 800 × 40% ไม่ใช่ 800 × 25%
+    expect(round.commission.toFixed(2)).toBe("320.00");
+  });
+
+  test("ไม่มีโปรโมชั่นก็ไม่มีเป้าให้ไล่ และค่าคอมใช้เรตปกติ", async () => {
+    await sell("800");
+
+    const report = await getSimpleAgentReport(f.actors.AGENT1);
+    expect(report.promotion.state).toBe("NONE");
+    expect(report.promotionProgress).toHaveLength(0);
+    expect(report.rounds.find((item) => item.drawId === f.draw.id)!.commission.toFixed(2)).toBe("200.00");
+  });
+
+  test("งวดที่ปิดรับไปแล้วไม่ขึ้นเป็นเป้า เพราะเพิ่มยอดไม่ได้อีก", async () => {
+    await promotionCoveringToday("1000");
+    await sell("400");
+    await lockDrawManually(f.actors.ADMIN, f.draw.id);
+
+    const report = await getSimpleAgentReport(f.actors.AGENT1);
+    expect(report.promotionProgress).toHaveLength(0);
+  });
+});

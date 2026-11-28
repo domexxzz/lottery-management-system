@@ -752,6 +752,12 @@ model Settlement {
 
   /// อัตราคอม ณ เวลาคำนวณ — snapshot เช่นเดียวกับ payoutRateSnapshot
   commissionRateSnapshot Decimal @db.Decimal(7, 4)
+  /// อัตราคอมปกติของ Agent ณ เวลาคำนวณ ก่อนคิดโปรโมชั่น
+  /// เก็บไว้เพื่อให้ตอบได้ว่าทำไมงวดนี้ได้เรตนี้ แม้ภายหลังจะแก้เรตปกติหรือลบโปรโมชั่นไปแล้ว
+  /// null = แถวที่คำนวณก่อนระบบเก็บค่านี้
+  commissionBaseRateSnapshot Decimal? @db.Decimal(7, 4)
+  /// true = งวดนี้ยอดถึงเกณฑ์โปรโมชั่นและใช้เรตโปรโมชั่น
+  commissionPromotionApplied Boolean @default(false)
 
   status SettlementStatus @default(DRAFT)
 

@@ -60,3 +60,7 @@
 @media(max-width:860px){.user-edit-agent-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:1100px){.user-promotion-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.user-edit-page{padding:.65rem}.user-edit-hero{align-items:stretch}.user-edit-identity{min-width:0}.user-edit-card{padding:.7rem}.user-edit-grid,.user-edit-agent-grid,.user-promotion-grid{grid-template-columns:1fr}.user-promotion-note{display:grid}.user-edit-actions{display:grid;grid-template-columns:1fr 1fr}.user-edit-actions>*{width:100%;min-width:0}}
+
+/* ทางเข้าหน้าโปรโมชั่นค่าคอม วางไว้ข้างสรุปจำนวนผู้ใช้ให้เห็นตั้งแต่หน้าแรกของงานจัดการบัญชี */
+.users-promotions-link{display:inline-flex;align-items:center;padding:.3rem .8rem;border-radius:999px;background:#12724f;color:#fff;font-size:.76rem;font-weight:800;text-decoration:none;white-space:nowrap}
+.users-promotions-link:hover,.users-promotions-link:focus-visible{background:#0e5c40}

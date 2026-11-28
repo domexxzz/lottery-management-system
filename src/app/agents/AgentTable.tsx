@@ -7,6 +7,7 @@ import { AppDropdown } from "../AppDropdown";
 import { DateRangePicker } from "@/components/calendar";
 import type { MonthShortcut } from "@/lib/draws/range";
 import { ReportExportButtons } from "@/components/ReportExportButtons";
+import { PROMOTION_STATE_LABEL, type PromotionState } from "@/lib/agents/commission";
 
 export type AgentTableCustomer = {
   key: string;
@@ -16,6 +17,17 @@ export type AgentTableCustomer = {
   profileHref: string;
 };
 
+export type AgentTablePromotion = {
+  state: PromotionState;
+  startsOn: string | null;
+  endsOn: string | null;
+  daysLeft: number | null;
+  thaiRate: number | null;
+  thaiMinGross: number | null;
+  laoRate: number | null;
+  laoMinGross: number | null;
+};
+
 export type AgentTableRow = {
   id: string;
   code: string;
@@ -23,6 +35,7 @@ export type AgentTableRow = {
   status: "ACTIVE" | "SUSPENDED" | "CLOSED";
   commissionRate: number;
   laoCommissionRate: number;
+  promotion: AgentTablePromotion;
   customerCount: number;
   sales: number;
   billCount: number;
@@ -36,6 +49,43 @@ export type AgentTableRow = {
 };
 
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const COMPACT_MONEY = new Intl.NumberFormat("th-TH", { notation: "compact", maximumFractionDigits: 1 });
+const PROMOTION_TONE: Record<PromotionState, string> = {
+  NONE: "muted",
+  SCHEDULED: "info",
+  ACTIVE: "success",
+  ENDING_SOON: "warning",
+  EXPIRED: "danger",
+};
+
+/**
+ * ช่องโปรโมชั่นในตาราง Agent
+ *
+ * เดิมต้องเปิดหน้าแก้ไขทีละคนถึงจะรู้ว่าใครได้โปรโมชั่น มี Agent สามสิบคนก็ต้องเปิดสามสิบหน้า
+ * จึงสรุปทั้งสถานะ เกณฑ์ และวันหมดอายุไว้ในช่องเดียวให้กวาดตาดูทั้งตารางได้
+ */
+function PromotionCell({ promotion }: { promotion: AgentTablePromotion }) {
+  if (promotion.state === "NONE") return <span className="agent-promotion-none">—</span>;
+  const targets = [
+    promotion.thaiRate !== null && promotion.thaiMinGross !== null
+      ? `ไทย ${COMPACT_MONEY.format(promotion.thaiMinGross)} → ${promotion.thaiRate.toFixed(0)}%`
+      : null,
+    promotion.laoRate !== null && promotion.laoMinGross !== null
+      ? `ลาว ${COMPACT_MONEY.format(promotion.laoMinGross)} → ${promotion.laoRate.toFixed(0)}%`
+      : null,
+  ].filter(Boolean);
+  const days = promotion.daysLeft;
+  const timing = promotion.state === "EXPIRED"
+    ? `หมดเมื่อ ${promotion.endsOn}`
+    : promotion.state === "SCHEDULED"
+      ? `เริ่ม ${promotion.startsOn}`
+      : days === 0 ? "วันนี้เป็นวันสุดท้าย" : `เหลือ ${days} วัน · ถึง ${promotion.endsOn}`;
+  return <div className="agent-promotion-cell">
+    <span className={`agent-promotion-badge ${PROMOTION_TONE[promotion.state]}`}>{PROMOTION_STATE_LABEL[promotion.state]}</span>
+    <small>{targets.join(" · ")}</small>
+    <small className="agent-promotion-timing">{timing}</small>
+  </div>;
+}
 const STATUS_LABEL = { ACTIVE: "ใช้งาน", SUSPENDED: "ระงับ", CLOSED: "ปิด" } as const;
 const STATUS_TONE = { ACTIVE: "success", SUSPENDED: "warning", CLOSED: "muted" } as const;
 
@@ -112,6 +162,7 @@ export function AgentTable({
     }),
     { customers: 0, bills: 0, sales: 0, payout: 0, thaiCommission: 0, laoCommission: 0, commission: 0 },
   );
+  const promotionCount = rows.filter((agent) => agent.promotion.state !== "NONE").length;
 
   // แสดงทีละ 10 Agent ที่เหลือกดหน้าถัดไป · ยอดรวมท้ายตารางยังคิดจากทุก Agent ที่ตรงตัวกรอง
   const [page, setPage] = useState(1);
@@ -217,6 +268,8 @@ export function AgentTable({
           <dl>
             <div><dt>จ่ายรางวัล</dt><dd>{MONEY.format(agent.payout)}</dd></div>
             <div className="agent-grid-commission"><dt>ค่าคอม Agent</dt><dd><span>หวยไทย <b>{MONEY.format(agent.thaiCommission)}</b></span><span>หวยลาวและหวยลาวชุด <b>{MONEY.format(agent.laoCommission)}</b></span><span className="total">รวม <b>{MONEY.format(agent.commission)}</b></span><small>ไทย {agent.commissionRate.toFixed(0)}% · ลาว {agent.laoCommissionRate.toFixed(0)}%</small></dd></div>
+            {/* มุมมองการ์ดเป็นค่าเริ่มต้นของหน้านี้ โปรโมชั่นจึงต้องอยู่ทั้งสองมุมมอง ไม่ใช่แค่ในตาราง */}
+            {agent.promotion.state !== "NONE" && <div className="agent-grid-promotion"><dt>โปรโมชั่น</dt><dd><PromotionCell promotion={agent.promotion} /></dd></div>}
             <div><dt>ลูกค้า</dt><dd>{agent.customerCount.toLocaleString("th-TH")} คน</dd></div>
             <div><dt>บิล</dt><dd>{agent.billCount.toLocaleString("th-TH")} บิล</dd></div>
           </dl>
@@ -247,11 +300,12 @@ export function AgentTable({
             <th scope="col" className="num">คอมหวยไทย</th>
             <th scope="col" className="num">คอมหวยลาวและชุด</th>
             <th scope="col" className="num">ค่าคอมรวม</th>
+            <th scope="col">โปรโมชั่น</th>
             <th scope="col"><span className="sr-only">จัดการ</span></th>
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 && <tr><td colSpan={10} className="agent-table-empty">ไม่พบ Agent ที่ค้นหา</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={11} className="agent-table-empty">ไม่พบ Agent ที่ค้นหา</td></tr>}
           {pageRows.map((agent) => {
             const open = openId === agent.id;
             return <Fragment key={agent.id}>
@@ -268,10 +322,11 @@ export function AgentTable({
                 <td className="num">{MONEY.format(agent.thaiCommission)}<small> ({agent.commissionRate.toFixed(0)}%)</small></td>
                 <td className="num">{MONEY.format(agent.laoCommission)}<small> ({agent.laoCommissionRate.toFixed(0)}%)</small></td>
                 <td className="num"><strong>{MONEY.format(agent.commission)}</strong></td>
+                <td data-label="โปรโมชั่น"><PromotionCell promotion={agent.promotion} /></td>
                 <td className="agent-table-link"><Link href={agent.profileHref}>ดูรายละเอียด</Link></td>
               </tr>
               {open && <tr className="agent-table-customers">
-                <td colSpan={10}>
+                <td colSpan={11}>
                   <div>
                     <span>ลูกค้าอันดับแรกตามยอดซื้อ</span>
                     <ol>
@@ -298,6 +353,7 @@ export function AgentTable({
             <td className="num">{MONEY.format(totals.thaiCommission)}</td>
             <td className="num">{MONEY.format(totals.laoCommission)}</td>
             <td className="num"><strong>{MONEY.format(totals.commission)}</strong></td>
+            <td className="num">{promotionCount > 0 ? `${promotionCount} คนมีโปรฯ` : "—"}</td>
             <td />
           </tr>
         </tfoot>}

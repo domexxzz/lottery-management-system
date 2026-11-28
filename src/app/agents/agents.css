@@ -569,3 +569,17 @@
 @media(max-width:1280px){.agent-card-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:860px){.agent-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.agent-card-grid{grid-template-columns:1fr}}
+
+/* ช่องโปรโมชั่นในตาราง Agent — กวาดตาดูทั้งตารางได้ว่าใครมีโปรฯ และใกล้หมดหรือยัง */
+.agent-promotion-cell{display:grid;gap:.1rem;min-width:9rem}
+.agent-promotion-cell small{color:#6f8793;font-size:.6rem;line-height:1.35}
+.agent-promotion-timing{font-weight:700}
+.agent-promotion-none{color:#9fb0b9}
+.agent-promotion-badge{display:inline-block;width:fit-content;padding:.08rem .4rem;border-radius:999px;font-size:.58rem;font-weight:800}
+.agent-promotion-badge.success{background:#e8f6ef;color:#12724f}
+.agent-promotion-badge.warning{background:#fdf2dd;color:#8a5a09}
+.agent-promotion-badge.danger{background:#fdecee;color:#9d2235}
+.agent-promotion-badge.info{background:#e8f1fd;color:#1a4f93}
+.agent-promotion-badge.muted{background:#eef2f4;color:#6f8793}
+.agent-grid-promotion dd{display:block}
+.agent-grid-promotion .agent-promotion-cell{min-width:0}

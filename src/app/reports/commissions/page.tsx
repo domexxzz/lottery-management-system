@@ -87,7 +87,7 @@ export default async function CommissionPayoutPage({ searchParams }: {
         <thead><tr><th>Agent</th><th className="num">งวด</th><th className="num">ยอดขาย</th><th className="num">จ่ายรางวัล</th><th className="num">คอมหวยไทย</th><th className="num">คอมหวยลาวและชุด</th><th className="num">ต้องจ่ายรวม</th><th className="num">สุทธิธุรกิจ</th><th>{report.checklistEnabled ? "เช็กการจ่าย" : "สถานะ"}</th></tr></thead>
         <tbody>{report.rows.map((row) => { const status = statusOf(row); return <tr key={row.agentId}>
           <td data-label="Agent"><Link href={`/agents/${row.agentId}`}><strong>{row.code}</strong><span>{row.name}</span></Link></td>
-          <td data-label="งวด" className="num">{COUNT.format(row.drawCount)}</td>
+          <td data-label="งวด" className="num">{COUNT.format(row.drawCount)}{row.promotionDrawCount > 0 && <small className="commission-promotion-note">ใช้เรตโปรฯ {COUNT.format(row.promotionDrawCount)} งวด</small>}</td>
           <td data-label="ยอดขาย" className="num">{MONEY.format(row.gross)}</td>
           <td data-label="จ่ายรางวัล" className="num">{MONEY.format(row.payout)}</td>
           <td data-label="คอมหวยไทย" className="num">{MONEY.format(row.thaiCommission)}<small>{row.thaiRate.toFixed(0)}%</small></td>

@@ -12,7 +12,7 @@ import {
   LAO_SET_PRIZE_TYPE_CODES,
   type LaoSetPrizeKey,
 } from "@/lib/lao/rules";
-import { effectiveCommissionRate, type AgentCommissionPromotion } from "@/lib/agents/commission";
+import { commissionDecision, type AgentCommissionPromotion } from "@/lib/agents/commission";
 import { drawDay as resolveDrawDay } from "@/lib/draws/range";
 
 /**
@@ -62,6 +62,9 @@ export type SettlementPreview = {
   commission: Prisma.Decimal;
   net: Prisma.Decimal;
   commissionRateSnapshot: Prisma.Decimal;
+  /// อัตราปกติก่อนคิดโปรโมชั่น เก็บคู่กันเพื่ออธิบายส่วนต่างให้ Agent ได้
+  commissionBaseRateSnapshot: Prisma.Decimal;
+  commissionPromotionApplied: boolean;
   winningItems: number;
   totalItems: number;
 };
@@ -300,7 +303,7 @@ function evaluateSettlement(
     .map(([agentId, b]) => {
       const gross = sumMoney(b.stakes);
       const payout = sumMoney(b.payouts);
-      const commissionRate = effectiveCommissionRate({
+      const decision = commissionDecision({
         agent: b.commissionPolicy,
         lotteryType,
         drawDay,
@@ -309,7 +312,7 @@ function evaluateSettlement(
       const commission = commissionOf({
         gross,
         payout,
-        commissionRatePercent: commissionRate,
+        commissionRatePercent: decision.rate,
       });
       return {
         agentId,
@@ -319,7 +322,9 @@ function evaluateSettlement(
         payout,
         commission,
         net: netOf({ gross, payout, commission }),
-        commissionRateSnapshot: commissionRate,
+        commissionRateSnapshot: decision.rate,
+        commissionBaseRateSnapshot: decision.baseRate,
+        commissionPromotionApplied: decision.promotionApplied,
         winningItems: b.winningItems,
         totalItems: b.totalItems,
       };
@@ -415,6 +420,8 @@ async function calculateSettlementSingle(
           commission: preview.commission,
           net: preview.net,
           commissionRateSnapshot: preview.commissionRateSnapshot,
+          commissionBaseRateSnapshot: preview.commissionBaseRateSnapshot,
+          commissionPromotionApplied: preview.commissionPromotionApplied,
           status: "DRAFT",
         },
         update: {
@@ -423,6 +430,8 @@ async function calculateSettlementSingle(
           commission: preview.commission,
           net: preview.net,
           commissionRateSnapshot: preview.commissionRateSnapshot,
+          commissionBaseRateSnapshot: preview.commissionBaseRateSnapshot,
+          commissionPromotionApplied: preview.commissionPromotionApplied,
           status: "DRAFT",
           calculatedAt: new Date(),
           reconciledById: null,
@@ -634,6 +643,8 @@ export async function listSettlements(actor: Actor, drawId: string) {
       commission: true,
       net: true,
       commissionRateSnapshot: true,
+      commissionBaseRateSnapshot: true,
+      commissionPromotionApplied: true,
       status: true,
       agentId: true,
       agent: { select: { code: true, name: true } },

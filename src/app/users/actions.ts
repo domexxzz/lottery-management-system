@@ -6,6 +6,8 @@ import { requireActor } from "@/lib/auth/context";
 import { AppError } from "@/lib/errors";
 import { displayLogin } from "@/lib/users/identity";
 import {
+  applyCommissionPromotion,
+  clearCommissionPromotion,
   createManagedUser,
   deleteManagedUser,
   setManagedUserPassword,
@@ -163,4 +165,55 @@ export async function setUserStatusAction(_previous: UserActionState, formData: 
   }
   refresh();
   return { error: null, ok: true };
+}
+
+const PromotionBulkSchema = z.object({
+  agentIds: z.array(z.string().min(1)).min(1, "กรุณาเลือก Agent อย่างน้อยหนึ่งคน"),
+  commissionPromotionStartsOn: z.string().max(10).optional(),
+  commissionPromotionEndsOn: z.string().max(10).optional(),
+  commissionPromotionThaiMinGross: z.string().max(20).optional(),
+  commissionPromotionLaoMinGross: z.string().max(20).optional(),
+  commissionPromotionThaiRate: z.string().max(20).optional(),
+  commissionPromotionLaoRate: z.string().max(20).optional(),
+});
+
+function refreshPromotions() {
+  revalidatePath("/users/promotions");
+  revalidatePath("/users");
+  revalidatePath("/agents");
+}
+
+/** ตั้งโปรโมชั่นชุดเดียวให้ Agent หลายคนพร้อมกัน */
+export async function applyPromotionAction(_previous: UserActionState, formData: FormData): Promise<UserActionState> {
+  const actor = await requireActor();
+  const parsed = PromotionBulkSchema.safeParse({
+    agentIds: formData.getAll("agentIds").map(String),
+    commissionPromotionStartsOn: formData.get("commissionPromotionStartsOn") ?? "",
+    commissionPromotionEndsOn: formData.get("commissionPromotionEndsOn") ?? "",
+    commissionPromotionThaiMinGross: formData.get("commissionPromotionThaiMinGross") ?? "",
+    commissionPromotionLaoMinGross: formData.get("commissionPromotionLaoMinGross") ?? "",
+    commissionPromotionThaiRate: formData.get("commissionPromotionThaiRate") ?? "",
+    commissionPromotionLaoRate: formData.get("commissionPromotionLaoRate") ?? "",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง", ok: false };
+  try {
+    const count = await applyCommissionPromotion(actor, parsed.data.agentIds, parsed.data);
+    refreshPromotions();
+    return { error: null, ok: true, message: `ตั้งโปรโมชั่นให้ ${count} Agent แล้ว` };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** ล้างโปรโมชั่นของ Agent ที่เลือก กลับไปใช้อัตราปกติ */
+export async function clearPromotionAction(_previous: UserActionState, formData: FormData): Promise<UserActionState> {
+  const actor = await requireActor();
+  const agentIds = formData.getAll("agentIds").map(String).filter(Boolean);
+  try {
+    const count = await clearCommissionPromotion(actor, agentIds);
+    refreshPromotions();
+    return { error: null, ok: true, message: `ล้างโปรโมชั่นของ ${count} Agent แล้ว` };
+  } catch (error) {
+    return fail(error);
+  }
 }

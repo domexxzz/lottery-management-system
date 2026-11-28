@@ -4,10 +4,10 @@ import { orgScope, requirePermission } from "@/lib/auth/context";
 import { databaseSchema, prisma } from "@/lib/db";
 import { ForbiddenError } from "@/lib/errors";
 import { sumMoney, ZERO } from "@/lib/money";
-import { commissionRateForLottery } from "@/lib/agents/commission";
+import { commissionDecision, promotionGroupOf, promotionStatus, promotionTargetFor } from "@/lib/agents/commission";
 import { listBetBills } from "@/lib/bills/service";
 import { resolveDashboardDrawScope } from "@/lib/dashboard/lottery-draw-filter";
-import { drawDay, inRange, parseDay } from "@/lib/draws/range";
+import { drawDay, inRange, parseDay, todayInBangkok } from "@/lib/draws/range";
 
 const COUNTED_STATUSES: BillStatus[] = ["CONFIRMED", "LOCKED", "SETTLED"];
 const SETTLEMENT_STATUSES: SettlementStatus[] = ["DRAFT", "RECONCILED", "APPROVED"];
@@ -48,6 +48,29 @@ export type SimpleAgentRound = {
   payout: Prisma.Decimal;
   commission: Prisma.Decimal;
   commissionFinal: boolean;
+  /** อัตราคอมที่ใช้กับงวดนี้ และเหตุผลว่ามาจากโปรโมชั่นหรือเรตปกติ */
+  commissionRate: Prisma.Decimal;
+  baseCommissionRate: Prisma.Decimal;
+  promotionApplied: boolean;
+};
+
+/**
+ * ความคืบหน้าของ Agent ต่อเป้าโปรโมชั่นในงวดที่ยังรับบิลอยู่
+ *
+ * โปรโมชั่นที่คนถูกจูงใจไม่รู้ว่ามีอยู่ ไม่จูงใจใคร ตัวเลขทั้งหมดนี้คำนวณจาก
+ * ยอดที่ระบบมีอยู่แล้ว ไม่ได้เพิ่ม query ใหม่
+ */
+export type AgentPromotionProgress = {
+  drawId: string;
+  drawName: string;
+  cutoffAt: Date;
+  gross: Prisma.Decimal;
+  minGross: Prisma.Decimal;
+  /** ยอดที่ยังขาดอีกถึงจะได้เรตโปรโมชั่น 0 = ถึงเป้าแล้ว */
+  remaining: Prisma.Decimal;
+  reached: boolean;
+  promotionRate: Prisma.Decimal;
+  baseRate: Prisma.Decimal;
 };
 
 function parseStart(value?: string) {
@@ -263,7 +286,15 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
   const [agent, drawOptions] = await Promise.all([
     prisma.agent.findFirst({
       where: { ...scope, id: actor.agentId },
-      select: { code: true, name: true, commissionRate: true, laoCommissionRate: true },
+      select: {
+        code: true, name: true, commissionRate: true, laoCommissionRate: true,
+        commissionPromotionStartsOn: true,
+        commissionPromotionEndsOn: true,
+        commissionPromotionThaiMinGross: true,
+        commissionPromotionLaoMinGross: true,
+        commissionPromotionThaiRate: true,
+        commissionPromotionLaoRate: true,
+      },
     }),
     prisma.draw.findMany({
       where: scope,
@@ -281,6 +312,8 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
   const drawIds = draws.map((draw) => draw.id);
   if (drawIds.length === 0) return {
     agent, rounds: [] as SimpleAgentRound[], winners: [], drawOptions, drawScope,
+    promotion: promotionStatus(agent, todayInBangkok()),
+    promotionProgress: [] as AgentPromotionProgress[],
     selectedDrawId: drawScope.selectedDraw?.id ?? "",
     totals: { gross: ZERO, payout: ZERO, commission: ZERO, commissionFinal: true },
     billHistory: { rows: [], counts: { all: 0, won: 0, lost: 0, pending: 0 }, page: 1, pages: 1, status: billStatus },
@@ -336,10 +369,17 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
   const billsByDraw = new Map(billTotals.map((row) => [row.drawId, row]));
   const winnersByDraw = new Map(winnerTotals.map((row) => [row.drawId, row.winners]));
   const settlementByDraw = new Map(settlements.map((row) => [row.drawId, row]));
+  /*
+   * ค่าคอมประมาณการของงวดที่ยังไม่ปิดบัญชีต้องคิดโปรโมชั่นด้วย
+   *
+   * ของเดิมใช้เรตปกติเสมอ Agent ที่ยอดถึงเกณฑ์ไปแล้วจึงเห็นตัวเลขต่ำกว่าที่จะได้จริง
+   * จนกว่า Settlement จะรัน แล้วตัวเลขก็กระโดดขึ้นโดยไม่มีคำอธิบาย
+   */
   const rounds = draws.map((draw): SimpleAgentRound => {
     const bill = billsByDraw.get(draw.id);
     const gross = bill?._sum.totalStake ?? ZERO;
     const settlement = settlementByDraw.get(draw.id);
+    const decision = commissionDecision({ agent, lotteryType: draw.lotteryType, drawDay: drawDay(draw), gross });
     return {
       drawId: draw.id,
       drawName: draw.name,
@@ -348,10 +388,45 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
       winnerCount: winnersByDraw.get(draw.id) ?? 0,
       gross,
       payout: bill?._sum.totalPayout ?? ZERO,
-      commission: settlement?.commission ?? gross.times(commissionRateForLottery(agent, draw.lotteryType)).dividedBy(100),
+      commission: settlement?.commission ?? gross.times(decision.rate).dividedBy(100),
       commissionFinal: Boolean(settlement),
+      commissionRate: decision.rate,
+      baseCommissionRate: decision.baseRate,
+      promotionApplied: decision.promotionApplied,
     };
   });
+
+  const today = todayInBangkok();
+  const promotion = promotionStatus(agent, today);
+  /*
+   * เป้าของงวดที่ยังรับบิลอยู่เท่านั้น
+   *
+   * งวดที่ปิดรับไปแล้วเพิ่มยอดไม่ได้ การบอกว่า "ขาดอีก 1,600" จึงไม่มีประโยชน์
+   * และทำให้คนเข้าใจผิดว่ายังทำได้
+   */
+  const promotionProgress: AgentPromotionProgress[] = promotion.state === "ACTIVE" || promotion.state === "ENDING_SOON"
+    ? draws.flatMap((draw) => {
+        if (draw.status !== "OPEN") return [];
+        const day = drawDay(draw);
+        if (promotion.startsOn && day < promotion.startsOn) return [];
+        if (promotion.endsOn && day > promotion.endsOn) return [];
+        const target = promotionTargetFor(agent, promotionGroupOf(draw.lotteryType));
+        if (!target) return [];
+        const gross = billsByDraw.get(draw.id)?._sum.totalStake ?? ZERO;
+        const remaining = target.minGross.minus(gross);
+        return [{
+          drawId: draw.id,
+          drawName: draw.name,
+          cutoffAt: draw.cutoffAt,
+          gross,
+          minGross: target.minGross,
+          remaining: remaining.isNegative() ? ZERO : remaining,
+          reached: !gross.lessThan(target.minGross),
+          promotionRate: target.rate,
+          baseRate: draw.lotteryType === "THAI_GOVERNMENT" ? agent.commissionRate : agent.laoCommissionRate,
+        }];
+      }).sort((a, b) => a.cutoffAt.getTime() - b.cutoffAt.getTime())
+    : [];
 
   const totals = {
     gross: sumMoney(rounds.map((round) => round.gross)),
@@ -361,7 +436,7 @@ export async function getSimpleAgentReport(actor: Actor, selectedDrawId?: string
   };
   const history = await listBetBills(actor, { tab: billStatus, drawWhere: { id: { in: drawIds } }, page: requestedPage, pageSize: 20 });
 
-  return { agent, rounds, winners, drawOptions, drawScope, selectedDrawId: drawScope.selectedDraw?.id ?? "", totals, billHistory: {
+  return { agent, rounds, winners, drawOptions, drawScope, promotion, promotionProgress, selectedDrawId: drawScope.selectedDraw?.id ?? "", totals, billHistory: {
     rows: history.bills,
     counts: { all: history.counts.ALL, won: history.counts.WON, lost: history.counts.LOST, pending: history.counts.PENDING },
     page: history.page, pages: history.pageCount, status: billStatus,

@@ -105,3 +105,7 @@
 .settlement-wins-more>summary{cursor:pointer;color:#168b99;font-size:.62rem;font-weight:700}
 .settlement-wins-more[open]>summary{margin-bottom:.3rem}
 @media(max-width:650px){.settlement-win-list li{grid-template-columns:auto 1fr;gap:.2rem .5rem}.settlement-win-calc,.settlement-win-bill{grid-column:1/-1}}
+
+/* ป้ายบอกว่าอัตราคอมของแถวนี้มาจากโปรโมชั่น พร้อมเรตปกติไว้เทียบ */
+.settlement-promotion-badge{display:inline-flex;align-items:center;gap:.25rem;margin-left:.3rem;padding:.08rem .35rem;border-radius:999px;background:#e8f6ef;color:#12724f;font-size:.56rem;font-weight:800;white-space:nowrap;vertical-align:middle}
+.settlement-promotion-badge small{color:#4a8a73;font-size:.54rem;font-weight:700}

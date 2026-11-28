@@ -46,7 +46,7 @@ export async function loadCommissionPayoutReport(actor: Actor, query: Commission
   const laoDrawIds = scopedDraws.filter((draw) => draw.lotteryType === "LAO" || draw.lotteryType === "LAO_SET").map((draw) => draw.id);
   const baseWhere = { organizationId: actor.organizationId, ...drawWhere };
 
-  const [overall, thai, lao, statuses] = await Promise.all([
+  const [overall, thai, lao, statuses, promotionDraws] = await Promise.all([
     prisma.settlement.groupBy({
       by: ["agentId"],
       where: baseWhere,
@@ -60,8 +60,14 @@ export async function loadCommissionPayoutReport(actor: Actor, query: Commission
       ? prisma.settlement.groupBy({ by: ["agentId"], where: { organizationId: actor.organizationId, drawId: { in: laoDrawIds } }, _sum: { commission: true } })
       : Promise.resolve([]),
     prisma.settlement.groupBy({ by: ["agentId", "status"], where: baseWhere, _count: { _all: true } }),
+    /*
+     * นับงวดที่ใช้เรตโปรโมชั่น เพื่อให้คนจ่ายเงินรู้ว่าตัวเลขนี้ไม่ได้คิดจากเรตปกติล้วน ๆ
+     * ถ้าไม่บอก คนจ่ายจะเห็นแต่เรตปกติข้างยอดเงินแล้วคิดว่าระบบคำนวณผิด
+     */
+    prisma.settlement.groupBy({ by: ["agentId"], where: { ...baseWhere, commissionPromotionApplied: true }, _count: { _all: true } }),
   ]);
 
+  const promotionByAgent = new Map(promotionDraws.map((row) => [row.agentId, row._count._all]));
   const agentIds = overall.map((row) => row.agentId);
   const agents = agentIds.length
     ? await prisma.agent.findMany({
@@ -92,6 +98,7 @@ export async function loadCommissionPayoutReport(actor: Actor, query: Commission
       thaiRate: number(agent?.commissionRate),
       laoRate: number(agent?.laoCommissionRate),
       drawCount: row._count._all,
+      promotionDrawCount: promotionByAgent.get(row.agentId) ?? 0,
       gross: number(row._sum.gross),
       payout: number(row._sum.payout),
       thaiCommission: thaiByAgent.get(row.agentId) ?? 0,

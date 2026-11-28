@@ -5,7 +5,10 @@ import { verifyPassword } from "@/lib/auth/password";
 import { confirmBill, createDraftBill, replaceDraftItems } from "@/lib/bills/service";
 import { getOrganizationMapData } from "@/lib/agents/organization-map";
 import {
+  applyCommissionPromotion,
+  clearCommissionPromotion,
   createManagedUser,
+  listAgentPromotions,
   deleteManagedUser,
   listManagedUsers,
   setManagedUserPassword,
@@ -198,5 +201,72 @@ describe("Owner จัดการบัญชี", () => {
   test("Owner ลบหรือตั้งรหัสผ่านบัญชีตัวเองหรือบัญชี Owner ไม่ได้", async () => {
     await expect(deleteManagedUser(f.actors.OWNER, f.users.owner.id)).rejects.toThrow();
     await expect(setManagedUserPassword(f.actors.OWNER, f.users.owner.id, "x")).rejects.toThrow();
+  });
+});
+
+describe("ตั้งโปรโมชั่นค่าคอมพร้อมกันหลายคน", () => {
+  const campaign = {
+    commissionPromotionStartsOn: "2026-12-01",
+    commissionPromotionEndsOn: "2026-12-31",
+    commissionPromotionThaiMinGross: "20000",
+    commissionPromotionThaiRate: "32",
+  };
+
+  test("เขียนเกณฑ์ชุดเดียวให้ทุกคนที่เลือก และไม่แตะคนที่ไม่ได้เลือก", async () => {
+    const count = await applyCommissionPromotion(f.actors.OWNER, [f.agents.agent1.id], campaign);
+    expect(count).toBe(1);
+
+    const rows = await listAgentPromotions(f.actors.OWNER, "2026-12-10");
+    const first = rows.find((row) => row.agentId === f.agents.agent1.id)!;
+    const second = rows.find((row) => row.agentId === f.agents.agent2.id)!;
+    expect(first.promotion.state).toBe("ACTIVE");
+    expect(first.promotion.thai?.rate.toString()).toBe("32");
+    expect(second.promotion.state).toBe("NONE");
+  });
+
+  test("ตั้งให้สองคนพร้อมกันได้ด้วยการกรอกครั้งเดียว", async () => {
+    const count = await applyCommissionPromotion(f.actors.OWNER, [f.agents.agent1.id, f.agents.agent2.id], campaign);
+    expect(count).toBe(2);
+    const rows = await listAgentPromotions(f.actors.OWNER, "2026-12-10");
+    expect(rows.filter((row) => row.promotion.state === "ACTIVE")).toHaveLength(2);
+  });
+
+  test("ล้างโปรโมชั่นแล้วกลับไปใช้อัตราปกติ", async () => {
+    await applyCommissionPromotion(f.actors.OWNER, [f.agents.agent1.id], campaign);
+    await clearCommissionPromotion(f.actors.OWNER, [f.agents.agent1.id]);
+    const rows = await listAgentPromotions(f.actors.OWNER, "2026-12-10");
+    expect(rows.find((row) => row.agentId === f.agents.agent1.id)!.promotion.state).toBe("NONE");
+  });
+
+  test("ใช้การตรวจค่าชุดเดียวกับการแก้ทีละคน ค่าที่ไม่ครบคู่ถูกปฏิเสธ", async () => {
+    await expect(applyCommissionPromotion(f.actors.OWNER, [f.agents.agent1.id], {
+      ...campaign,
+      commissionPromotionThaiRate: "",
+    })).rejects.toThrow(/ยอดขั้นต่ำและค่าคอมหวยรัฐบาล/);
+
+    await expect(applyCommissionPromotion(f.actors.OWNER, [f.agents.agent1.id], {
+      ...campaign,
+      commissionPromotionEndsOn: "2026-11-01",
+    })).rejects.toThrow(/วันสิ้นสุดโปรโมชั่นต้องไม่ก่อนวันเริ่มต้น/);
+  });
+
+  test("ไม่เลือกใครเลยถูกปฏิเสธ ไม่ใช่เขียนให้ทุกคนโดยไม่ตั้งใจ", async () => {
+    await expect(applyCommissionPromotion(f.actors.OWNER, [], campaign)).rejects.toThrow(/เลือก Agent/);
+    await expect(clearCommissionPromotion(f.actors.OWNER, [])).rejects.toThrow(/เลือก Agent/);
+  });
+
+  test("Agent เรียกเองไม่ได้ ต้องมีสิทธิ์จัดการผู้ใช้", async () => {
+    await expect(applyCommissionPromotion(f.actors.AGENT1, [f.agents.agent1.id], campaign)).rejects.toThrow();
+  });
+
+  test("Agent ขององค์กรอื่นไม่ถูกเขียนทับ แม้จะส่ง id มาตรง ๆ", async () => {
+    const otherOrg = await prisma.organization.create({ data: { name: "องค์กรอื่น", timezone: "Asia/Bangkok" } });
+    const outsider = await prisma.agent.create({
+      data: { organizationId: otherOrg.id, code: "Z001", name: "ตัวแทนองค์กรอื่น", commissionRate: "25", laoCommissionRate: "25" },
+    });
+
+    await expect(applyCommissionPromotion(f.actors.OWNER, [outsider.id], campaign)).rejects.toThrow(/ไม่พบ Agent/);
+    const after = await prisma.agent.findUniqueOrThrow({ where: { id: outsider.id }, select: { commissionPromotionStartsOn: true } });
+    expect(after.commissionPromotionStartsOn).toBeNull();
   });
 });

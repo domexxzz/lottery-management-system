@@ -4,7 +4,8 @@ import { can } from "@/lib/auth/permissions";
 import { getOrganizationMapData } from "@/lib/agents/organization-map";
 import { customerProfileKey } from "@/lib/customers/profile-key";
 import { prisma } from "@/lib/db";
-import { drawDay, inRange, monthShortcuts, parseDay, recentMonths, thaiDayLabel } from "@/lib/draws/range";
+import { drawDay, inRange, monthShortcuts, parseDay, recentMonths, thaiDayLabel, todayInBangkok } from "@/lib/draws/range";
+import { promotionStatus } from "@/lib/agents/commission";
 import { pickCurrentDraw } from "@/lib/bills/draw-scope";
 import { DashboardIcon } from "../DashboardIcon";
 import { AgentTable, type AgentTableRow } from "./AgentTable";
@@ -59,8 +60,10 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
     customerCounts.set(customer.agentId, customer.customerCount);
   }
 
+  const promotionToday = todayInBangkok();
   const nodes: AgentTableRow[] = mapData.agents
     .map((agent) => {
+      const promotion = promotionStatus(agent, promotionToday);
       const stats = performance.get(agent.id) ?? { sales: 0, billCount: 0, payout: 0, thaiCommission: 0, laoCommission: 0, commission: 0, net: 0 };
       const customers = customerRows.get(agent.id) ?? [];
       const drawQuery = currentDraw ? `?drawId=${currentDraw.id}` : "";
@@ -71,6 +74,16 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         status: agent.status,
         commissionRate: Number(agent.commissionRate),
         laoCommissionRate: Number(agent.laoCommissionRate),
+        promotion: {
+          state: promotion.state,
+          startsOn: promotion.startsOn,
+          endsOn: promotion.endsOn,
+          daysLeft: promotion.daysLeft,
+          thaiRate: promotion.thai ? Number(promotion.thai.rate) : null,
+          thaiMinGross: promotion.thai ? Number(promotion.thai.minGross) : null,
+          laoRate: promotion.lao ? Number(promotion.lao.rate) : null,
+          laoMinGross: promotion.lao ? Number(promotion.lao.minGross) : null,
+        },
         customerCount: customerCounts.get(agent.id) ?? 0,
         sales: stats.sales,
         billCount: stats.billCount,

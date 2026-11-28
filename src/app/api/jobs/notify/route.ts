@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { runDailySummary } from "@/lib/notify/daily-summary";
 import { runEvidenceAlerts } from "@/lib/notify/evidence-alerts";
+import { runPromotionExpiryAlerts } from "@/lib/notify/promotion-expiry";
 
 export const dynamic = "force-dynamic";
 
@@ -36,11 +37,15 @@ export async function POST(request: NextRequest) {
   }
 
   /*
-   * ทำทั้งสองงานในการเรียกครั้งเดียว
+   * ทำทุกงานแจ้งเตือนในการเรียกครั้งเดียว
    *
-   * สรุปรายวันกันซ้ำด้วยวันที่อยู่แล้ว เรียกถี่แค่ไหนก็ส่งวันละครั้ง
-   * จึงไม่ต้องตั้ง scheduler แยกให้ต้องดูแลสองที่
+   * ทั้งสามงานกันส่งซ้ำด้วย AuditEvent อยู่แล้ว เรียกถี่แค่ไหนก็ได้ข้อความชุดเดียว
+   * จึงไม่ต้องตั้ง scheduler แยกให้ต้องดูแลหลายที่
    */
-  const [evidence, dailySummary] = await Promise.all([runEvidenceAlerts(), runDailySummary()]);
-  return NextResponse.json({ evidence, dailySummary });
+  const [evidence, dailySummary, promotionExpiry] = await Promise.all([
+    runEvidenceAlerts(),
+    runDailySummary(),
+    runPromotionExpiryAlerts(),
+  ]);
+  return NextResponse.json({ evidence, dailySummary, promotionExpiry });
 }

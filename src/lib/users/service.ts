@@ -1,12 +1,13 @@
-import type { Role, UserStatus } from "@prisma/client";
+import type { AgentStatus, Role, UserStatus } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
-import { requirePermission, type Actor } from "@/lib/auth/context";
+import { orgScope, requirePermission, type Actor } from "@/lib/auth/context";
 import { hashPassword } from "@/lib/auth/password";
 import { revokeAllSessionsForUser } from "@/lib/auth/session";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
-import { parseDay } from "@/lib/draws/range";
+import { parseDay, todayInBangkok } from "@/lib/draws/range";
+import { promotionStatus, type PromotionStatus } from "@/lib/agents/commission";
 import { agentIdentityAfter, validateOwnerSetPassword } from "./identity";
 
 export type ManagedRole = Extract<Role, "ADMIN" | "AGENT">;
@@ -61,7 +62,17 @@ function decimal(raw: string | undefined, label: string, optional = false): Pris
   }
 }
 
-function commissionPromotion(input: UpdateManagedUserInput) {
+/** ช่องโปรโมชั่นดิบจากฟอร์ม ใช้ร่วมกันทั้งแก้ทีละคนและตั้งรวมหลายคน */
+export type CommissionPromotionInput = {
+  commissionPromotionStartsOn?: string;
+  commissionPromotionEndsOn?: string;
+  commissionPromotionThaiMinGross?: string;
+  commissionPromotionLaoMinGross?: string;
+  commissionPromotionThaiRate?: string;
+  commissionPromotionLaoRate?: string;
+};
+
+function commissionPromotion(input: CommissionPromotionInput) {
   const raw = {
     startsOn: input.commissionPromotionStartsOn?.trim() ?? "",
     endsOn: input.commissionPromotionEndsOn?.trim() ?? "",
@@ -552,4 +563,159 @@ export async function setManagedUserStatus(actor: Actor, userId: string, status:
   });
 
   if (status === "SUSPENDED") await revokeAllSessionsForUser(user.id);
+}
+
+/** ข้อมูลโปรโมชั่นของ Agent หนึ่งคนสำหรับหน้าจัดการโปรโมชั่น */
+export type AgentPromotionRow = {
+  agentId: string;
+  userId: string | null;
+  code: string;
+  name: string;
+  status: AgentStatus;
+  commissionRate: string;
+  laoCommissionRate: string;
+  promotion: PromotionStatus;
+};
+
+/**
+ * รายชื่อ Agent พร้อมสถานะโปรโมชั่น
+ *
+ * อ่านทีเดียวทั้งองค์กร เพราะคำถามที่ต้องตอบคือ "ใครได้โปรฯ บ้าง" และ
+ * "อันไหนใกล้หมด" ซึ่งตอบไม่ได้ถ้าดูทีละคน
+ */
+export async function listAgentPromotions(actor: Actor, today = todayInBangkok()): Promise<AgentPromotionRow[]> {
+  requirePermission(actor, "user.manage");
+  const agents = await prisma.agent.findMany({
+    where: {
+      ...orgScope(actor),
+      status: { not: "CLOSED" },
+      OR: [{ userId: null }, { user: { deletedAt: null } }],
+    },
+    orderBy: { code: "asc" },
+    select: {
+      id: true,
+      userId: true,
+      code: true,
+      name: true,
+      status: true,
+      commissionRate: true,
+      laoCommissionRate: true,
+      commissionPromotionStartsOn: true,
+      commissionPromotionEndsOn: true,
+      commissionPromotionThaiMinGross: true,
+      commissionPromotionLaoMinGross: true,
+      commissionPromotionThaiRate: true,
+      commissionPromotionLaoRate: true,
+    },
+  });
+  return agents.map((agent) => ({
+    agentId: agent.id,
+    userId: agent.userId,
+    code: agent.code,
+    name: agent.name,
+    status: agent.status,
+    commissionRate: agent.commissionRate.toString(),
+    laoCommissionRate: agent.laoCommissionRate.toString(),
+    promotion: promotionStatus(agent, today),
+  }));
+}
+
+type PromotionFields = {
+  commissionPromotionStartsOn: Date | null;
+  commissionPromotionEndsOn: Date | null;
+  commissionPromotionThaiMinGross: Prisma.Decimal | null;
+  commissionPromotionLaoMinGross: Prisma.Decimal | null;
+  commissionPromotionThaiRate: Prisma.Decimal | null;
+  commissionPromotionLaoRate: Prisma.Decimal | null;
+};
+
+/** เขียนโปรโมชั่นชุดเดียวกันให้ Agent หลายคน พร้อม Audit รายคน */
+async function writePromotionToAgents(actor: Actor, agentIds: string[], fields: PromotionFields, reason: string): Promise<number> {
+  const targets = await prisma.agent.findMany({
+    where: { ...orgScope(actor), id: { in: agentIds }, status: { not: "CLOSED" } },
+    select: {
+      id: true,
+      code: true,
+      commissionPromotionStartsOn: true,
+      commissionPromotionEndsOn: true,
+      commissionPromotionThaiMinGross: true,
+      commissionPromotionLaoMinGross: true,
+      commissionPromotionThaiRate: true,
+      commissionPromotionLaoRate: true,
+    },
+  });
+  if (targets.length === 0) throw new ValidationError("ไม่พบ Agent ที่เลือก");
+
+  const day = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
+  const money = (value: Prisma.Decimal | null) => value?.toString() ?? null;
+  const snapshot = (row: PromotionFields) => ({
+    commissionPromotionStartsOn: day(row.commissionPromotionStartsOn),
+    commissionPromotionEndsOn: day(row.commissionPromotionEndsOn),
+    commissionPromotionThaiMinGross: money(row.commissionPromotionThaiMinGross),
+    commissionPromotionLaoMinGross: money(row.commissionPromotionLaoMinGross),
+    commissionPromotionThaiRate: money(row.commissionPromotionThaiRate),
+    commissionPromotionLaoRate: money(row.commissionPromotionLaoRate),
+  });
+
+  /*
+   * เขียนทั้งชุดใน transaction เดียว
+   *
+   * การตั้งแคมเปญที่สำเร็จครึ่งเดียวแย่กว่าไม่สำเร็จเลย เพราะ Agent บางคน
+   * ได้เรตพิเศษและบางคนไม่ได้ โดยไม่มีใครรู้ว่าใครอยู่ฝั่งไหน
+   */
+  await prisma.$transaction(async (tx) => {
+    await tx.agent.updateMany({
+      where: { organizationId: actor.organizationId, id: { in: targets.map((row) => row.id) } },
+      data: fields,
+    });
+    for (const target of targets) {
+      await writeAudit(tx, {
+        organizationId: actor.organizationId,
+        actorId: actor.userId,
+        requestId: actor.requestId,
+        ipAddress: actor.ipAddress,
+        action: "UPDATE",
+        entityType: "Agent",
+        entityId: target.id,
+        before: snapshot(target),
+        after: snapshot(fields),
+        reason,
+      });
+    }
+  });
+  return targets.length;
+}
+
+/** ตั้งโปรโมชั่นชุดเดียวให้ Agent ที่เลือกพร้อมกัน ใช้การตรวจค่าชุดเดียวกับการแก้ทีละคน */
+export async function applyCommissionPromotion(
+  actor: Actor,
+  agentIds: string[],
+  input: CommissionPromotionInput,
+): Promise<number> {
+  requirePermission(actor, "user.manage");
+  if (agentIds.length === 0) throw new ValidationError("กรุณาเลือก Agent อย่างน้อยหนึ่งคน");
+  const promotion = commissionPromotion(input);
+  if (!promotion.startsOn) throw new ValidationError("กรุณากรอกช่วงวันโปรโมชั่นให้ครบ");
+  return writePromotionToAgents(actor, agentIds, {
+    commissionPromotionStartsOn: promotion.startsOn,
+    commissionPromotionEndsOn: promotion.endsOn,
+    commissionPromotionThaiMinGross: promotion.thaiMinGross,
+    commissionPromotionLaoMinGross: promotion.laoMinGross,
+    commissionPromotionThaiRate: promotion.thaiRate,
+    commissionPromotionLaoRate: promotion.laoRate,
+  }, "ตั้งโปรโมชั่นค่าคอมพร้อมกันหลายคน");
+}
+
+/** ล้างโปรโมชั่นของ Agent ที่เลือก กลับไปใช้อัตราปกติ */
+export async function clearCommissionPromotion(actor: Actor, agentIds: string[]): Promise<number> {
+  requirePermission(actor, "user.manage");
+  if (agentIds.length === 0) throw new ValidationError("กรุณาเลือก Agent อย่างน้อยหนึ่งคน");
+  return writePromotionToAgents(actor, agentIds, {
+    commissionPromotionStartsOn: null,
+    commissionPromotionEndsOn: null,
+    commissionPromotionThaiMinGross: null,
+    commissionPromotionLaoMinGross: null,
+    commissionPromotionThaiRate: null,
+    commissionPromotionLaoRate: null,
+  }, "ล้างโปรโมชั่นค่าคอมพร้อมกันหลายคน");
 }

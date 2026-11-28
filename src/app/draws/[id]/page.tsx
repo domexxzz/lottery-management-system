@@ -348,6 +348,18 @@ export default async function DrawDetailPage({ params }: { params: Promise<{ id:
                     <td className="num">
                       {s.commission.toFixed(2)}
                       <span className="muted"> ({s.commissionRateSnapshot.toFixed(2)}%)</span>
+                      {/*
+                        * บอกด้วยว่าเรตนี้มาจากโปรโมชั่น ไม่ใช่เรตปกติ
+                        *
+                        * ตอนจ่ายค่าคอมจริง Agent จะถามว่าทำไมงวดนี้ได้ไม่เท่างวดก่อน
+                        * ถ้าเห็นแต่ตัวเลขเปล่า ๆ คนจ่ายต้องไปเปิดหน้าตั้งค่ามาเทียบเอง
+                        */}
+                      {s.commissionPromotionApplied && (
+                        <span className="settlement-promotion-badge" title={s.commissionBaseRateSnapshot ? `เรตปกติ ${s.commissionBaseRateSnapshot.toFixed(2)}%` : undefined}>
+                          โปรฯ
+                          {s.commissionBaseRateSnapshot && <small>ปกติ {s.commissionBaseRateSnapshot.toFixed(2)}%</small>}
+                        </span>
+                      )}
                     </td>
                     <td className={s.net.isNegative() ? "num error" : "num"}>
                       {s.net.toFixed(2)}

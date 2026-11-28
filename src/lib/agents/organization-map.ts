@@ -64,7 +64,15 @@ export async function getOrganizationMapData(actor: Actor, draws?: DrawFilter) {
         OR: [{ userId: null }, { user: { deletedAt: null } }],
       },
       orderBy: { code: "asc" },
-      select: { id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true },
+      select: {
+        id: true, code: true, name: true, status: true, commissionRate: true, laoCommissionRate: true,
+        commissionPromotionStartsOn: true,
+        commissionPromotionEndsOn: true,
+        commissionPromotionThaiMinGross: true,
+        commissionPromotionLaoMinGross: true,
+        commissionPromotionThaiRate: true,
+        commissionPromotionLaoRate: true,
+      },
     }),
     prisma.$queryRaw<StatRow[]>(Prisma.sql`
       WITH bill_agg AS (

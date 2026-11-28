@@ -22,6 +22,11 @@ export function parseDay(value: string | null | undefined): string | undefined {
   return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? undefined : value;
 }
 
+/** วันนี้ตามเวลาไทย รูปแบบ YYYY-MM-DD ใช้เทียบกับวันของงวดและช่วงโปรโมชั่นที่เก็บเป็นวันปฏิทิน */
+export function todayInBangkok(now: Date = new Date()): string {
+  return new Date(now.getTime() + BANGKOK_OFFSET_MS).toISOString().slice(0, 10);
+}
+
 /** วันออกรางวัลของงวด ใช้ drawDate ถ้ามี ไม่งั้นใช้วันปิดรับตามเวลาไทย */
 export function drawDay(draw: { drawDate: Date | null; cutoffAt: Date }): string {
   if (draw.drawDate) return draw.drawDate.toISOString().slice(0, 10);

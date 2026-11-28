@@ -10,6 +10,7 @@ import { reportCategoryLabel } from "@/lib/reports/draw-groups";
 
 const MONEY = new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const DATE_TIME = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
+const DATE = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeZone: "Asia/Bangkok" });
 const FILTERS: Array<{ value: SimpleAgentBillFilter; label: string; count: "all" | "won" | "pending" | "lost" }> = [
   { value: "ALL", label: "ทุกบิล", count: "all" },
   { value: "WON", label: "ถูกรางวัล", count: "won" },
@@ -47,6 +48,40 @@ export async function AgentReports({ actor, selectedDrawId, billStatus = "ALL", 
       category={report.drawScope.category}
       selectedDrawId={selectedDraw?.id}
     />
+    {report.promotionProgress.length > 0 && <section className="agent-promotion-board" aria-labelledby="agent-promotion-heading">
+      <header>
+        <div>
+          <p className="page-eyebrow">โปรโมชั่นค่าคอม</p>
+          <h2 id="agent-promotion-heading">เป้ายอดขายของงวดที่ยังเปิดรับ</h2>
+          <p>ทำยอดถึงเกณฑ์ในงวดไหน งวดนั้นได้ค่าคอมอัตราพิเศษ · ถึงวันที่ {report.promotion.endsOn}</p>
+        </div>
+        {report.promotion.daysLeft !== null && <span className={`agent-promotion-countdown ${report.promotion.state === "ENDING_SOON" ? "is-urgent" : ""}`}>
+          {report.promotion.daysLeft === 0 ? "วันนี้วันสุดท้าย" : `เหลือ ${report.promotion.daysLeft} วัน`}
+        </span>}
+      </header>
+      <div className="agent-promotion-targets">{report.promotionProgress.map((target) => {
+        const gross = Number(target.gross);
+        const minGross = Number(target.minGross);
+        const percent = minGross > 0 ? Math.min(gross / minGross * 100, 100) : 0;
+        return <article key={target.drawId} className={target.reached ? "is-reached" : undefined}>
+          <div className="agent-promotion-target-head">
+            <strong>{target.drawName}</strong>
+            <small>ปิดรับ {DATE.format(target.cutoffAt)}</small>
+          </div>
+          <p className="agent-promotion-numbers">
+            <b>{MONEY.format(gross)}</b>
+            <span>/ {MONEY.format(minGross)} บาท</span>
+          </p>
+          <span className="agent-promotion-track" aria-hidden="true"><i style={{ width: `${percent}%` }} /></span>
+          <p className="agent-promotion-result">
+            {target.reached
+              ? `ถึงเป้าแล้ว งวดนี้ได้ค่าคอม ${Number(target.promotionRate).toFixed(0)}% แทน ${Number(target.baseRate).toFixed(0)}%`
+              : `อีก ${MONEY.format(Number(target.remaining))} บาท ได้ค่าคอม ${Number(target.promotionRate).toFixed(0)}% แทน ${Number(target.baseRate).toFixed(0)}%`}
+          </p>
+        </article>;
+      })}</div>
+    </section>}
+
     {report.drawOptions.length > 0 ? <>
       <section className="agent-bill-overview" aria-label="ยอดรวมตามตัวกรอง">
         <div className="agent-bill-overview-heading"><span>ข้อมูลที่กำลังดู</span><h2>{scopeLabel}</h2><p>{report.rounds.length.toLocaleString("th-TH")} งวด · เฉพาะบิลที่ยืนยันแล้ว</p></div>

@@ -2615,3 +2615,24 @@
 .agent-simple-report .agent-bill-overview > div > strong { overflow-wrap: anywhere; }
 @media (max-width: 1100px) { .agent-simple-report .agent-bill-overview { grid-template-columns: repeat(3,minmax(0,1fr)); }.agent-simple-report .agent-bill-overview-heading { grid-column: 1/-1; } }
 @media (max-width: 650px) { .agent-simple-report .agent-bill-overview { grid-template-columns: 1fr; }.agent-simple-report .agent-bill-overview-heading { grid-column: auto; } }
+
+/* เป้าโปรโมชั่นของ Agent — บอกว่าขาดอีกเท่าไหร่ถึงจะได้ค่าคอมอัตราพิเศษ */
+.agent-promotion-board{margin:1rem 0;padding:1rem 1.1rem;border:1px solid #d7e7df;border-radius:14px;background:linear-gradient(180deg,#f3fbf7,#fff)}
+.agent-promotion-board>header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:.8rem}
+.agent-promotion-board h2{margin:.1rem 0;font-size:1.02rem;color:#123a56}
+.agent-promotion-board>header p:last-child{margin:0;color:#5c7a6c;font-size:.76rem}
+.agent-promotion-countdown{flex:0 0 auto;padding:.25rem .6rem;border-radius:999px;background:#e8f6ef;color:#12724f;font-size:.72rem;font-weight:800;white-space:nowrap}
+.agent-promotion-countdown.is-urgent{background:#fdf2dd;color:#8a5a09}
+.agent-promotion-targets{display:grid;gap:.7rem;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.agent-promotion-targets article{padding:.75rem .85rem;border:1px solid #e2ece7;border-radius:12px;background:#fff}
+.agent-promotion-targets article.is-reached{border-color:#9fd6bc;background:#f6fcf9}
+.agent-promotion-target-head{display:grid;gap:.1rem;margin-bottom:.4rem}
+.agent-promotion-target-head strong{color:#123a56;font-size:.86rem}
+.agent-promotion-target-head small{color:#7b8f99;font-size:.68rem}
+.agent-promotion-numbers{display:flex;align-items:baseline;gap:.35rem;margin:0 0 .35rem}
+.agent-promotion-numbers b{color:#12724f;font-size:1.05rem}
+.agent-promotion-numbers span{color:#7b8f99;font-size:.72rem}
+.agent-promotion-track{display:block;height:7px;border-radius:999px;background:#e6efea;overflow:hidden}
+.agent-promotion-track i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#39a37d,#12724f)}
+.agent-promotion-result{margin:.4rem 0 0;color:#4d6b5c;font-size:.74rem;line-height:1.45}
+@media (max-width:640px){.agent-promotion-board>header{flex-direction:column;gap:.5rem}}
